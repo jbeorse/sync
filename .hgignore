@@ -1,0 +1,9 @@
+
+syntax: regexp
+^ODKSync/gen$
+syntax: regexp
+^ODKSync/bin$
+syntax: regexp
+^ODKSyncTest/bin$
+syntax: regexp
+^ODKSyncTest/gen$

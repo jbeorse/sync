@@ -30,4 +30,17 @@
 		<nature>com.android.ide.eclipse.adt.AndroidNature</nature>
 		<nature>org.eclipse.jdt.core.javanature</nature>
 	</natures>
+	<linkedResources>
+		<link>
+			<name>tbls_src</name>
+			<type>2</type>
+			<location>C:/SyncWorkspace/opendatakit.tables/src</location>
+		</link>
+	</linkedResources>
+	<variableList>
+		<variable>
+			<name>PARENT_PROJECT_LOC</name>
+			<value>${PROJECT_LOC}/..</value>
+		</variable>
+	</variableList>
 </projectDescription>
