@@ -14,14 +14,13 @@ public class OdkSyncServiceInterfaceImpl extends Stub {
 	
 	@Override
 	public String getSyncStatus() throws RemoteException {
-		// TODO Auto-generated method stub
-		return null;
+		return syncService.getStatus().toString();
 	}
 
 	@Override
 	public boolean synchronize() throws RemoteException {
-		// TODO Auto-generated method stub
-		return false;
+		syncService.sync();
+		return true;
 	}
 
 }
