@@ -32,11 +32,6 @@
 	</natures>
 	<linkedResources>
 		<link>
-			<name>tbls_src</name>
-			<type>2</type>
-			<location>C:/SyncWorkspace/opendatakit.tables/src</location>
-		</link>
-		<link>
 			<name>tblssrc</name>
 			<type>2</type>
 			<locationURI>WORKSPACE_LOC/opendatakit.tables/src</locationURI>
