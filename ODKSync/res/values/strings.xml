@@ -3,7 +3,7 @@
 
     <string name="app_name">ODK Sync</string>
     <string name="action_settings">Settings</string>
-	
+
 	<string name="ok">OK</string>
 	<string name="cancel">Cancel</string>
 	<string name="set">Set</string>
@@ -28,6 +28,8 @@
 	<string name="choose_sync_set">Choose set of tables to sync</string>
 	<string name="download_table">Download table from server</string>
 	<string name="sync_now">Sync now</string>
+	<string name="sync_now_push">Reset App Server</string>
+	<string name="sync_now_pull">Sync now</string>
 	<string name="server_url">Aggregate URL:</string>
 	<string name="default_server_url">http://opendatakit-2.appspot.com</string>
 	<string name="save">Save</string>
@@ -248,5 +250,5 @@
 	<string name="use_index_html">Use custom home screen</string>
 	<string name="no_index">No assets/index.html</string>
 	<string name="failed_download_table">Failed to download table %1$s. Error: %2$s</string>
-    
+
 	</resources>

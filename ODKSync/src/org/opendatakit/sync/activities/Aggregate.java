@@ -45,7 +45,7 @@ import android.widget.Toast;
 
 /**
  * An activity for downloading from and uploading to an ODK Aggregate instance.
- * 
+ *
  * @author hkworden@gmail.com
  * @author the.dylan.price@gmail.com
  */
@@ -148,8 +148,8 @@ public class Aggregate extends Activity implements SyncNowCallback {
 				restOfButtons);
 		findViewById(R.id.aggregate_activity_get_table_button).setEnabled(
 				restOfButtons);
-		findViewById(R.id.aggregate_activity_sync_now_button).setEnabled(
-				restOfButtons);
+	    findViewById(R.id.aggregate_activity_sync_now_push_button).setEnabled(restOfButtons);
+	    findViewById(R.id.aggregate_activity_sync_now_pull_button).setEnabled(restOfButtons);
 		// findViewById(R.id.aggregate_activity_sync_using_submit_button).setEnabled(restOfButtons);
 	}
 
@@ -263,23 +263,39 @@ public class Aggregate extends Activity implements SyncNowCallback {
 		updateButtonsEnabled();
 	}
 
-	/**
-	 * Hooked to syncNowButton's onClick in aggregate_activity.xml
-	 */
-	public void onClickSyncNow(View v) {
-		Log.d(TAG, "in onClickSyncNow");
-		// ask whether to sync app files and table-level files
-		String accountName = prefs.getAccount();
-		Log.e(TAG, "[onClickSyncNow] timestamp: " + System.currentTimeMillis());
-		if (accountName == null) {
-			Toast.makeText(this, getString(R.string.choose_account),
-					Toast.LENGTH_SHORT).show();
-		} else {
-			SyncNowTask syncTask = new SyncNowTask(this, appName, this);
-			syncTask.execute();
-		}
-		updateButtonsEnabled();
-	}
+	  /**
+	   * Hooked to syncNowButton's onClick in aggregate_activity.xml
+	   */
+	  public void onClickSyncNowPush(View v) {
+	    Log.d(TAG, "in onClickSyncNow");
+	    // ask whether to sync app files and table-level files
+	    String accountName = prefs.getAccount();
+	    Log.e(TAG, "[onClickSyncNow] timestamp: " + System.currentTimeMillis());
+	    if (accountName == null) {
+	      Toast.makeText(this, getString(R.string.choose_account), Toast.LENGTH_SHORT).show();
+	    } else {
+	      SyncNowTask syncTask = new SyncNowTask(this, appName, true, this);
+	      syncTask.execute();
+	    }
+	    updateButtonsEnabled();
+	  }
+
+	  /**
+	   * Hooked to syncNowButton's onClick in aggregate_activity.xml
+	   */
+	  public void onClickSyncNowPull(View v) {
+	    Log.d(TAG, "in onClickSyncNow");
+	    // ask whether to sync app files and table-level files
+	    String accountName = prefs.getAccount();
+	    Log.e(TAG, "[onClickSyncNow] timestamp: " + System.currentTimeMillis());
+	    if (accountName == null) {
+	      Toast.makeText(this, getString(R.string.choose_account), Toast.LENGTH_SHORT).show();
+	    } else {
+	      SyncNowTask syncTask = new SyncNowTask(this, appName, false, this);
+	      syncTask.execute();
+	    }
+	    updateButtonsEnabled();
+	  }
 
 	public static void invalidateAuthToken(String authToken, Context context,
 			String appName) {

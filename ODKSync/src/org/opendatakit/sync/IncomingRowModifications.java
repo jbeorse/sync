@@ -33,11 +33,11 @@ public class IncomingRowModifications {
   // rowId to SyncRow
   private Map<String, SyncRow> rows;
 
-  private SyncTag  tableSyncTag;
+  private SyncTag tableSyncTag;
 
   public IncomingRowModifications() {
     this.rows = new HashMap<String, SyncRow>();
-    this.tableSyncTag = new SyncTag(null,null,null);
+    this.tableSyncTag = new SyncTag(null,null);
   }
 
   /**
