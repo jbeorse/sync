@@ -1297,6 +1297,7 @@ public class AggregateSynchronizer implements Synchronizer {
       }
       return success;
     } catch ( Exception e ) {
+      Log.e(TAG, "Exception during sync: " + e.toString());
       return false;
     }
   }
