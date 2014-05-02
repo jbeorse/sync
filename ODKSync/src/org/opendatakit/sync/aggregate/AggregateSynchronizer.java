@@ -1198,13 +1198,13 @@ public class AggregateSynchronizer implements Synchronizer {
   }
 
   @Override
-  public boolean getFileAttachments(String tableId, SyncRow row) {
+  public boolean getFileAttachments(String tableId, SyncRow serverRow, boolean shouldDeleteLocal ) {
 
     boolean success = true;
     try {
       // 1) Get the manifest of all files under this row's instanceId (rowId)
       List<OdkTablesFileManifestEntry> manifest;
-      String escapedInstanceId = SyncUtil.formatPathForAggregate(row.getRowId());
+      String escapedInstanceId = SyncUtil.formatPathForAggregate(serverRow.getRowId());
       URI instanceFileManifestUri = SyncUtilities.normalizeUri(aggregateUri, getTablesUriFragment() + tableId + "/attachments/manifest/" + escapedInstanceId );
       Uri.Builder uriBuilder = Uri.parse(instanceFileManifestUri.toString()).buildUpon();
       ResponseEntity<OdkTablesFileManifest> responseEntity;
@@ -1215,7 +1215,7 @@ public class AggregateSynchronizer implements Synchronizer {
       // TODO: scan the row and pick apart the elements that specify a file.
 
       // 2) Get the local files
-      String instancesFolderFullPath = ODKFileUtils.getInstanceFolder(appName, tableId, row.getRowId());
+      String instancesFolderFullPath = ODKFileUtils.getInstanceFolder(appName, tableId, serverRow.getRowId());
       List<String> relativePathsToAppFolderOnDevice = getAllFilesUnderFolder(
           instancesFolderFullPath, null);
 
@@ -1236,11 +1236,16 @@ public class AggregateSynchronizer implements Synchronizer {
         relativePathsToAppFolderOnDevice.remove(relativePath);
       }
 
-      for ( String relativePath : relativePathsToAppFolderOnDevice ) {
-        // remove local files that are  not on server...
-        File localFile = ODKFileUtils.asAppFile(appName, relativePath);
-        if ( !localFile.delete() ) {
-          success = false;
+      // we usually do this, but, when we have a conflict row, we pull the
+      // server files down, and leave the local files. Upon the next sync,
+      // we will resolve what to do and clean up.
+      if ( shouldDeleteLocal ) {
+        for ( String relativePath : relativePathsToAppFolderOnDevice ) {
+          // remove local files that are  not on server...
+          File localFile = ODKFileUtils.asAppFile(appName, relativePath);
+          if ( !localFile.delete() ) {
+            success = false;
+          }
         }
       }
       return success;
@@ -1250,14 +1255,15 @@ public class AggregateSynchronizer implements Synchronizer {
     }
   }
 
+
   @Override
-  public boolean putFileAttachments(String tableId, SyncRow row) {
+  public boolean putFileAttachments(String tableId, SyncRow localRow) {
 
     boolean success = true;
     try {
       // 1) Get the manifest of all files under this row's instanceId (rowId)
       List<OdkTablesFileManifestEntry> manifest;
-      String escapedInstanceId = SyncUtil.formatPathForAggregate(row.getRowId());
+      String escapedInstanceId = SyncUtil.formatPathForAggregate(localRow.getRowId());
       URI instanceFileManifestUri = SyncUtilities.normalizeUri(aggregateUri, getTablesUriFragment() + tableId + "/attachments/manifest/" + escapedInstanceId );
       Uri.Builder uriBuilder = Uri.parse(instanceFileManifestUri.toString()).buildUpon();
       ResponseEntity<OdkTablesFileManifest> responseEntity;
@@ -1268,7 +1274,7 @@ public class AggregateSynchronizer implements Synchronizer {
       // TODO: scan the row and pick apart the elements that specify a file.
 
       // 2) Get the local files
-      String instancesFolderFullPath = ODKFileUtils.getInstanceFolder(appName, tableId, row.getRowId());
+      String instancesFolderFullPath = ODKFileUtils.getInstanceFolder(appName, tableId, localRow.getRowId());
       List<String> relativePathsToAppFolderOnDevice = getAllFilesUnderFolder(
           instancesFolderFullPath, null);
 

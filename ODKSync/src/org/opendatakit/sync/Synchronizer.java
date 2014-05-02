@@ -169,13 +169,14 @@ public interface Synchronizer {
 
   /**
    * Ensure that the file attachments for the indicated row values are pulled down
-   * to the local system. All other files in the instance folder should be removed.
+   * to the local system.
    *
    * @param tableId
-   * @param row
+   * @param serverRow
+   * @param shouldDeleteLocal - true if all other files in the local instance folder should be removed.
    * @return true if successful
    */
-  public boolean getFileAttachments(String tableId, SyncRow row);
+  public boolean getFileAttachments(String tableId, SyncRow serverRow, boolean shouldDeleteLocal);
 
   /**
    * Ensure that the file attachments for the indicated row values exist on the
@@ -183,8 +184,8 @@ public interface Synchronizer {
    * never destroyed.
    *
    * @param tableId
-   * @param row
+   * @param localRow
    * @return true if successful
    */
-  public boolean putFileAttachments(String tableId, SyncRow row);
+  public boolean putFileAttachments(String tableId, SyncRow localRow);
 }

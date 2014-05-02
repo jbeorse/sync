@@ -22,7 +22,7 @@ public class TableFileUtils {
 
 
   /** The default app name for ODK Sync */
-  private static final String DEFAULT_APP_NAME = "Sync";
+  private static final String DEFAULT_APP_NAME = "tables";
 
   public static final String getDefaultAppName() {
     Log.i("TableFileUtils", "appName is null on intent");
