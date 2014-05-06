@@ -23,4 +23,10 @@ public class OdkSyncServiceInterfaceImpl extends Stub {
 		return true;
 	}
 
+	@Override
+	public boolean push() throws RemoteException {
+		syncService.push();
+		return true;
+	}
+
 }
