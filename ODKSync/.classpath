@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <classpath>
 	<classpathentry kind="src" path="src"/>
+	<classpathentry kind="src" path="global"/>
 	<classpathentry excluding="org/opendatakit/tables/activities/|org/opendatakit/tables/application/|org/opendatakit/tables/fragments/|org/opendatakit/tables/preferences/|org/opendatakit/tables/tasks/|org/opendatakit/tables/types/|org/opendatakit/tables/views/" including="org/opendatakit/common/" kind="src" path="tblssrc"/>
 	<classpathentry kind="src" path="gen"/>
 	<classpathentry kind="con" path="com.android.ide.eclipse.adt.ANDROID_FRAMEWORK"/>

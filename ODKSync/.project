@@ -34,13 +34,7 @@
 		<link>
 			<name>tblssrc</name>
 			<type>2</type>
-			<locationURI>WORKSPACE_LOC/opendatakit.tables/src</locationURI>
+			<locationURI>WORKSPACE_LOC/opendatakit.tables/tables/src</locationURI>
 		</link>
 	</linkedResources>
-	<variableList>
-		<variable>
-			<name>PARENT_PROJECT_LOC</name>
-			<value>${PROJECT_LOC}/..</value>
-		</variable>
-	</variableList>
 </projectDescription>

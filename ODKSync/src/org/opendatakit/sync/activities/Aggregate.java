@@ -19,13 +19,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.opendatakit.common.android.data.Preferences;
+import org.opendatakit.sync.OdkSyncServiceProxy;
 import org.opendatakit.sync.R;
 import org.opendatakit.sync.SyncUtil;
 import org.opendatakit.sync.SynchronizationResult;
 import org.opendatakit.sync.TableFileUtils;
 import org.opendatakit.sync.TableResult;
-import org.opendatakit.sync.tasks.SyncNowTask;
-import org.opendatakit.sync.tasks.SyncNowTask.SyncNowCallback;
 
 import android.accounts.Account;
 import android.accounts.AccountManager;
@@ -36,6 +35,7 @@ import android.content.DialogInterface;
 import android.content.DialogInterface.OnClickListener;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.RemoteException;
 import android.util.Log;
 import android.view.View;
 import android.widget.ArrayAdapter;
@@ -49,8 +49,9 @@ import android.widget.Toast;
  * @author hkworden@gmail.com
  * @author the.dylan.price@gmail.com
  */
-public class Aggregate extends Activity implements SyncNowCallback {
+public class Aggregate extends Activity  {
 
+	private static final String LOGTAG = "Aggregate";
 	public static final String INTENT_KEY_APP_NAME = "appName";
 	public static final String INTENT_KEY_TABLE_ID = "tableId";
 	// public static final String INTENT_KEY_SEARCH_STACK = "searchStack";
@@ -70,6 +71,9 @@ public class Aggregate extends Activity implements SyncNowCallback {
 	private AccountManager accountManager;
 	private Preferences prefs;
 
+	private OdkSyncServiceProxy syncProxy;
+
+	
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
@@ -79,7 +83,8 @@ public class Aggregate extends Activity implements SyncNowCallback {
 		}
 		accountManager = AccountManager.get(this);
 		prefs = new Preferences(this, appName);
-
+		syncProxy = new OdkSyncServiceProxy(this);
+		
 		setTitle("");
 		setContentView(R.layout.aggregate_activity);
 		findViewComponents();
@@ -274,8 +279,11 @@ public class Aggregate extends Activity implements SyncNowCallback {
 	    if (accountName == null) {
 	      Toast.makeText(this, getString(R.string.choose_account), Toast.LENGTH_SHORT).show();
 	    } else {
-	      SyncNowTask syncTask = new SyncNowTask(this, appName, true, this);
-	      syncTask.execute();
+	    	try {
+				syncProxy.synchronize();
+			} catch (RemoteException e) {
+				Log.e(LOGTAG, "Problem with sync command");
+			}
 	    }
 	    updateButtonsEnabled();
 	  }
@@ -291,9 +299,13 @@ public class Aggregate extends Activity implements SyncNowCallback {
 	    if (accountName == null) {
 	      Toast.makeText(this, getString(R.string.choose_account), Toast.LENGTH_SHORT).show();
 	    } else {
-	      SyncNowTask syncTask = new SyncNowTask(this, appName, false, this);
-	      syncTask.execute();
+	    	try {
+				syncProxy.synchronize();
+			} catch (RemoteException e) {
+				Log.e(LOGTAG, "Problem with sync command");
+			}
 	    }
+	    
 	    updateButtonsEnabled();
 	  }
 
@@ -311,20 +323,5 @@ public class Aggregate extends Activity implements SyncNowCallback {
 		updateButtonsEnabled();
 	}
 
-	@Override
-	public void syncOutcome(boolean success, String message,
-			boolean authRequired, SynchronizationResult result) {
-
-		if (authRequired) {
-			invalidateAuthToken(prefs.getAuthToken(), this, appName);
-		}
-
-		if (!success && message != null) {
-			buildOkMessage(getString(R.string.sync_error), message).show();
-		} else {
-			buildResultMessage(getString(R.string.sync_result), result).show();
-		}
-		updateButtonsEnabled();
-	}
 
 }
