@@ -3,6 +3,7 @@ package org.opendatakit.sync.activities;
 import org.opendatakit.common.android.data.ConflictTable;
 import org.opendatakit.common.android.data.DbTable;
 import org.opendatakit.common.android.data.TableProperties;
+import org.opendatakit.common.android.data.UserTable.Row;
 import org.opendatakit.common.android.provider.DataTableColumns;
 import org.opendatakit.sync.TableFileUtils;
 
@@ -45,10 +46,10 @@ public class ConflictResolutionListActivity extends ListActivity {
         getActionBar().getThemedContext(),
         android.R.layout.simple_list_item_1);
     for (int i = 0; i < this.mConflictTable.getLocalTable().getNumberOfRows(); i++) {
-      String localRowId = this.mConflictTable.getLocalTable()
-          .getMetadataByElementKey(i, DataTableColumns.ID);
-      String serverRowId = this.mConflictTable.getServerTable()
-          .getMetadataByElementKey(i, DataTableColumns.ID);
+      Row localRow = this.mConflictTable.getLocalTable().getRowAtIndex(i);
+      String localRowId = localRow.getDataOrMetadataByElementKey(DataTableColumns.ID);
+      Row serverRow = this.mConflictTable.getServerTable().getRowAtIndex(i);
+      String serverRowId = serverRow.getDataOrMetadataByElementKey(DataTableColumns.ID);
       if (!localRowId.equals(serverRowId)) {
         Log.e(TAG, "row ids at same index are not the same! this is an " +
             "error.");
