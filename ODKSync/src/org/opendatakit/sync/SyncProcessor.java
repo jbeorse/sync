@@ -356,7 +356,7 @@ public class SyncProcessor {
       Map<String, SyncRow> changedServerRows = modification.getRows();
 
       // get all the rows in the data table -- we will iterate through them all.
-      UserTable localDataTable = table.rawSqlQuery(tp.getPersistedColumns(),
+      UserTable localDataTable = table.rawSqlQuery(
                                 DataTableColumns.SAVEPOINT_TYPE + " IS NOT NULL",
                                                 null, null, null, null, null);
 
