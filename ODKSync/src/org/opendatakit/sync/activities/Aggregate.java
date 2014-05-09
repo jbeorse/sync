@@ -15,12 +15,13 @@
  */
 package org.opendatakit.sync.activities;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.opendatakit.common.android.data.Preferences;
 import org.opendatakit.sync.OdkSyncServiceProxy;
 import org.opendatakit.sync.R;
+import org.opendatakit.sync.SyncPreferences;
 import org.opendatakit.sync.SyncUtil;
 import org.opendatakit.sync.SynchronizationResult;
 import org.opendatakit.sync.TableFileUtils;
@@ -45,11 +46,11 @@ import android.widget.Toast;
 
 /**
  * An activity for downloading from and uploading to an ODK Aggregate instance.
- *
+ * 
  * @author hkworden@gmail.com
  * @author the.dylan.price@gmail.com
  */
-public class Aggregate extends Activity  {
+public class Aggregate extends Activity {
 
 	private static final String LOGTAG = "Aggregate";
 	public static final String INTENT_KEY_APP_NAME = "appName";
@@ -69,11 +70,9 @@ public class Aggregate extends Activity  {
 
 	private String appName;
 	private AccountManager accountManager;
-	private Preferences prefs;
 
 	private OdkSyncServiceProxy syncProxy;
 
-	
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
@@ -82,26 +81,44 @@ public class Aggregate extends Activity  {
 			appName = TableFileUtils.getDefaultAppName();
 		}
 		accountManager = AccountManager.get(this);
-		prefs = new Preferences(this, appName);
+
 		syncProxy = new OdkSyncServiceProxy(this);
-		
+
 		setTitle("");
 		setContentView(R.layout.aggregate_activity);
 		findViewComponents();
-		initializeData();
-		updateButtonsEnabled();
+		try {
+		SyncPreferences prefs = new SyncPreferences(this, appName);
+		initializeData(prefs);
+		updateButtonsEnabled(prefs);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 
 	@Override
 	protected void onStart() {
 		super.onStart();
-		updateButtonsEnabled();
+	try{	
+		SyncPreferences prefs = new SyncPreferences(this, appName);
+		updateButtonsEnabled(prefs);
+	} catch (IOException e) {
+		// TODO Auto-generated catch block
+		e.printStackTrace();
+	}
 	}
 
 	@Override
 	protected void onResume() {
 		super.onResume();
-		updateButtonsEnabled();
+		try {
+		SyncPreferences prefs = new SyncPreferences(this, appName);
+		updateButtonsEnabled(prefs);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 
 	private void findViewComponents() {
@@ -109,7 +126,7 @@ public class Aggregate extends Activity  {
 		accountListSpinner = (Spinner) findViewById(R.id.aggregate_activity_account_list_spinner);
 	}
 
-	private void initializeData() {
+	private void initializeData(SyncPreferences prefs) {
 		// Add accounts to spinner
 		Account[] accounts = accountManager.getAccountsByType(ACCOUNT_TYPE_G);
 		List<String> accountNames = new ArrayList<String>(accounts.length);
@@ -136,7 +153,7 @@ public class Aggregate extends Activity  {
 		}
 	}
 
-	void updateButtonsEnabled() {
+	void updateButtonsEnabled(SyncPreferences prefs) {
 		String accountName = prefs.getAccount();
 		String serverUri = prefs.getServerUri();
 		boolean haveSettings = (accountName != null) && (serverUri != null);
@@ -153,12 +170,14 @@ public class Aggregate extends Activity  {
 				restOfButtons);
 		findViewById(R.id.aggregate_activity_get_table_button).setEnabled(
 				restOfButtons);
-	    findViewById(R.id.aggregate_activity_sync_now_push_button).setEnabled(restOfButtons);
-	    findViewById(R.id.aggregate_activity_sync_now_pull_button).setEnabled(restOfButtons);
+		findViewById(R.id.aggregate_activity_sync_now_push_button).setEnabled(
+				restOfButtons);
+		findViewById(R.id.aggregate_activity_sync_now_pull_button).setEnabled(
+				restOfButtons);
 		// findViewById(R.id.aggregate_activity_sync_using_submit_button).setEnabled(restOfButtons);
 	}
 
-	private void saveSettings() {
+	private void saveSettings(SyncPreferences prefs) throws IOException {
 
 		// save fields in preferences
 		String uri = uriField.getText().toString();
@@ -168,6 +187,7 @@ public class Aggregate extends Activity  {
 
 		prefs.setServerUri(uri);
 		prefs.setAccount(accountName);
+
 	}
 
 	AlertDialog.Builder buildOkMessage(String title, String message) {
@@ -212,6 +232,8 @@ public class Aggregate extends Activity  {
 	 * Hooked up to save settings button in aggregate_activity.xml
 	 */
 	public void onClickSaveSettings(View v) {
+		try {
+		final SyncPreferences prefs = new SyncPreferences(this, appName);
 		// show warning message
 		AlertDialog.Builder msg = buildOkMessage(
 				getString(R.string.confirm_change_settings),
@@ -220,7 +242,11 @@ public class Aggregate extends Activity  {
 		msg.setPositiveButton(getString(R.string.save), new OnClickListener() {
 			@Override
 			public void onClick(DialogInterface dialog, int which) {
-				saveSettings();
+				
+				// TODO: IMPORATNT rewrite this interaction
+				try {
+					saveSettings(prefs);
+			
 				// SS Oct 15: clear the auth token here.
 				// TODO if you change a user you can switch to their privileges
 				// without
@@ -229,99 +255,155 @@ public class Aggregate extends Activity  {
 						"[onClickSaveSettings][onClick] invalidated authtoken");
 				invalidateAuthToken(prefs.getAuthToken(), Aggregate.this,
 						appName);
-				updateButtonsEnabled();
+				updateButtonsEnabled(prefs);
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				
 			}
 		});
 
 		msg.setNegativeButton(getString(R.string.cancel), null);
 		msg.show();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 
 	/**
 	 * Hooked up to authorizeAccountButton's onClick in aggregate_activity.xml
 	 */
 	public void onClickAuthorizeAccount(View v) {
+		try {
+			SyncPreferences prefs = new SyncPreferences(this, appName);
 		Intent i = new Intent(this, AccountInfoActivity.class);
 		Account account = new Account(prefs.getAccount(), ACCOUNT_TYPE_G);
 		i.putExtra(INTENT_KEY_APP_NAME, appName);
 		i.putExtra(AccountInfoActivity.INTENT_EXTRAS_ACCOUNT, account);
 		startActivityForResult(i, AUTHORIZE_ACCOUNT_RESULT_ID);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 
 	/**
 	 * Hooked to chooseTablesButton's onClick in aggregate_activity.xml
 	 */
 	public void onClickChooseTables(View v) {
+		try {
+			SyncPreferences prefs = new SyncPreferences(this, appName);
 		Intent i = new Intent(this, AggregateChooseTablesActivity.class);
 		i.putExtra(INTENT_KEY_APP_NAME, appName);
 		startActivity(i);
-		updateButtonsEnabled();
+		updateButtonsEnabled(prefs);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 
 	/**
 	 * Hooked up to downloadTableButton's onClick in aggregate_activity.xml
 	 */
 	public void onClickDownloadTableFromServer(View v) {
+		try {
+			SyncPreferences prefs = new SyncPreferences(this, appName);
 		Intent i = new Intent(this, AggregateDownloadTableActivity.class);
 		i.putExtra(INTENT_KEY_APP_NAME, appName);
 		startActivity(i);
-		updateButtonsEnabled();
+		updateButtonsEnabled(prefs);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
 	}
 
-	  /**
-	   * Hooked to syncNowButton's onClick in aggregate_activity.xml
-	   */
-	  public void onClickSyncNowPush(View v) {
-	    Log.d(TAG, "in onClickSyncNow");
-	    // ask whether to sync app files and table-level files
-	    String accountName = prefs.getAccount();
-	    Log.e(TAG, "[onClickSyncNow] timestamp: " + System.currentTimeMillis());
-	    if (accountName == null) {
-	      Toast.makeText(this, getString(R.string.choose_account), Toast.LENGTH_SHORT).show();
-	    } else {
-	    	try {
+	/**
+	 * Hooked to syncNowButton's onClick in aggregate_activity.xml
+	 */
+	public void onClickSyncNowPush(View v) {
+		Log.d(TAG, "in onClickSyncNow");
+		// ask whether to sync app files and table-level files
+		
+		try {
+			SyncPreferences prefs = new SyncPreferences(this, appName);
+		String accountName = prefs.getAccount();
+		Log.e(TAG, "[onClickSyncNow] timestamp: " + System.currentTimeMillis());
+		if (accountName == null) {
+			Toast.makeText(this, getString(R.string.choose_account),
+					Toast.LENGTH_SHORT).show();
+		} else {
+			try {
 				syncProxy.synchronize();
 			} catch (RemoteException e) {
 				Log.e(LOGTAG, "Problem with sync command");
 			}
-	    }
-	    updateButtonsEnabled();
-	  }
+		}
+		updateButtonsEnabled(prefs);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
 
-	  /**
-	   * Hooked to syncNowButton's onClick in aggregate_activity.xml
-	   */
-	  public void onClickSyncNowPull(View v) {
-	    Log.d(TAG, "in onClickSyncNow");
-	    // ask whether to sync app files and table-level files
-	    String accountName = prefs.getAccount();
-	    Log.e(TAG, "[onClickSyncNow] timestamp: " + System.currentTimeMillis());
-	    if (accountName == null) {
-	      Toast.makeText(this, getString(R.string.choose_account), Toast.LENGTH_SHORT).show();
-	    } else {
-	    	try {
-				syncProxy.synchronize();
-			} catch (RemoteException e) {
-				Log.e(LOGTAG, "Problem with sync command");
+	/**
+	 * Hooked to syncNowButton's onClick in aggregate_activity.xml
+	 */
+	public void onClickSyncNowPull(View v) {
+		Log.d(TAG, "in onClickSyncNow");
+		// ask whether to sync app files and table-level files
+		try {
+			SyncPreferences prefs = new SyncPreferences(this, appName);
+			String accountName = prefs.getAccount();
+			Log.e(TAG,
+					"[onClickSyncNow] timestamp: " + System.currentTimeMillis());
+			if (accountName == null) {
+				Toast.makeText(this, getString(R.string.choose_account),
+						Toast.LENGTH_SHORT).show();
+			} else {
+				try {
+					syncProxy.synchronize();
+				} catch (RemoteException e) {
+					Log.e(LOGTAG, "Problem with sync command");
+				}
 			}
-	    }
-	    
-	    updateButtonsEnabled();
-	  }
+			
+			updateButtonsEnabled(prefs);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+		
+	}
 
 	public static void invalidateAuthToken(String authToken, Context context,
 			String appName) {
 		AccountManager.get(context).invalidateAuthToken(ACCOUNT_TYPE_G,
 				authToken);
-		Preferences prefs = new Preferences(context, appName);
-		prefs.setAuthToken(null);
+		try {
+			SyncPreferences prefs = new SyncPreferences(context, appName);
+			prefs.setAuthToken(null);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 
 	@Override
 	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+		try {
+			SyncPreferences prefs = new SyncPreferences(this, appName);
 		super.onActivityResult(requestCode, resultCode, data);
-		updateButtonsEnabled();
+		updateButtonsEnabled(prefs);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
-
 
 }

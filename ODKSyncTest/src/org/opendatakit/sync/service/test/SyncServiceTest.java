@@ -27,6 +27,7 @@ public class SyncServiceTest extends ServiceTestCase<OdkSyncService> {
 
 	}
 
+	
 //	public void testRunning() {
 //		setupService();
 //

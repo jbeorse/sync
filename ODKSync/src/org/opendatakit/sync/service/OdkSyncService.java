@@ -2,7 +2,7 @@ package org.opendatakit.sync.service;
 
 import java.util.Arrays;
 
-import org.opendatakit.common.android.data.Preferences;
+import org.opendatakit.sync.SyncPreferences;
 import org.opendatakit.sync.SyncProcessor;
 import org.opendatakit.sync.SynchronizationResult;
 import org.opendatakit.sync.Synchronizer;
@@ -28,8 +28,6 @@ public class OdkSyncService extends Service {
 
 	private SyncStatus status;
 
-	private Preferences prefs;
-
 	private String appName;
 	private SyncThread syncThread;
 	private OdkSyncServiceInterfaceImpl serviceInterface;
@@ -42,7 +40,7 @@ public class OdkSyncService extends Service {
 		if (appName == null) {
 			appName = TableFileUtils.getDefaultAppName();
 		}
-		prefs = new Preferences(this, appName);
+		
 		syncThread = new SyncThread(this);
 	}
 
@@ -105,7 +103,8 @@ public class OdkSyncService extends Service {
 		@Override
 		public void run() {
 			try {
-				
+
+					SyncPreferences prefs = new SyncPreferences(cntxt, appName);
 				Synchronizer synchronizer = new AggregateSynchronizer(appName,
 						prefs.getServerUri(), prefs.getAuthToken());
 				SyncProcessor processor = new SyncProcessor(cntxt, appName,
