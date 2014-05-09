@@ -908,7 +908,8 @@ public class SyncProcessor {
         values.put(DataTableColumns.LOCALE, serverRow.getLocale());
         values.put(DataTableColumns.SAVEPOINT_TIMESTAMP, serverRow.getSavepointTimestamp());
         values.put(DataTableColumns.SAVEPOINT_CREATOR, serverRow.getSavepointCreator());
-        values.put(DataTableColumns.FILTER_TYPE, serverRow.getFilterScope().getType().name());
+        Scope.Type type = serverRow.getFilterScope().getType();
+        values.put(DataTableColumns.FILTER_TYPE, (type == null) ? Scope.Type.DEFAULT.name() : type.name());
         values.put(DataTableColumns.FILTER_VALUE, serverRow.getFilterScope().getValue());
         table.actualAddRow(values);
 
