@@ -268,7 +268,6 @@ public class AggregateSynchronizer implements Synchronizer {
     converters.add(new OdkXmlHttpMessageConverter());
     this.tokenRt.setMessageConverters(converters);
 
-    Log.e(TAG, "AT CHECK ACCESS TOKEN:" + accessToken);
     checkAccessToken(accessToken);
     this.accessToken = accessToken;
 
@@ -277,9 +276,7 @@ public class AggregateSynchronizer implements Synchronizer {
   private void checkAccessToken(String accessToken) throws InvalidAuthTokenException {
     ResponseEntity<Object> responseEntity;
     try {
-      String tmp = TOKEN_INFO + URLEncoder.encode(accessToken, ApiConstants.UTF8_ENCODE);
-      Log.e(TAG, "TOKEN URI:" + tmp);
-      responseEntity = tokenRt.getForEntity(tmp, Object.class);
+      responseEntity = tokenRt.getForEntity(URLEncoder.encode(accessToken, ApiConstants.UTF8_ENCODE), Object.class);
       @SuppressWarnings("unused")
       Object o = responseEntity.getBody();
     } catch (HttpClientErrorException e) {
@@ -302,6 +299,7 @@ public class AggregateSynchronizer implements Synchronizer {
       }
     } catch (Exception e ) {
       Log.e(TAG, "HttpClientErrorException in checkAccessToken");
+      e.printStackTrace();
       Object o = null;
       throw new InvalidAuthTokenException("Invalid auth token (): " + accessToken, e);
     }

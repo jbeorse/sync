@@ -164,9 +164,8 @@ public class Aggregate extends Activity {
 
 		findViewById(R.id.aggregate_activity_save_settings_button).setEnabled(
 				true);
-		// TODO: CHANGE BACK - figure out correct logic
 		findViewById(R.id.aggregate_activity_authorize_account_button)
-				.setEnabled(true);
+				.setEnabled(authorizeAccount);
 		findViewById(R.id.aggregate_activity_choose_tables_button).setEnabled(
 				restOfButtons);
 		findViewById(R.id.aggregate_activity_get_table_button).setEnabled(

@@ -66,7 +66,7 @@ public class OdkSyncService extends Service {
 		if(!syncThread.isAlive() || syncThread.isInterrupted()) {
 			syncThread.setPush(false);
 			status = SyncStatus.SYNCING;
-			syncThread.run();
+			syncThread.start();
 		}
 	}
 
@@ -74,7 +74,7 @@ public class OdkSyncService extends Service {
 		if(!syncThread.isAlive() || syncThread.isInterrupted()) {
 			syncThread.setPush(true);
 			status = SyncStatus.SYNCING;
-			syncThread.run();
+			syncThread.start();
 		}
 		
 	}
