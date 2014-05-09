@@ -40,7 +40,6 @@ public class OdkSyncService extends Service {
 		if (appName == null) {
 			appName = TableFileUtils.getDefaultAppName();
 		}
-		
 		syncThread = new SyncThread(this);
 	}
 
@@ -105,6 +104,9 @@ public class OdkSyncService extends Service {
 			try {
 
 					SyncPreferences prefs = new SyncPreferences(cntxt, appName);
+				Log.e(LOGTAG, "APPNAME IN SERVICE: " + appName);
+				Log.e(LOGTAG, "TOKEN IN SERVICE:" + prefs.getAuthToken());
+				Log.e(LOGTAG, "URI IN SEVERICE:" + prefs.getServerUri());
 				Synchronizer synchronizer = new AggregateSynchronizer(appName,
 						prefs.getServerUri(), prefs.getAuthToken());
 				SyncProcessor processor = new SyncProcessor(cntxt, appName,
@@ -117,7 +119,7 @@ public class OdkSyncService extends Service {
 				status = SyncStatus.SYNC_COMPLETE;
 				for (TableResult result : results.getTableResults()) {
 					TableResult.Status status = result.getStatus();
-
+					// TODO: decide how to handle the status
 				}
 
 				Log.e(LOGTAG, "[SyncNowTask#doInBackground] timestamp: "

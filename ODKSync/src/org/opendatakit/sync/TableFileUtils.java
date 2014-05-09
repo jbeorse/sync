@@ -26,7 +26,6 @@ public class TableFileUtils {
 
   public static final String getDefaultAppName() {
     Log.i("TableFileUtils", "appName is null on intent");
-    Thread.dumpStack();
     return DEFAULT_APP_NAME;
   }
 

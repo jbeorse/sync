@@ -31,6 +31,7 @@ import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.Intent;
 import android.os.Bundle;
+import android.util.Log;
 import android.widget.Toast;
 
 /**
@@ -44,6 +45,8 @@ import android.widget.Toast;
 public class AccountInfoActivity extends Activity {
 	public static final String INTENT_EXTRAS_ACCOUNT = "account";
 
+  private static final String LOGTAG = AccountInfoActivity.class.getSimpleName();
+  
 	private final static int WAITING_ID = 1;
 	private final static int CALLBACK_DIALOG_INTENT_ID = 2;
 	private final static String authString = "oauth2:https://www.googleapis.com/auth/userinfo.email";
@@ -155,7 +158,10 @@ public class AccountInfoActivity extends Activity {
 		try {
 			SyncPreferences prefs = new SyncPreferences(this, appName);
 			prefs.setAuthToken(auth_token);
-		} catch (IOException e) {
+			 Log.e(LOGTAG, "TOKEN" + auth_token);
+
+} catch (IOException e) {
+
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}

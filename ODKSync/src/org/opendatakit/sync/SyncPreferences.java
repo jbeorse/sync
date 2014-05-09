@@ -70,7 +70,7 @@ public class SyncPreferences {
 		this(context, "TEST_FRAMEWORK");
 	}
 
-	private void storPreferences() throws IOException {
+	private void storePreferences() throws IOException {
 		FileOutputStream out = cntxt.openFileOutput(fileName,
 				Context.MODE_PRIVATE);
 		this.prop.store(out, "Sync Properties");
@@ -78,8 +78,10 @@ public class SyncPreferences {
 	}
 
 	public void setServerUri(String serverUri) throws IOException {
-		this.prop.setProperty(SERVER_URI_KEY, serverUri);
-		storPreferences();
+		if (serverUri != null) {
+			this.prop.setProperty(SERVER_URI_KEY, serverUri);
+			storePreferences();
+		}
 	}
 
 	public String getServerUri() {
@@ -87,8 +89,10 @@ public class SyncPreferences {
 	}
 
 	public void setAccount(String accountName) throws IOException {
-		this.prop.setProperty(ACCOUNT_KEY, accountName);
-		storPreferences();
+		if (accountName != null) {
+			this.prop.setProperty(ACCOUNT_KEY, accountName);
+			storePreferences();
+		}
 	}
 
 	public String getAccount() {
@@ -96,8 +100,10 @@ public class SyncPreferences {
 	}
 
 	public void setAuthToken(String authToken) throws IOException {
-		this.prop.setProperty(AUTH_KEY, authToken);
-		storPreferences();
+		if (authToken != null) {
+			this.prop.setProperty(AUTH_KEY, authToken);
+			storePreferences();
+		}
 	}
 
 	public String getAuthToken() {

@@ -81,6 +81,7 @@ public class AggregateDownloadTableActivity extends ListActivity {
 			SyncPreferences prefs = new SyncPreferences(this, appName);
 			aggregateUrl = prefs.getServerUri();
 			authToken = prefs.getAuthToken();
+			Log.e(TAG,"TOKEN: " + authToken);
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();

@@ -46,7 +46,7 @@ public class Sync extends Application {
         testing.start();
         server = testing;
       } catch (IOException e) {
-        Log.e("Tables.Thread.WebServer", "Exception: " + e.toString());
+        Log.v("Tables.Thread.WebServer", "Exception: " + e.toString());
       }
     }
   }
@@ -119,7 +119,7 @@ public class Sync extends Application {
             retryCount++;
             Thread.sleep(1000);
             if ( retryCount % 60 == 0 ) {
-              Log.d(t,"Tables.Thread.WebServer -- waking to confirm webserver is working");
+              Log.v(t,"Tables.Thread.WebServer -- waking to confirm webserver is working");
             }
           } catch (InterruptedException e) {
             e.printStackTrace();
