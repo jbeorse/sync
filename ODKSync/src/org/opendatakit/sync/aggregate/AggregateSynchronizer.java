@@ -164,7 +164,7 @@ public class AggregateSynchronizer implements Synchronizer {
     Log.e(TAG, "AggregateUri:" + aggregateUri);
     this.baseUri = SyncUtilities.normalizeUri(aggregateUri, "/");
     Log.e(TAG, "baseUri:" + baseUri);
-    
+
     this.mHttpClient = new DefaultHttpClient(new BasicClientConnectionManager());
     final HttpParams params = mHttpClient.getParams();
     HttpConnectionParams.setConnectionTimeout(params, HTTP_REQUEST_TIMEOUT_MS);
@@ -1207,7 +1207,9 @@ public class AggregateSynchronizer implements Synchronizer {
     try {
       // 1) Get the manifest of all files under this row's instanceId (rowId)
       List<OdkTablesFileManifestEntry> manifest;
-      String escapedInstanceId = SyncUtil.formatPathForAggregate(serverRow.getRowId());
+      String instancesFolderFullPath = ODKFileUtils.getInstanceFolder(appName, tableId, serverRow.getRowId());
+      String[] parts = instancesFolderFullPath.split(File.separator);
+      String escapedInstanceId = SyncUtil.formatPathForAggregate(parts[parts.length-1]);
       URI instanceFileManifestUri = SyncUtilities.normalizeUri(aggregateUri, getTablesUriFragment() + tableId + "/attachments/manifest/" + escapedInstanceId );
       Uri.Builder uriBuilder = Uri.parse(instanceFileManifestUri.toString()).buildUpon();
       ResponseEntity<OdkTablesFileManifest> responseEntity;
@@ -1218,7 +1220,6 @@ public class AggregateSynchronizer implements Synchronizer {
       // TODO: scan the row and pick apart the elements that specify a file.
 
       // 2) Get the local files
-      String instancesFolderFullPath = ODKFileUtils.getInstanceFolder(appName, tableId, serverRow.getRowId());
       List<String> relativePathsToAppFolderOnDevice = getAllFilesUnderFolder(
           instancesFolderFullPath, null);
 
