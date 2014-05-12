@@ -573,7 +573,7 @@ public class AggregateSynchronizer implements Synchronizer {
     SyncTag syncTag = currentSyncTag;
     String lastKnownServerDataTag = null; // the data tag of the whole table.
     String rowId = rowToDelete.getRowId();
-    URI url = SyncUtilities.normalizeUri(resource.getDataUri(), rowId);
+    URI url = SyncUtilities.normalizeUri(resource.getDataUri(), rowId + "?row_etag=" + Uri.encode(rowToDelete.getRowETag()));
     try {
       ResponseEntity<String> response = rt.exchange(url, HttpMethod.DELETE, null, String.class);
       lastKnownServerDataTag = response.getBody();
@@ -1207,9 +1207,7 @@ public class AggregateSynchronizer implements Synchronizer {
     try {
       // 1) Get the manifest of all files under this row's instanceId (rowId)
       List<OdkTablesFileManifestEntry> manifest;
-      String instancesFolderFullPath = ODKFileUtils.getInstanceFolder(appName, tableId, serverRow.getRowId());
-      String[] parts = instancesFolderFullPath.split(File.separator);
-      String escapedInstanceId = SyncUtil.formatPathForAggregate(parts[parts.length-1]);
+      String escapedInstanceId = Uri.encode(serverRow.getRowId());
       URI instanceFileManifestUri = SyncUtilities.normalizeUri(aggregateUri, getTablesUriFragment() + tableId + "/attachments/manifest/" + escapedInstanceId );
       Uri.Builder uriBuilder = Uri.parse(instanceFileManifestUri.toString()).buildUpon();
       ResponseEntity<OdkTablesFileManifest> responseEntity;
@@ -1220,14 +1218,19 @@ public class AggregateSynchronizer implements Synchronizer {
       // TODO: scan the row and pick apart the elements that specify a file.
 
       // 2) Get the local files
+      String instancesFolderFullPath = ODKFileUtils.getInstanceFolder(appName, tableId, serverRow.getRowId());
+      File instanceFolder = new File(instancesFolderFullPath);
+
       List<String> relativePathsToAppFolderOnDevice = getAllFilesUnderFolder(
           instancesFolderFullPath, null);
 
-      String pathPrefix = "tables/" + tableId + "/instances/";
+
       // we are getting files. So iterate over the remote files...
       for ( OdkTablesFileManifestEntry entry : manifest ) {
-        String relativePath = pathPrefix + entry.filename;
-        File localFile = ODKFileUtils.asAppFile(appName, relativePath);
+        // remove the instanceId, as the actual directory name on the
+        // device is transformed to remove special characters
+        String withoutInstanceId = entry.filename.substring(serverRow.getRowId().length() + 1);
+        File localFile = new File(instanceFolder, withoutInstanceId);
 
         if ( !localFile.exists() ) {
           if ( !downloadFile(localFile, entry.downloadUrl) ) {
@@ -1237,6 +1240,8 @@ public class AggregateSynchronizer implements Synchronizer {
           Log.e(TAG, "File " + localFile.getAbsolutePath() + " MD5Hash has changed from that on server -- this is not supposed to happen!");
           success = false;
         }
+        // remove it from the local files list
+        String relativePath = ODKFileUtils.asRelativePath(appName, localFile);
         relativePathsToAppFolderOnDevice.remove(relativePath);
       }
 
@@ -1267,7 +1272,7 @@ public class AggregateSynchronizer implements Synchronizer {
     try {
       // 1) Get the manifest of all files under this row's instanceId (rowId)
       List<OdkTablesFileManifestEntry> manifest;
-      String escapedInstanceId = SyncUtil.formatPathForAggregate(localRow.getRowId());
+      String escapedInstanceId = Uri.encode(localRow.getRowId());
       URI instanceFileManifestUri = SyncUtilities.normalizeUri(aggregateUri, getTablesUriFragment() + tableId + "/attachments/manifest/" + escapedInstanceId );
       Uri.Builder uriBuilder = Uri.parse(instanceFileManifestUri.toString()).buildUpon();
       ResponseEntity<OdkTablesFileManifest> responseEntity;
@@ -1279,14 +1284,20 @@ public class AggregateSynchronizer implements Synchronizer {
 
       // 2) Get the local files
       String instancesFolderFullPath = ODKFileUtils.getInstanceFolder(appName, tableId, localRow.getRowId());
+      File instanceFolder = new File(instancesFolderFullPath);
+      String pathPrefix = ODKFileUtils.asRelativePath(appName, instanceFolder);
+
       List<String> relativePathsToAppFolderOnDevice = getAllFilesUnderFolder(
           instancesFolderFullPath, null);
 
-      String pathPrefix = "tables/" + tableId + "/instances/";
       // we are putting files. So iterate over the local files...
       for ( String relativePath : relativePathsToAppFolderOnDevice ) {
         File localFile = ODKFileUtils.asAppFile(appName, relativePath);
-        String partialPath = relativePath.substring(pathPrefix.length());
+
+        // strip off the instance folder and slash and add the instanceId.
+        // The instance folder name is a sanitized version of the instanceID
+        // that does not contain any special characters.
+        String partialPath = localRow.getRowId() + File.separator + relativePath.substring(pathPrefix.length() + 1);
         OdkTablesFileManifestEntry entry = null;
         for ( OdkTablesFileManifestEntry e : manifest ) {
           if ( e.filename.equals(partialPath) ) {

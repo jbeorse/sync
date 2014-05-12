@@ -28,7 +28,7 @@ import fi.iki.elonen.SimpleWebServer;
 
 public class Sync extends Application {
 
-  public static final String t = "Tables";
+  public static final String t = "Sync";
   private SimpleWebServer server = null;
   private volatile Thread webServer = null;
 
