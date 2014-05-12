@@ -15,6 +15,7 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SyncResult;
+import android.os.AsyncTask;
 import android.os.IBinder;
 import android.util.Log;
 
@@ -63,47 +64,53 @@ public class OdkSyncService extends Service {
 	}
 
 	public void sync() {
-		if(!syncThread.isAlive() || syncThread.isInterrupted()) {
-			syncThread.setPush(false);
-			status = SyncStatus.SYNCING;
-			syncThread.start();
-		}
+		SyncNowTask syncTask = new SyncNowTask(this, appName, false);
+		syncTask.execute();
+
+		// if (!syncThread.isAlive() || syncThread.isInterrupted()) {
+		// syncThread.setPush(false);
+		// status = SyncStatus.SYNCING;
+		// syncThread.start();
+		// }
 	}
 
 	public void push() {
-		if(!syncThread.isAlive() || syncThread.isInterrupted()) {
-			syncThread.setPush(true);
-			status = SyncStatus.SYNCING;
-			syncThread.start();
-		}
-		
+		SyncNowTask syncTask = new SyncNowTask(this, appName, true);
+		syncTask.execute();
+
+		// if (!syncThread.isAlive() || syncThread.isInterrupted()) {
+		// syncThread.setPush(true);
+		// status = SyncStatus.SYNCING;
+		// syncThread.start();
+		// }
+
 	}
-	
+
 	public SyncStatus getStatus() {
 		return status;
 	}
 
 	// TEMPORARY THREAD while transition API
 	private class SyncThread extends Thread {
-		
+
 		private Context cntxt;
-		
+
 		private boolean push;
-		
+
 		public SyncThread(Context context) {
 			this.cntxt = context;
 			this.push = false;
 		}
-		
+
 		public void setPush(boolean push) {
 			this.push = push;
 		}
-		
+
 		@Override
 		public void run() {
 			try {
 
-					SyncPreferences prefs = new SyncPreferences(cntxt, appName);
+				SyncPreferences prefs = new SyncPreferences(cntxt, appName);
 				Log.e(LOGTAG, "APPNAME IN SERVICE: " + appName);
 				Log.e(LOGTAG, "TOKEN IN SERVICE:" + prefs.getAuthToken());
 				Log.e(LOGTAG, "URI IN SEVERICE:" + prefs.getServerUri());
@@ -122,8 +129,8 @@ public class OdkSyncService extends Service {
 					// TODO: decide how to handle the status
 				}
 
-				Log.e(LOGTAG, "[SyncNowTask#doInBackground] timestamp: "
-						+ System.currentTimeMillis());
+				Log.e(LOGTAG,
+						"[SyncThread] timestamp: " + System.currentTimeMillis());
 			} catch (InvalidAuthTokenException e) {
 				status = SyncStatus.AUTH_RESOLUTION;
 			} catch (Exception e) {
@@ -136,5 +143,58 @@ public class OdkSyncService extends Service {
 
 	}
 
-	
+	public class SyncNowTask extends AsyncTask<Void, Void, Void> {
+
+		private static final String t = "SyncNowTask";
+
+		private final Context context;
+		private final String appName;
+		private final boolean pushToServer;
+
+		public SyncNowTask(Context context, String appName, boolean pushToServer) {
+			this.context = context;
+			this.appName = appName;
+			this.pushToServer = pushToServer;
+		}
+
+		@Override
+		protected Void doInBackground(Void... params) {
+
+			try {
+				SyncPreferences prefs = new SyncPreferences(context, appName);
+				Log.e(t, "APPNAME IN TASK: " + appName);
+				Log.e(t, "TOKEN IN TASK:" + prefs.getAuthToken());
+				Log.e(t, "URI IN TASK:" + prefs.getServerUri());
+				Synchronizer synchronizer = new AggregateSynchronizer(appName,
+						prefs.getServerUri(), prefs.getAuthToken());
+				SyncProcessor processor = new SyncProcessor(context, appName,
+						synchronizer, new SyncResult());
+				// The user should specify whether it is a push or a pull during
+				// a sync. We always sync the data.
+				SynchronizationResult results = processor.synchronize(
+						pushToServer, pushToServer, true);
+
+				// default to sync complete
+				status = SyncStatus.SYNC_COMPLETE;
+				for (TableResult result : results.getTableResults()) {
+					TableResult.Status status = result.getStatus();
+					// TODO: decide how to handle the status
+				}
+
+				Log.e(t,
+						"[SyncNowTask#doInBackground] timestamp: "
+								+ System.currentTimeMillis());
+			} catch (InvalidAuthTokenException e) {
+				status = SyncStatus.AUTH_RESOLUTION;
+			} catch (Exception e) {
+				Log.e(t, "[exception during synchronization. stack trace:\n"
+						+ Arrays.toString(e.getStackTrace()));
+				status = SyncStatus.NETWORK_ERROR;
+			}
+			return null;
+
+		}
+
+	}
+
 }
