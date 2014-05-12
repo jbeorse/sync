@@ -276,7 +276,7 @@ public class AggregateSynchronizer implements Synchronizer {
   private void checkAccessToken(String accessToken) throws InvalidAuthTokenException {
     ResponseEntity<Object> responseEntity;
     try {
-      responseEntity = tokenRt.getForEntity(URLEncoder.encode(accessToken, ApiConstants.UTF8_ENCODE), Object.class);
+      responseEntity = tokenRt.getForEntity(TOKEN_INFO + URLEncoder.encode(accessToken, ApiConstants.UTF8_ENCODE), Object.class);
       @SuppressWarnings("unused")
       Object o = responseEntity.getBody();
     } catch (HttpClientErrorException e) {

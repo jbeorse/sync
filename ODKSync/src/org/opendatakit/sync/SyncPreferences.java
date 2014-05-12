@@ -80,8 +80,10 @@ public class SyncPreferences {
 	public void setServerUri(String serverUri) throws IOException {
 		if (serverUri != null) {
 			this.prop.setProperty(SERVER_URI_KEY, serverUri);
-			storePreferences();
+		} else {
+			this.prop.remove(SERVER_URI_KEY);
 		}
+		storePreferences();
 	}
 
 	public String getServerUri() {
@@ -91,8 +93,10 @@ public class SyncPreferences {
 	public void setAccount(String accountName) throws IOException {
 		if (accountName != null) {
 			this.prop.setProperty(ACCOUNT_KEY, accountName);
-			storePreferences();
+		} else {
+			this.prop.remove(ACCOUNT_KEY);
 		}
+		storePreferences();
 	}
 
 	public String getAccount() {
@@ -102,8 +106,10 @@ public class SyncPreferences {
 	public void setAuthToken(String authToken) throws IOException {
 		if (authToken != null) {
 			this.prop.setProperty(AUTH_KEY, authToken);
-			storePreferences();
+		} else {
+			this.prop.remove(AUTH_KEY);
 		}
+		storePreferences();
 	}
 
 	public String getAuthToken() {

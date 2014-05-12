@@ -16,7 +16,6 @@ package org.opendatakit.sync.activities;
 
 import java.io.IOException;
 
-import org.opendatakit.common.android.data.Preferences;
 import org.opendatakit.sync.R;
 import org.opendatakit.sync.SyncPreferences;
 import org.opendatakit.sync.TableFileUtils;

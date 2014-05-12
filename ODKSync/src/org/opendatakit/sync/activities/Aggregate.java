@@ -26,6 +26,7 @@ import org.opendatakit.sync.SyncUtil;
 import org.opendatakit.sync.SynchronizationResult;
 import org.opendatakit.sync.TableFileUtils;
 import org.opendatakit.sync.TableResult;
+import org.opendatakit.sync.activities.SyncNowTask.SyncNowCallback;
 
 import android.accounts.Account;
 import android.accounts.AccountManager;
@@ -50,7 +51,7 @@ import android.widget.Toast;
  * @author hkworden@gmail.com
  * @author the.dylan.price@gmail.com
  */
-public class Aggregate extends Activity {
+public class Aggregate extends Activity implements SyncNowCallback {
 
 	private static final String LOGTAG = "Aggregate";
 	public static final String INTENT_KEY_APP_NAME = "appName";
@@ -337,11 +338,10 @@ public class Aggregate extends Activity {
 			Toast.makeText(this, getString(R.string.choose_account),
 					Toast.LENGTH_SHORT).show();
 		} else {
-			try {
-				syncProxy.pushToServer();
-			} catch (RemoteException e) {
-				Log.e(LOGTAG, "Problem with sync command");
-			}
+				SyncNowTask syncTask = new SyncNowTask(this, appName, true,
+						this);
+				syncTask.execute();
+
 		}
 		updateButtonsEnabled(prefs);
 		} catch (IOException e) {
@@ -365,11 +365,8 @@ public class Aggregate extends Activity {
 				Toast.makeText(this, getString(R.string.choose_account),
 						Toast.LENGTH_SHORT).show();
 			} else {
-				try {
-					syncProxy.synchronize();
-				} catch (RemoteException e) {
-					Log.e(LOGTAG, "Problem with sync command");
-				}
+				 SyncNowTask syncTask = new SyncNowTask(this, appName, false, this);
+	              syncTask.execute();
 			}
 			
 			updateButtonsEnabled(prefs);
@@ -405,5 +402,44 @@ public class Aggregate extends Activity {
 			e.printStackTrace();
 		}
 	}
+	
+	@Override
+	public void syncOutcome(boolean success, String message,
+			boolean authRequired, SynchronizationResult result) {
+
+		try {
+			Log.e(LOGTAG, "AUTH REQUIRED" + authRequired);
+			SyncPreferences prefs = new SyncPreferences(this, appName);
+			if (authRequired) {
+				invalidateAuthToken(prefs.getAuthToken(), this, appName);
+			}
+
+			if (!success && message != null) {
+				buildOkMessage(getString(R.string.sync_error), message).show();
+			} else {
+				buildResultMessage(getString(R.string.sync_result), result)
+						.show();
+			}
+			
+
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+		try {
+			SyncPreferences prefs = new SyncPreferences(this, appName);
+			if(prefs.getAuthToken() == null)
+			Log.e(LOGTAG, "AUTH TOKEN BEFORE UDPATE:" + null);
+			else 
+				Log.e(LOGTAG, "AUTH TOKEN BEFORE UDPATE:" + prefs.getAuthToken());
+			updateButtonsEnabled(prefs);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+	}
+
 
 }
