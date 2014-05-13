@@ -31,8 +31,8 @@ import org.opendatakit.common.android.utils.NameUtil;
 import org.opendatakit.sync.R;
 import org.opendatakit.sync.SyncPreferences;
 import org.opendatakit.sync.SyncProcessor;
+import org.opendatakit.sync.SyncUtil;
 import org.opendatakit.sync.Synchronizer;
-import org.opendatakit.sync.TableFileUtils;
 import org.opendatakit.sync.TableResult;
 import org.opendatakit.sync.aggregate.AggregateSynchronizer;
 import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
@@ -68,7 +68,7 @@ public class AggregateDownloadTableActivity extends ListActivity {
 		super.onCreate(savedInstanceState);
 		appName = getIntent().getStringExtra(Aggregate.INTENT_KEY_APP_NAME);
 		if (appName == null) {
-			appName = TableFileUtils.getDefaultAppName();
+			appName = SyncUtil.getDefaultAppName();
 		}
 
 		final ListView listView = getListView();

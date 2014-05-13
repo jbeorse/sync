@@ -17,7 +17,7 @@ package org.opendatakit.sync.activities;
 
 import org.opendatakit.common.android.data.TableProperties;
 import org.opendatakit.sync.R;
-import org.opendatakit.sync.TableFileUtils;
+import org.opendatakit.sync.SyncUtil;
 
 import android.app.ListActivity;
 import android.os.Bundle;
@@ -28,14 +28,13 @@ import android.widget.ListView;
 public class AggregateChooseTablesActivity extends ListActivity {
 
   private String appName;
-  private ListView tablesView;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     appName = getIntent().getStringExtra(Aggregate.INTENT_KEY_APP_NAME);
     if ( appName == null ) {
-      appName = TableFileUtils.getDefaultAppName();
+    	appName = SyncUtil.getDefaultAppName();
     }
     setContentView(R.layout.aggregate_choose_tables_activity);
 

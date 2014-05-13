@@ -4,9 +4,9 @@ import java.util.Arrays;
 
 import org.opendatakit.sync.SyncPreferences;
 import org.opendatakit.sync.SyncProcessor;
+import org.opendatakit.sync.SyncUtil;
 import org.opendatakit.sync.SynchronizationResult;
 import org.opendatakit.sync.Synchronizer;
-import org.opendatakit.sync.TableFileUtils;
 import org.opendatakit.sync.TableResult;
 import org.opendatakit.sync.aggregate.AggregateSynchronizer;
 import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
@@ -15,7 +15,6 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SyncResult;
-import android.os.AsyncTask;
 import android.os.IBinder;
 import android.util.Log;
 
@@ -23,24 +22,21 @@ public class OdkSyncService extends Service {
 
 	private static final String LOGTAG = "OdkSyncService";
 
-	public static final String BENCHMARK_SERVICE_PACKAGE = "org.opendatakit.sync";
+	public static final String SYNC_SERVICE_PACKAGE = "org.opendatakit.sync";
 
-	public static final String BENCHMARK_SERVICE_CLASS = "org.opendatakit.sync.service.OdkSyncService";
+	public static final String SYNC_SERVICE_CLASS = "org.opendatakit.sync.service.OdkSyncService";
 
 	private SyncStatus status;
-
-	private String appName;
+	private String syncAppName;
+	
 	private SyncThread syncThread;
 	private OdkSyncServiceInterfaceImpl serviceInterface;
 
 	@Override
 	public void onCreate() {
 		serviceInterface = new OdkSyncServiceInterfaceImpl(this);
-		status = SyncStatus.INIT;
-
-		if (appName == null) {
-			appName = TableFileUtils.getDefaultAppName();
-		}
+		status = SyncStatus.INIT;	
+		syncAppName = null;
 		syncThread = new SyncThread(this);
 	}
 
@@ -109,7 +105,14 @@ public class OdkSyncService extends Service {
 		@Override
 		public void run() {
 			try {
-
+				
+				String appName;
+				if(syncAppName == null){
+					appName = SyncUtil.getDefaultAppName();
+				} else {
+					appName = syncAppName;
+				}
+				
 				SyncPreferences prefs = new SyncPreferences(cntxt, appName);
 				Log.e(LOGTAG, "APPNAME IN SERVICE: " + appName);
 				Log.e(LOGTAG, "TOKEN IN SERVICE:" + prefs.getAuthToken());

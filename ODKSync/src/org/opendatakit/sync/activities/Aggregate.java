@@ -24,7 +24,6 @@ import org.opendatakit.sync.R;
 import org.opendatakit.sync.SyncPreferences;
 import org.opendatakit.sync.SyncUtil;
 import org.opendatakit.sync.SynchronizationResult;
-import org.opendatakit.sync.TableFileUtils;
 import org.opendatakit.sync.TableResult;
 
 import android.accounts.Account;
@@ -52,13 +51,10 @@ import android.widget.Toast;
  */
 public class Aggregate extends Activity {
 
-	private static final String LOGTAG = "Aggregate";
+	private static final String LOGTAG = Aggregate.class.getSimpleName();
+	
 	public static final String INTENT_KEY_APP_NAME = "appName";
 	public static final String INTENT_KEY_TABLE_ID = "tableId";
-	// public static final String INTENT_KEY_SEARCH_STACK = "searchStack";
-	public static final String INTENT_KEY_IS_OVERVIEW = "isOverview";
-
-	public static final String TAG = "Aggregate--Activity";
 
 	private static final String ACCOUNT_TYPE_G = "com.google";
 	private static final String URI_FIELD_EMPTY = "http://";
@@ -78,7 +74,7 @@ public class Aggregate extends Activity {
 		super.onCreate(savedInstanceState);
 		appName = getIntent().getStringExtra(INTENT_KEY_APP_NAME);
 		if (appName == null) {
-			appName = TableFileUtils.getDefaultAppName();
+			appName = SyncUtil.getDefaultAppName();
 		}
 		accountManager = AccountManager.get(this);
 
@@ -251,7 +247,7 @@ public class Aggregate extends Activity {
 				// TODO if you change a user you can switch to their privileges
 				// without
 				// this.
-				Log.d(TAG,
+				Log.d(LOGTAG,
 						"[onClickSaveSettings][onClick] invalidated authtoken");
 				invalidateAuthToken(prefs.getAuthToken(), Aggregate.this,
 						appName);
@@ -326,13 +322,13 @@ public class Aggregate extends Activity {
 	 * Hooked to syncNowButton's onClick in aggregate_activity.xml
 	 */
 	public void onClickSyncNowPush(View v) {
-		Log.d(TAG, "in onClickSyncNow");
+		Log.d(LOGTAG, "in onClickSyncNow");
 		// ask whether to sync app files and table-level files
 		
 		try {
 			SyncPreferences prefs = new SyncPreferences(this, appName);
 		String accountName = prefs.getAccount();
-		Log.e(TAG, "[onClickSyncNow] timestamp: " + System.currentTimeMillis());
+		Log.e(LOGTAG, "[onClickSyncNow] timestamp: " + System.currentTimeMillis());
 		if (accountName == null) {
 			Toast.makeText(this, getString(R.string.choose_account),
 					Toast.LENGTH_SHORT).show();
@@ -356,12 +352,12 @@ public class Aggregate extends Activity {
 	 * Hooked to syncNowButton's onClick in aggregate_activity.xml
 	 */
 	public void onClickSyncNowPull(View v) {
-		Log.d(TAG, "in onClickSyncNow");
+		Log.d(LOGTAG, "in onClickSyncNow");
 		// ask whether to sync app files and table-level files
 		try {
 			SyncPreferences prefs = new SyncPreferences(this, appName);
 			String accountName = prefs.getAccount();
-			Log.e(TAG,
+			Log.e(LOGTAG,
 					"[onClickSyncNow] timestamp: " + System.currentTimeMillis());
 			if (accountName == null) {
 				Toast.makeText(this, getString(R.string.choose_account),

@@ -13,7 +13,7 @@ import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
 import org.opendatakit.common.android.provider.DataTableColumns;
 import org.opendatakit.sync.R;
-import org.opendatakit.sync.TableFileUtils;
+import org.opendatakit.sync.SyncUtil;
 import org.opendatakit.sync.views.components.ConflictResolutionListAdapter;
 import org.opendatakit.sync.views.components.ConflictResolutionListAdapter.ConcordantColumn;
 import org.opendatakit.sync.views.components.ConflictResolutionListAdapter.ConflictColumn;
@@ -101,7 +101,7 @@ public class ConflictResolutionRowActivity extends ListActivity
     super.onCreate(savedInstanceState);
     String appName = getIntent().getStringExtra(Aggregate.INTENT_KEY_APP_NAME);
     if ( appName == null ) {
-      appName = TableFileUtils.getDefaultAppName();
+    	appName = SyncUtil.getDefaultAppName();
     }
     this.setContentView(R.layout.conflict_resolution_row_activity);
     this.mTextViewDeletionMessage = (TextView)

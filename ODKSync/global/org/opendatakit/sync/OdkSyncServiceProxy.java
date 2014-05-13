@@ -23,8 +23,8 @@ public class OdkSyncServiceProxy implements ServiceConnection {
 	protected final AtomicBoolean isBoundToService = new AtomicBoolean(false);
 
 	public OdkSyncServiceProxy(Context context) {
-		this(context, OdkSyncService.BENCHMARK_SERVICE_PACKAGE,
-				OdkSyncService.BENCHMARK_SERVICE_CLASS);
+		this(context, OdkSyncService.SYNC_SERVICE_PACKAGE,
+				OdkSyncService.SYNC_SERVICE_CLASS);
 	}
 
 	public OdkSyncServiceProxy(Context context, String frameworkPackage,
