@@ -72,6 +72,7 @@ import org.opendatakit.httpclientandroidlib.params.HttpConnectionParams;
 import org.opendatakit.httpclientandroidlib.params.HttpParams;
 import org.opendatakit.sync.IncomingRowModifications;
 import org.opendatakit.sync.RowModification;
+import org.opendatakit.sync.SyncApp;
 import org.opendatakit.sync.SyncRow;
 import org.opendatakit.sync.Synchronizer;
 import org.opendatakit.sync.exceptions.AccessDeniedException;
@@ -79,7 +80,6 @@ import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
 import org.opendatakit.sync.exceptions.RequestFailureException;
 import org.opendatakit.sync.files.SyncUtil;
 import org.opendatakit.sync.files.SyncUtilities;
-import org.opendatakit.webkitserver.application.WebkitFileServer;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -137,7 +137,7 @@ public class AggregateSynchronizer implements Synchronizer {
 
   private String getManifestUriFragment() {
     /** Path to the tables servlet (the one that manages table definitions) on the Aggregate server. */
-    String versionCode = WebkitFileServer.getInstance().getVersionCodeString();
+    String versionCode = SyncApp.getInstance().getVersionCodeString();
     // the javascript API and file representation are the 100's and higher place in the versionCode.
     String odkClientVersion = versionCode.substring(0, versionCode.length()-2);
     return "/odktables/" + appName + "/manifest/" + odkClientVersion + "/";
@@ -151,7 +151,7 @@ public class AggregateSynchronizer implements Synchronizer {
    * @return
    */
   private String getFilePathURI() {
-    String versionCode = WebkitFileServer.getInstance().getVersionCodeString();
+    String versionCode = SyncApp.getInstance().getVersionCodeString();
     // the javascript API and file representation are the 100's and higher place in the versionCode.
     String odkClientVersion = versionCode.substring(0, versionCode.length()-2);
     return "/odktables/" + appName + "/files/" + odkClientVersion + "/";

@@ -2,10 +2,10 @@ package org.opendatakit.sync.service;
 
 interface OdkSyncServiceInterface {
 
-	String getSyncStatus();
+	String getSyncStatus(in String appName);
 	
-	boolean synchronize();
+	boolean synchronize(in String appName);
 	
-	boolean push();
+	boolean push(in String appName);
 
 }

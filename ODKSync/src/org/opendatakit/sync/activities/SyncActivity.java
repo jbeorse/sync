@@ -50,9 +50,9 @@ import android.widget.Toast;
  * @author hkworden@gmail.com
  * @author the.dylan.price@gmail.com
  */
-public class Aggregate extends Activity {
+public class SyncActivity extends Activity {
 
-	private static final String LOGTAG = Aggregate.class.getSimpleName();
+	private static final String LOGTAG = SyncActivity.class.getSimpleName();
 	
 	private static final String ACCOUNT_TYPE_G = "com.google";
 	private static final String URI_FIELD_EMPTY = "http://";
@@ -242,7 +242,7 @@ public class Aggregate extends Activity {
 				// this.
 				Log.d(LOGTAG,
 						"[onClickSaveSettings][onClick] invalidated authtoken");
-				invalidateAuthToken(prefs.getAuthToken(), Aggregate.this,
+				invalidateAuthToken(prefs.getAuthToken(), SyncActivity.this,
 						appName);
 				updateButtonsEnabled(prefs);
 				} catch (IOException e) {
@@ -294,7 +294,7 @@ public class Aggregate extends Activity {
 					Toast.LENGTH_SHORT).show();
 		} else {
 			 try {
-                 syncProxy.pushToServer();
+                 syncProxy.pushToServer(appName);
          } catch (RemoteException e) {
                  Log.e(LOGTAG, "Problem with push command");
          }
@@ -323,7 +323,7 @@ public class Aggregate extends Activity {
 				Toast.makeText(this, getString(R.string.choose_account),
 						Toast.LENGTH_SHORT).show();
 				 try {
-                     syncProxy.synchronizeFromServer();
+                     syncProxy.synchronizeFromServer(appName);
              } catch (RemoteException e) {
                      Log.e(LOGTAG, "Problem with pull command");
              }

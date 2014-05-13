@@ -1,6 +1,7 @@
 package org.opendatakit.sync.service.test;
 
 import org.opendatakit.sync.SyncConsts;
+import org.opendatakit.sync.files.SyncUtil;
 import org.opendatakit.sync.service.OdkSyncService;
 import org.opendatakit.sync.service.OdkSyncServiceInterface;
 import org.opendatakit.sync.service.SyncStatus;
@@ -61,7 +62,7 @@ public class SyncServiceTest extends ServiceTestCase<OdkSyncService> {
 			OdkSyncServiceInterface syncServiceInterface,
 			SyncStatus syncStatus) {
 		try {
-			String status = syncServiceInterface.getSyncStatus();
+			String status = syncServiceInterface.getSyncStatus(SyncUtil.getDefaultAppName());
 			assertTrue(status.equals(syncStatus.name()));
 		} catch (RemoteException e) {
 			e.printStackTrace();
