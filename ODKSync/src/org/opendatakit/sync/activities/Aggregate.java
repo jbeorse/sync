@@ -21,6 +21,7 @@ import java.util.List;
 
 import org.opendatakit.sync.OdkSyncServiceProxy;
 import org.opendatakit.sync.R;
+import org.opendatakit.sync.SyncConsts;
 import org.opendatakit.sync.SyncPreferences;
 import org.opendatakit.sync.SynchronizationResult;
 import org.opendatakit.sync.TableResult;
@@ -53,9 +54,6 @@ public class Aggregate extends Activity {
 
 	private static final String LOGTAG = Aggregate.class.getSimpleName();
 	
-	public static final String INTENT_KEY_APP_NAME = "appName";
-	public static final String INTENT_KEY_TABLE_ID = "tableId";
-
 	private static final String ACCOUNT_TYPE_G = "com.google";
 	private static final String URI_FIELD_EMPTY = "http://";
 
@@ -72,7 +70,7 @@ public class Aggregate extends Activity {
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
-		appName = getIntent().getStringExtra(INTENT_KEY_APP_NAME);
+		appName = getIntent().getStringExtra(SyncConsts.INTENT_KEY_APP_NAME);
 		if (appName == null) {
 			appName = SyncUtil.getDefaultAppName();
 		}
@@ -271,7 +269,7 @@ public class Aggregate extends Activity {
 			SyncPreferences prefs = new SyncPreferences(this, appName);
 		Intent i = new Intent(this, AccountInfoActivity.class);
 		Account account = new Account(prefs.getAccount(), ACCOUNT_TYPE_G);
-		i.putExtra(INTENT_KEY_APP_NAME, appName);
+		i.putExtra(SyncConsts.INTENT_KEY_APP_NAME, appName);
 		i.putExtra(AccountInfoActivity.INTENT_EXTRAS_ACCOUNT, account);
 		startActivityForResult(i, AUTHORIZE_ACCOUNT_RESULT_ID);
 		} catch (IOException e) {

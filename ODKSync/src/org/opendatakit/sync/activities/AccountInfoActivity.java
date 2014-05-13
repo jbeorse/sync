@@ -17,6 +17,7 @@ package org.opendatakit.sync.activities;
 import java.io.IOException;
 
 import org.opendatakit.sync.R;
+import org.opendatakit.sync.SyncConsts;
 import org.opendatakit.sync.SyncPreferences;
 import org.opendatakit.sync.files.SyncUtil;
 
@@ -59,7 +60,7 @@ public class AccountInfoActivity extends Activity {
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
-		appName = getIntent().getStringExtra(Aggregate.INTENT_KEY_APP_NAME);
+		appName = getIntent().getStringExtra(SyncConsts.INTENT_KEY_APP_NAME);
 		if (appName == null) {
 			appName = SyncUtil.getDefaultAppName();
 		}

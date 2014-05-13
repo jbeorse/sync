@@ -22,10 +22,6 @@ public class OdkSyncService extends Service {
 
 	private static final String LOGTAG = "OdkSyncService";
 
-	public static final String SYNC_SERVICE_PACKAGE = "org.opendatakit.sync";
-
-	public static final String SYNC_SERVICE_CLASS = "org.opendatakit.sync.service.OdkSyncService";
-
 	private SyncStatus status;
 	private String syncAppName;
 	

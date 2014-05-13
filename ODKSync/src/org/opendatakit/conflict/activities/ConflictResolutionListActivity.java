@@ -5,7 +5,7 @@ import org.opendatakit.common.android.data.DbTable;
 import org.opendatakit.common.android.data.TableProperties;
 import org.opendatakit.common.android.data.UserTable.Row;
 import org.opendatakit.common.android.provider.DataTableColumns;
-import org.opendatakit.sync.activities.Aggregate;
+import org.opendatakit.sync.SyncConsts;
 import org.opendatakit.sync.files.SyncUtil;
 
 import android.app.ListActivity;
@@ -33,12 +33,12 @@ public class ConflictResolutionListActivity extends ListActivity {
     super.onResume();
     // Do this in on resume so that if we resolve a row it will be refreshed
     // when we come back.
-    String appName = getIntent().getStringExtra(Aggregate.INTENT_KEY_APP_NAME);
+    String appName = getIntent().getStringExtra(SyncConsts.INTENT_KEY_APP_NAME);
     if ( appName == null ) {
       appName = SyncUtil.getDefaultAppName();
     }
     String tableId =
-        getIntent().getStringExtra(Aggregate.INTENT_KEY_TABLE_ID);
+        getIntent().getStringExtra(SyncConsts.INTENT_KEY_TABLE_ID);
     TableProperties tableProperties =
         TableProperties.getTablePropertiesForTable(this, appName, tableId);
     DbTable dbTable = DbTable.getDbTable(tableProperties);
@@ -65,9 +65,9 @@ public class ConflictResolutionListActivity extends ListActivity {
   protected void onListItemClick(ListView l, View v, int position, long id) {
     Log.e(TAG, "[onListItemClick] clicked position: " + position);
     Intent i = new Intent(this, ConflictResolutionRowActivity.class);
-    i.putExtra(Aggregate.INTENT_KEY_APP_NAME,
+    i.putExtra(SyncConsts.INTENT_KEY_APP_NAME,
         mConflictTable.getLocalTable().getTableProperties().getAppName());
-    i.putExtra(Aggregate.INTENT_KEY_TABLE_ID,
+    i.putExtra(SyncConsts.INTENT_KEY_TABLE_ID,
         mConflictTable.getLocalTable().getTableProperties().getTableId());
     String rowId =
         this.mConflictTable.getLocalTable().getRowAtIndex(position).getRowId();

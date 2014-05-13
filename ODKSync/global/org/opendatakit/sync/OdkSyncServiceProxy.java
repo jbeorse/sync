@@ -2,7 +2,6 @@ package org.opendatakit.sync;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.opendatakit.sync.service.OdkSyncService;
 import org.opendatakit.sync.service.OdkSyncServiceInterface;
 
 import android.content.ComponentName;
@@ -23,8 +22,8 @@ public class OdkSyncServiceProxy implements ServiceConnection {
 	protected final AtomicBoolean isBoundToService = new AtomicBoolean(false);
 
 	public OdkSyncServiceProxy(Context context) {
-		this(context, OdkSyncService.SYNC_SERVICE_PACKAGE,
-				OdkSyncService.SYNC_SERVICE_CLASS);
+		this(context, SyncConsts.SYNC_SERVICE_PACKAGE,
+				SyncConsts.SYNC_SERVICE_CLASS);
 	}
 
 	public OdkSyncServiceProxy(Context context, String frameworkPackage,

@@ -13,7 +13,7 @@ import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
 import org.opendatakit.common.android.provider.DataTableColumns;
 import org.opendatakit.sync.R;
-import org.opendatakit.sync.activities.Aggregate;
+import org.opendatakit.sync.SyncConsts;
 import org.opendatakit.sync.files.SyncUtil;
 import org.opendatakit.sync.views.components.ConflictResolutionListAdapter;
 import org.opendatakit.sync.views.components.ConflictResolutionListAdapter.ConcordantColumn;
@@ -100,7 +100,7 @@ public class ConflictResolutionRowActivity extends ListActivity
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
-    String appName = getIntent().getStringExtra(Aggregate.INTENT_KEY_APP_NAME);
+    String appName = getIntent().getStringExtra(SyncConsts.INTENT_KEY_APP_NAME);
     if ( appName == null ) {
     	appName = SyncUtil.getDefaultAppName();
     }
@@ -123,7 +123,7 @@ public class ConflictResolutionRowActivity extends ListActivity
         (Button) findViewById(R.id.conflict_resolution_button_resolve_row);
     this.mButtonResolveRow.setOnClickListener(new ResolveRowClickListener());
     String tableId =
-        getIntent().getStringExtra(Aggregate.INTENT_KEY_TABLE_ID);
+        getIntent().getStringExtra(SyncConsts.INTENT_KEY_TABLE_ID);
     this.mRowId = getIntent().getStringExtra(INTENT_KEY_ROW_ID);
     TableProperties tableProperties =
         TableProperties.getTablePropertiesForTable(this, appName, tableId);
