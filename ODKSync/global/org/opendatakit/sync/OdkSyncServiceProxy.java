@@ -72,15 +72,6 @@ public class OdkSyncServiceProxy implements ServiceConnection {
 		}
 	}
 
-	public boolean synchronize() throws RemoteException {
-		try {
-			return sensorSvcProxy.synchronize();
-		} catch (RemoteException rex) {
-			rex.printStackTrace();
-			throw rex;
-		}
-	}
-
 	public boolean pushToServer() throws RemoteException {
 		try {
 			return sensorSvcProxy.push();
@@ -89,7 +80,16 @@ public class OdkSyncServiceProxy implements ServiceConnection {
 			throw rex;
 		}
 	}
-	
+
+   public boolean synchronizeFromServer() throws RemoteException {
+      try {
+         return sensorSvcProxy.synchronize();
+      } catch (RemoteException rex) {
+         rex.printStackTrace();
+         throw rex;
+      }
+   }
+
 	public boolean isBoundToService() {
 		return isBoundToService.get();
 	}

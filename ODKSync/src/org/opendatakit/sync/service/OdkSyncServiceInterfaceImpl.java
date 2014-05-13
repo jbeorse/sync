@@ -11,16 +11,10 @@ public class OdkSyncServiceInterfaceImpl extends Stub {
 	public OdkSyncServiceInterfaceImpl(OdkSyncService syncService) {
 		this.syncService = syncService;
 	}
-	
+
 	@Override
 	public String getSyncStatus() throws RemoteException {
 		return syncService.getStatus().toString();
-	}
-
-	@Override
-	public boolean synchronize() throws RemoteException {
-		syncService.sync();
-		return true;
 	}
 
 	@Override
@@ -29,4 +23,9 @@ public class OdkSyncServiceInterfaceImpl extends Stub {
 		return true;
 	}
 
+   @Override
+   public boolean synchronize() throws RemoteException {
+      syncService.synchronize();
+      return true;
+   }
 }

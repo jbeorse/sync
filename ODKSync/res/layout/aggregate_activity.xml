@@ -47,19 +47,6 @@
         android:onClick="onClickAuthorizeAccount"
         android:text="@+string/auth_account" />
 
-    <Button
-        android:id="@+id/aggregate_activity_choose_tables_button"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:onClick="onClickChooseTables"
-        android:text="@+string/choose_sync_set" />
-
-    <Button
-        android:id="@+id/aggregate_activity_get_table_button"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:onClick="onClickDownloadTableFromServer"
-        android:text="@+string/download_table" />
 
     <Button
         android:id="@+id/aggregate_activity_sync_now_pull_button"
@@ -76,14 +63,6 @@
         android:layout_gravity="bottom"
         android:onClick="onClickSyncNowPush"
         android:text="@+string/sync_now_push" />
-
-    <!--     <Button
-        android:id="@+id/aggregate_activity_sync_using_submit_button"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
-        android:onClick="onClickSyncUsingSubmit"
-        android:text="@+string/send_using_submit" /> -->
 
 </LinearLayout>
 </ScrollView>

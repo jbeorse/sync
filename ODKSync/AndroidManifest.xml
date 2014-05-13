@@ -41,8 +41,6 @@
 
         <activity android:name=".activities.ConflictResolutionListActivity" />
 		<activity android:name=".activities.ConflictResolutionRowActivity" />
-        <activity android:name=".activities.AggregateChooseTablesActivity" />
-        <activity android:name=".activities.AggregateDownloadTableActivity" />
         <activity android:name=".activities.AccountInfoActivity" />
     </application>
 

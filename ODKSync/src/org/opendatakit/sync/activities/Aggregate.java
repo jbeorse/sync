@@ -46,7 +46,7 @@ import android.widget.Toast;
 
 /**
  * An activity for downloading from and uploading to an ODK Aggregate instance.
- * 
+ *
  * @author hkworden@gmail.com
  * @author the.dylan.price@gmail.com
  */
@@ -100,7 +100,7 @@ public class Aggregate extends Activity {
 	@Override
 	protected void onStart() {
 		super.onStart();
-	try{	
+	try{
 		SyncPreferences prefs = new SyncPreferences(this, appName);
 		updateButtonsEnabled(prefs);
 	} catch (IOException e) {
@@ -166,15 +166,10 @@ public class Aggregate extends Activity {
 				true);
 		findViewById(R.id.aggregate_activity_authorize_account_button)
 				.setEnabled(authorizeAccount);
-		findViewById(R.id.aggregate_activity_choose_tables_button).setEnabled(
-				restOfButtons);
-		findViewById(R.id.aggregate_activity_get_table_button).setEnabled(
-				restOfButtons);
 		findViewById(R.id.aggregate_activity_sync_now_push_button).setEnabled(
 				restOfButtons);
 		findViewById(R.id.aggregate_activity_sync_now_pull_button).setEnabled(
 				restOfButtons);
-		// findViewById(R.id.aggregate_activity_sync_using_submit_button).setEnabled(restOfButtons);
 	}
 
 	private void saveSettings(SyncPreferences prefs) throws IOException {
@@ -242,11 +237,11 @@ public class Aggregate extends Activity {
 		msg.setPositiveButton(getString(R.string.save), new OnClickListener() {
 			@Override
 			public void onClick(DialogInterface dialog, int which) {
-				
+
 				// TODO: IMPORATNT rewrite this interaction
 				try {
 					saveSettings(prefs);
-			
+
 				// SS Oct 15: clear the auth token here.
 				// TODO if you change a user you can switch to their privileges
 				// without
@@ -260,7 +255,7 @@ public class Aggregate extends Activity {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
-				
+
 			}
 		});
 
@@ -290,45 +285,12 @@ public class Aggregate extends Activity {
 	}
 
 	/**
-	 * Hooked to chooseTablesButton's onClick in aggregate_activity.xml
-	 */
-	public void onClickChooseTables(View v) {
-		try {
-			SyncPreferences prefs = new SyncPreferences(this, appName);
-		Intent i = new Intent(this, AggregateChooseTablesActivity.class);
-		i.putExtra(INTENT_KEY_APP_NAME, appName);
-		startActivity(i);
-		updateButtonsEnabled(prefs);
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-	}
-
-	/**
-	 * Hooked up to downloadTableButton's onClick in aggregate_activity.xml
-	 */
-	public void onClickDownloadTableFromServer(View v) {
-		try {
-			SyncPreferences prefs = new SyncPreferences(this, appName);
-		Intent i = new Intent(this, AggregateDownloadTableActivity.class);
-		i.putExtra(INTENT_KEY_APP_NAME, appName);
-		startActivity(i);
-		updateButtonsEnabled(prefs);
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		
-	}
-
-	/**
 	 * Hooked to syncNowButton's onClick in aggregate_activity.xml
 	 */
 	public void onClickSyncNowPush(View v) {
 		Log.d(TAG, "in onClickSyncNow");
 		// ask whether to sync app files and table-level files
-		
+
 		try {
 			SyncPreferences prefs = new SyncPreferences(this, appName);
 		String accountName = prefs.getAccount();
@@ -340,7 +302,7 @@ public class Aggregate extends Activity {
 			 try {
                  syncProxy.pushToServer();
          } catch (RemoteException e) {
-                 Log.e(LOGTAG, "Problem with sync command");
+                 Log.e(LOGTAG, "Problem with push command");
          }
 
 
@@ -367,22 +329,22 @@ public class Aggregate extends Activity {
 				Toast.makeText(this, getString(R.string.choose_account),
 						Toast.LENGTH_SHORT).show();
 				 try {
-                     syncProxy.pushToServer();
+                     syncProxy.synchronizeFromServer();
              } catch (RemoteException e) {
-                     Log.e(LOGTAG, "Problem with sync command");
+                     Log.e(LOGTAG, "Problem with pull command");
              }
 
 
 
 			}
-			
+
 			updateButtonsEnabled(prefs);
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 
-		
+
 	}
 
 	public static void invalidateAuthToken(String authToken, Context context,
@@ -409,8 +371,8 @@ public class Aggregate extends Activity {
 			e.printStackTrace();
 		}
 	}
-	
-	
+
+
 
 
 }

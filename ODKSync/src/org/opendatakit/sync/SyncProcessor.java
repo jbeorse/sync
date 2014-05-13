@@ -17,6 +17,7 @@ package org.opendatakit.sync;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -45,6 +46,7 @@ import org.opendatakit.common.android.data.UserTable.Row;
 import org.opendatakit.common.android.provider.DataTableColumns;
 import org.opendatakit.common.android.sync.aggregate.SyncTag;
 import org.opendatakit.common.android.sync.exceptions.SchemaMismatchException;
+import org.opendatakit.common.android.utilities.ODKFileUtils;
 import org.opendatakit.common.android.utils.CsvUtil;
 import org.opendatakit.common.android.utils.DataUtil;
 import org.opendatakit.sync.Synchronizer.OnTablePropertiesChanged;
@@ -140,6 +142,8 @@ public class SyncProcessor {
                                            boolean pushLocalTableLevelFiles,
                                            boolean pushLocalInstanceFiles) {
     Log.i(TAG, "entered synchronize()");
+    ODKFileUtils.assertDirectoryStructure(appName);
+
     // First we're going to synchronize the app level files.
     try {
       synchronizer.syncAppLevelFiles(pushLocalAppLevelFiles);
@@ -148,13 +152,89 @@ public class SyncProcessor {
       Log.e(TAG, "[synchronize] error trying to synchronize app-level files.");
       e.printStackTrace();
     }
-    // TableProperties[] tps = dm.getSynchronizedTableProperties();
-    // we want this call rather than just the getSynchronizedTableProperties,
-    // because we only want to push the default to the server.
-    TableProperties[] tps = TableProperties.getTablePropertiesForSynchronizedTables(context, appName);
-    for (TableProperties tp : tps) {
-      Log.i(TAG, "synchronizing table " + tp.getTableId());
-      synchronizeTable(tp, pushLocalTableLevelFiles, pushLocalInstanceFiles);
+
+
+    TableProperties[] tps;
+    tps = TableProperties.getTablePropertiesForAll(context, appName);
+    if ( pushLocalTableLevelFiles ) {
+      for (TableProperties tp : tps) {
+        Log.i(TAG, "synchronizing table " + tp.getTableId());
+        synchronizeTable(tp, true, pushLocalInstanceFiles);
+      }
+    } else {
+      // get tables (tableId -> schemaETag) from server
+      List<TableResource> tables = new ArrayList<TableResource>();
+      try {
+         tables = synchronizer.getTables();
+         if ( tables == null ) {
+           tables = new ArrayList<TableResource>();
+         }
+      } catch (IOException e) {
+         Log.i(TAG, "Could not retrieve table list", e);
+         return null;
+      } catch (Exception e) {
+         Log.e(TAG, "Unexpected exception getting table list", e);
+         return null;
+      }
+
+      List<TableProperties> toDelete = new ArrayList<TableProperties>();
+      Collections.addAll(toDelete, tps);
+      for ( TableResource table : tables ) {
+        TableProperties tpOriginal = null;
+        String tableId = table.getTableId();
+        boolean tablePresent = false;
+        for (TableProperties p : tps) {
+           if (p.getTableId().equals(tableId)) {
+              tablePresent = true;
+              tpOriginal = p;
+              tpOriginal.setSyncTag(new SyncTag(null, null));
+              toDelete.remove(p);
+              break;
+           }
+        }
+
+        TableResource tr;
+        try {
+           tr = synchronizer.getTable(tableId);
+        } catch (IOException e) {
+           // TODO report failure properly
+           e.printStackTrace();
+           return null;
+        }
+
+        TableProperties tp;
+        try {
+           tp = assertTableDefinition(tr.getDefinitionUri());
+        } catch (JsonParseException e) {
+           // TODO report failure properly
+           e.printStackTrace();
+           return null;
+        } catch (JsonMappingException e) {
+           // TODO report failure properly
+           e.printStackTrace();
+           return null;
+        } catch (IOException e) {
+           // TODO report failure properly
+           e.printStackTrace();
+           return null;
+        } catch (SchemaMismatchException e) {
+           // TODO Auto-generated catch block
+           e.printStackTrace();
+           return null;
+        }
+
+        tp.setSyncState(tablePresent ? SyncState.inserting : SyncState.rest);
+        // Sync the local media files with the server if the table
+        // existed locally before we attempted downloading it.
+
+        synchronizeTable(tp, false, tablePresent);
+      }
+
+      // and now loop through the ones to delete...
+      for ( TableProperties tp : toDelete ) {
+        tp.deleteTable();
+      }
+
     }
     return mUserResult;
   }

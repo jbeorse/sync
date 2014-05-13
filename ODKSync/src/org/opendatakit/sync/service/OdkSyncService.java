@@ -15,7 +15,6 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SyncResult;
-import android.os.AsyncTask;
 import android.os.IBinder;
 import android.util.Log;
 
@@ -63,17 +62,6 @@ public class OdkSyncService extends Service {
 
 	}
 
-	public void sync() {
-//		SyncNowTask syncTask = new SyncNowTask(this, appName, false);
-//		syncTask.execute();
-
-		 if (!syncThread.isAlive() || syncThread.isInterrupted()) {
-		 syncThread.setPush(false);
-		 status = SyncStatus.SYNCING;
-		 syncThread.start();
-		 }
-	}
-
 	public void push() {
 //		SyncNowTask syncTask = new SyncNowTask(this, appName, true);
 //		syncTask.execute();
@@ -85,6 +73,18 @@ public class OdkSyncService extends Service {
 		 }
 
 	}
+
+   public void synchronize() {
+//    SyncNowTask syncTask = new SyncNowTask(this, appName, true);
+//    syncTask.execute();
+
+       if (!syncThread.isAlive() || syncThread.isInterrupted()) {
+       syncThread.setPush(false);
+       status = SyncStatus.SYNCING;
+       syncThread.start();
+       }
+
+   }
 
 	public SyncStatus getStatus() {
 		return status;
