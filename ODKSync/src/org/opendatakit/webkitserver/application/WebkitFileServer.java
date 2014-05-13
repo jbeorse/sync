@@ -12,7 +12,7 @@
  * the License.
  */
 
-package org.opendatakit.sync.application;
+package org.opendatakit.webkitserver.application;
 
 import java.io.IOException;
 
@@ -26,15 +26,16 @@ import android.content.res.Configuration;
 import android.util.Log;
 import fi.iki.elonen.SimpleWebServer;
 
-public class Sync extends Application {
+public class WebkitFileServer extends Application {
 
-  public static final String t = "Sync";
+  public static final String LOGTAG = WebkitFileServer.class.getSimpleName();
+  
   private SimpleWebServer server = null;
   private volatile Thread webServer = null;
 
-  private static Sync singleton = null;
+  private static WebkitFileServer singleton = null;
 
-  public static Sync getInstance() {
+  public static WebkitFileServer getInstance() {
     return singleton;
   }
 
@@ -119,7 +120,7 @@ public class Sync extends Application {
             retryCount++;
             Thread.sleep(1000);
             if ( retryCount % 60 == 0 ) {
-              Log.v(t,"Tables.Thread.WebServer -- waking to confirm webserver is working");
+              Log.v(LOGTAG,"Thread.WebServer -- waking to confirm webserver is working");
             }
           } catch (InterruptedException e) {
             e.printStackTrace();
@@ -134,7 +135,7 @@ public class Sync extends Application {
   @Override
   public void onConfigurationChanged(Configuration newConfig) {
     super.onConfigurationChanged(newConfig);
-    Log.i(t, "onConfigurationChanged");
+    Log.i(LOGTAG, "onConfigurationChanged");
   }
 
   @Override
@@ -149,7 +150,7 @@ public class Sync extends Application {
       e.printStackTrace();
     }
     super.onTerminate();
-    Log.i(t, "onTerminate");
+    Log.i(LOGTAG, "onTerminate");
   }
 
 }

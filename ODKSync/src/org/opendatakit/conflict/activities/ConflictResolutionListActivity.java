@@ -1,11 +1,12 @@
-package org.opendatakit.sync.activities;
+package org.opendatakit.conflict.activities;
 
 import org.opendatakit.common.android.data.ConflictTable;
 import org.opendatakit.common.android.data.DbTable;
 import org.opendatakit.common.android.data.TableProperties;
 import org.opendatakit.common.android.data.UserTable.Row;
 import org.opendatakit.common.android.provider.DataTableColumns;
-import org.opendatakit.sync.SyncUtil;
+import org.opendatakit.sync.activities.Aggregate;
+import org.opendatakit.sync.files.SyncUtil;
 
 import android.app.ListActivity;
 import android.content.Intent;

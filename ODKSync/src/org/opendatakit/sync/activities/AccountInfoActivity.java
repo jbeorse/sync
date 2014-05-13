@@ -18,7 +18,7 @@ import java.io.IOException;
 
 import org.opendatakit.sync.R;
 import org.opendatakit.sync.SyncPreferences;
-import org.opendatakit.sync.SyncUtil;
+import org.opendatakit.sync.files.SyncUtil;
 
 import android.accounts.Account;
 import android.accounts.AccountManager;

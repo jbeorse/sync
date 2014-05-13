@@ -73,13 +73,13 @@ import org.opendatakit.httpclientandroidlib.params.HttpParams;
 import org.opendatakit.sync.IncomingRowModifications;
 import org.opendatakit.sync.RowModification;
 import org.opendatakit.sync.SyncRow;
-import org.opendatakit.sync.SyncUtil;
 import org.opendatakit.sync.Synchronizer;
-import org.opendatakit.sync.application.Sync;
 import org.opendatakit.sync.exceptions.AccessDeniedException;
 import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
 import org.opendatakit.sync.exceptions.RequestFailureException;
+import org.opendatakit.sync.files.SyncUtil;
 import org.opendatakit.sync.files.SyncUtilities;
+import org.opendatakit.webkitserver.application.WebkitFileServer;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -107,7 +107,7 @@ import android.util.Log;
  */
 public class AggregateSynchronizer implements Synchronizer {
 
-  private static final String TAG = AggregateSynchronizer.class.getSimpleName();
+  private static final String LOGTAG = AggregateSynchronizer.class.getSimpleName();
   private static final String TOKEN_INFO = "https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=";
 
   /** Timeout (in ms) we specify for each http request */
@@ -137,7 +137,7 @@ public class AggregateSynchronizer implements Synchronizer {
 
   private String getManifestUriFragment() {
     /** Path to the tables servlet (the one that manages table definitions) on the Aggregate server. */
-    String versionCode = Sync.getInstance().getVersionCodeString();
+    String versionCode = WebkitFileServer.getInstance().getVersionCodeString();
     // the javascript API and file representation are the 100's and higher place in the versionCode.
     String odkClientVersion = versionCode.substring(0, versionCode.length()-2);
     return "/odktables/" + appName + "/manifest/" + odkClientVersion + "/";
@@ -151,7 +151,7 @@ public class AggregateSynchronizer implements Synchronizer {
    * @return
    */
   private String getFilePathURI() {
-    String versionCode = Sync.getInstance().getVersionCodeString();
+    String versionCode = WebkitFileServer.getInstance().getVersionCodeString();
     // the javascript API and file representation are the 100's and higher place in the versionCode.
     String odkClientVersion = versionCode.substring(0, versionCode.length()-2);
     return "/odktables/" + appName + "/files/" + odkClientVersion + "/";
@@ -161,9 +161,9 @@ public class AggregateSynchronizer implements Synchronizer {
       throws InvalidAuthTokenException {
     this.appName = appName;
     this.aggregateUri = aggregateUri;
-    Log.e(TAG, "AggregateUri:" + aggregateUri);
+    Log.e(LOGTAG, "AggregateUri:" + aggregateUri);
     this.baseUri = SyncUtilities.normalizeUri(aggregateUri, "/");
-    Log.e(TAG, "baseUri:" + baseUri);
+    Log.e(LOGTAG, "baseUri:" + baseUri);
 
     this.mHttpClient = new DefaultHttpClient(new BasicClientConnectionManager());
     final HttpParams params = mHttpClient.getParams();
@@ -280,7 +280,7 @@ public class AggregateSynchronizer implements Synchronizer {
       @SuppressWarnings("unused")
       Object o = responseEntity.getBody();
     } catch (HttpClientErrorException e) {
-      Log.e(TAG, "HttpClientErrorException in checkAccessToken");
+      Log.e(LOGTAG, "HttpClientErrorException in checkAccessToken");
       Object o = null;
       try {
         o = ODKFileUtils.mapper.readValue(e.getResponseBodyAsString(), Object.class);
@@ -298,7 +298,7 @@ public class AggregateSynchronizer implements Synchronizer {
         }
       }
     } catch (Exception e ) {
-      Log.e(TAG, "HttpClientErrorException in checkAccessToken");
+      Log.e(LOGTAG, "HttpClientErrorException in checkAccessToken");
       e.printStackTrace();
       Object o = null;
       throw new InvalidAuthTokenException("Invalid auth token (): " + accessToken, e);
@@ -395,7 +395,7 @@ public class AggregateSynchronizer implements Synchronizer {
       // TODO: we also need to put up the key value store/properties.
       resourceEntity = rt.exchange(uri, HttpMethod.PUT, requestEntity, TableResource.class);
     } catch (ResourceAccessException e) {
-      Log.e(TAG, "ResourceAccessException in createTable");
+      Log.e(LOGTAG, "ResourceAccessException in createTable");
       throw new IOException(e.getMessage());
     }
     TableResource resource = resourceEntity.getBody();
@@ -550,7 +550,7 @@ public class AggregateSynchronizer implements Synchronizer {
           throw new IOException(e.getMessage());
         }
         RowResource inserted = insertedEntity.getBody();
-        Log.i(TAG, "[insertOrUpdateRows] setting data etag to row's last "
+        Log.i(LOGTAG, "[insertOrUpdateRows] setting data etag to row's last "
             + "known dataetag at modification: " + inserted.getDataETagAtModification());
         lastKnownServerSyncTag.setDataETag(inserted.getDataETagAtModification());
 
@@ -582,9 +582,9 @@ public class AggregateSynchronizer implements Synchronizer {
     }
     if (lastKnownServerDataTag == null) {
       // do something--b/c the delete hasn't worked.
-      Log.e(TAG, "delete call didn't return a known data etag.");
+      Log.e(LOGTAG, "delete call didn't return a known data etag.");
     }
-    Log.i(TAG, "[deleteRows] setting data etag to last known server tag: "
+    Log.i(LOGTAG, "[deleteRows] setting data etag to last known server tag: "
         + lastKnownServerDataTag);
     syncTag.setDataETag(lastKnownServerDataTag);
 
@@ -654,7 +654,7 @@ public class AggregateSynchronizer implements Synchronizer {
     if (!baseFolder.exists()) {
       return new ArrayList<String>();
     } else if (!baseFolder.isDirectory()) {
-      Log.e(TAG, "[getAllFilesUnderFolder] folder is not a directory: "
+      Log.e(LOGTAG, "[getAllFilesUnderFolder] folder is not a directory: "
           + folder);
       return new ArrayList<String>();
     }
@@ -741,19 +741,19 @@ public class AggregateSynchronizer implements Synchronizer {
         String wholePathToFile = localFile.getAbsolutePath();
         if ( !uploadFile(wholePathToFile, relativePath)) {
           success = false;
-          Log.e(TAG, "Unable to upload file to server: " + relativePath);
+          Log.e(LOGTAG, "Unable to upload file to server: " + relativePath);
         }
       }
 
       for ( String relativePath : serverFilesToDelete ) {
         if ( !deleteFile(relativePath) ) {
           success = false;
-          Log.e(TAG, "Unable to delete file on server: " +  relativePath);
+          Log.e(LOGTAG, "Unable to delete file on server: " +  relativePath);
         }
       }
 
       if ( !success ) {
-        Log.i(TAG, "unable to delete one or more files!");
+        Log.i(LOGTAG, "unable to delete one or more files!");
       }
 
     } else {
@@ -775,12 +775,12 @@ public class AggregateSynchronizer implements Synchronizer {
         File f = ODKFileUtils.asAppFile(appName, relativePath);
         if ( !f.delete() ) {
           success = false;
-          Log.e(TAG, "Unable to delete " +  f.getAbsolutePath());
+          Log.e(LOGTAG, "Unable to delete " +  f.getAbsolutePath());
         }
       }
 
       if ( !success ) {
-        Log.i(TAG, "unable to delete one or more files!");
+        Log.i(LOGTAG, "unable to delete one or more files!");
       }
 
       // should we return our status?
@@ -837,19 +837,19 @@ public class AggregateSynchronizer implements Synchronizer {
         String wholePathToFile = localFile.getAbsolutePath();
         if ( !uploadFile(wholePathToFile, relativePath)) {
           success = false;
-          Log.e(TAG, "Unable to upload file to server: " + relativePath);
+          Log.e(LOGTAG, "Unable to upload file to server: " + relativePath);
         }
       }
 
       for ( String relativePath : serverFilesToDelete ) {
         if ( !deleteFile(relativePath) ) {
           success = false;
-          Log.e(TAG, "Unable to delete file on server: " +  relativePath);
+          Log.e(LOGTAG, "Unable to delete file on server: " +  relativePath);
         }
       }
 
       if ( !success ) {
-        Log.i(TAG, "unable to delete one or more files!");
+        Log.i(LOGTAG, "unable to delete one or more files!");
       }
 
     } else {
@@ -875,7 +875,7 @@ public class AggregateSynchronizer implements Synchronizer {
         File f = ODKFileUtils.asAppFile(appName, relativePath);
         if ( !f.delete() ) {
           success = false;
-          Log.e(TAG, "Unable to delete " +  f.getAbsolutePath());
+          Log.e(LOGTAG, "Unable to delete " +  f.getAbsolutePath());
         }
       }
 
@@ -885,7 +885,7 @@ public class AggregateSynchronizer implements Synchronizer {
       }
 
       if ( !success ) {
-        Log.i(TAG, "unable to delete one or more files!");
+        Log.i(LOGTAG, "unable to delete one or more files!");
       }
 
       // should we return our status?
@@ -935,7 +935,7 @@ public class AggregateSynchronizer implements Synchronizer {
   private boolean deleteFile(String pathRelativeToAppFolder) {
     String escapedPath = SyncUtil.formatPathForAggregate(pathRelativeToAppFolder);
     URI filesUri = SyncUtilities.normalizeUri(aggregateUri, getFilePathURI() + escapedPath);
-    Log.i(TAG, "[deleteFile] fileDeleteUri: " + filesUri.toString());
+    Log.i(LOGTAG, "[deleteFile] fileDeleteUri: " + filesUri.toString());
     RestTemplate rt = SyncUtil.getRestTemplateForFiles();
     List<ClientHttpRequestInterceptor> interceptors = new ArrayList<ClientHttpRequestInterceptor>();
     interceptors.add(new AggregateRequestInterceptor(this.baseUri, accessToken));
@@ -950,7 +950,7 @@ public class AggregateSynchronizer implements Synchronizer {
     FileSystemResource resource = new FileSystemResource(file);
     String escapedPath = SyncUtil.formatPathForAggregate(pathRelativeToAppFolder);
     URI filesUri = SyncUtilities.normalizeUri(aggregateUri, getFilePathURI() + escapedPath);
-    Log.i(TAG, "[uploadFile] filePostUri: " + filesUri.toString());
+    Log.i(LOGTAG, "[uploadFile] filePostUri: " + filesUri.toString());
     RestTemplate rt = SyncUtil.getRestTemplateForFiles();
     List<ClientHttpRequestInterceptor> interceptors = new ArrayList<ClientHttpRequestInterceptor>();
     interceptors.add(new AggregateRequestInterceptor(this.baseUri, accessToken));
@@ -965,7 +965,7 @@ public class AggregateSynchronizer implements Synchronizer {
     FileSystemResource resource = new FileSystemResource(file);
     String escapedPath = SyncUtil.formatPathForAggregate(pathRelativeToInstancesFolder);
     URI filesUri = SyncUtilities.normalizeUri(aggregateUri, getTablesUriFragment() + tableId + "/attachments/file/" + escapedPath);
-    Log.i(TAG, "[uploadFile] filePostUri: " + filesUri.toString());
+    Log.i(LOGTAG, "[uploadFile] filePostUri: " + filesUri.toString());
     RestTemplate rt = SyncUtil.getRestTemplateForFiles();
     List<ClientHttpRequestInterceptor> interceptors = new ArrayList<ClientHttpRequestInterceptor>();
     interceptors.add(new AggregateRequestInterceptor(this.baseUri, accessToken));
@@ -998,7 +998,7 @@ public class AggregateSynchronizer implements Synchronizer {
     // supposed to be stored.
     // make sure you don't return a bad string.
     if (entry.filename == null || entry.filename.equals("")) {
-      Log.i(TAG, "returned a null or empty filename");
+      Log.i(LOGTAG, "returned a null or empty filename");
       return false;
     } else {
       // filename is the unrooted path of the file, so prepend the basepath.
@@ -1017,7 +1017,7 @@ public class AggregateSynchronizer implements Synchronizer {
           return downloadFile(newFile, entry.downloadUrl);
         } catch (Exception e) {
           e.printStackTrace();
-          Log.e(TAG, "trouble downloading file for first time");
+          Log.e(LOGTAG, "trouble downloading file for first time");
           return false;
         }
       } else {
@@ -1033,7 +1033,7 @@ public class AggregateSynchronizer implements Synchronizer {
           } catch (Exception e) {
             e.printStackTrace();
             // TODO throw correct exception
-            Log.e(TAG, "trouble downloading new version of existing file");
+            Log.e(LOGTAG, "trouble downloading new version of existing file");
             return false;
           }
         } else {
@@ -1054,7 +1054,7 @@ public class AggregateSynchronizer implements Synchronizer {
   public boolean downloadFile(File destFile, String downloadUrl) throws Exception {
     URI uri = null;
     try {
-      Log.i(TAG, "[downloadFile] downloading at url: " + downloadUrl);
+      Log.i(LOGTAG, "[downloadFile] downloading at url: " + downloadUrl);
       URL url = new URL(downloadUrl);
       uri = url.toURI();
     } catch (MalformedURLException e) {
@@ -1237,7 +1237,7 @@ public class AggregateSynchronizer implements Synchronizer {
             success = false;
           }
         } else if ( !entry.md5hash.equals(ODKFileUtils.getMd5Hash(localFile)) ) {
-          Log.e(TAG, "File " + localFile.getAbsolutePath() + " MD5Hash has changed from that on server -- this is not supposed to happen!");
+          Log.e(LOGTAG, "File " + localFile.getAbsolutePath() + " MD5Hash has changed from that on server -- this is not supposed to happen!");
           success = false;
         }
         // remove it from the local files list
@@ -1313,12 +1313,12 @@ public class AggregateSynchronizer implements Synchronizer {
           }
         } else if ( !entry.md5hash.equals(ODKFileUtils.getMd5Hash(localFile)) ) {
           success = false;
-          Log.e(TAG, "File " + localFile.getAbsolutePath() + " MD5Hash has changed from that on server -- this is not supposed to happen!");
+          Log.e(LOGTAG, "File " + localFile.getAbsolutePath() + " MD5Hash has changed from that on server -- this is not supposed to happen!");
         }
       }
       return success;
     } catch ( Exception e ) {
-      Log.e(TAG, "Exception during sync: " + e.toString());
+      Log.e(LOGTAG, "Exception during sync: " + e.toString());
       return false;
     }
   }

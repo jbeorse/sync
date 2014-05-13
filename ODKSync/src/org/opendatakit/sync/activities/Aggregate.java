@@ -22,9 +22,9 @@ import java.util.List;
 import org.opendatakit.sync.OdkSyncServiceProxy;
 import org.opendatakit.sync.R;
 import org.opendatakit.sync.SyncPreferences;
-import org.opendatakit.sync.SyncUtil;
 import org.opendatakit.sync.SynchronizationResult;
 import org.opendatakit.sync.TableResult;
+import org.opendatakit.sync.files.SyncUtil;
 
 import android.accounts.Account;
 import android.accounts.AccountManager;

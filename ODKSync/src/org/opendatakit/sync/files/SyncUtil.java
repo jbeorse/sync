@@ -13,11 +13,15 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package org.opendatakit.sync;
+package org.opendatakit.sync.files;
 
 import java.util.ArrayList;
 import java.util.List;
 
+import org.opendatakit.sync.R;
+import org.opendatakit.sync.TableResult;
+import org.opendatakit.sync.R.string;
+import org.opendatakit.sync.TableResult.Status;
 import org.springframework.http.converter.ResourceHttpMessageConverter;
 import org.springframework.web.client.RestTemplate;
 

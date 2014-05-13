@@ -4,12 +4,12 @@ import java.util.Arrays;
 
 import org.opendatakit.sync.SyncPreferences;
 import org.opendatakit.sync.SyncProcessor;
-import org.opendatakit.sync.SyncUtil;
 import org.opendatakit.sync.SynchronizationResult;
 import org.opendatakit.sync.Synchronizer;
 import org.opendatakit.sync.TableResult;
 import org.opendatakit.sync.aggregate.AggregateSynchronizer;
 import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
+import org.opendatakit.sync.files.SyncUtil;
 
 import android.app.Service;
 import android.content.Context;
