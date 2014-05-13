@@ -48,8 +48,8 @@ public class SyncServiceTest extends ServiceTestCase<OdkSyncService> {
 
 	private OdkSyncServiceInterface bindToService() {
 		Intent bind_intent = new Intent();
-		bind_intent.setClassName(OdkSyncService.BENCHMARK_SERVICE_PACKAGE,
-				OdkSyncService.BENCHMARK_SERVICE_CLASS);
+		bind_intent.setClassName(OdkSyncService.SYNC_SERVICE_PACKAGE,
+				OdkSyncService.SYNC_SERVICE_CLASS);
 		IBinder service = this.bindService(bind_intent);
 		OdkSyncServiceInterface odkSyncServiceInterface = OdkSyncServiceInterface.Stub
 				.asInterface(service);

@@ -18,7 +18,7 @@ import java.io.IOException;
 
 import org.opendatakit.sync.R;
 import org.opendatakit.sync.SyncPreferences;
-import org.opendatakit.sync.TableFileUtils;
+import org.opendatakit.sync.SyncUtil;
 
 import android.accounts.Account;
 import android.accounts.AccountManager;
@@ -61,7 +61,7 @@ public class AccountInfoActivity extends Activity {
 		super.onCreate(savedInstanceState);
 		appName = getIntent().getStringExtra(Aggregate.INTENT_KEY_APP_NAME);
 		if (appName == null) {
-			appName = TableFileUtils.getDefaultAppName();
+			appName = SyncUtil.getDefaultAppName();
 		}
 	}
 

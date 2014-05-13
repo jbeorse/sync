@@ -32,6 +32,14 @@ public class SyncUtil {
 
   public static final String TAG = SyncUtil.class.getSimpleName();
 
+  /** The default app name for ODK Sync */
+  private static final String DEFAULT_APP_NAME = "tables";
+
+  public static final String getDefaultAppName() {
+    Log.i("SyncUtils", "appName is null on intent");
+    return DEFAULT_APP_NAME;
+  }
+  
   private static final String FORWARD_SLASH = "/";
 
   /**
@@ -41,7 +49,7 @@ public class SyncUtil {
    * @return a properly escaped url, with forward slashes remaining.
    */
   public static String formatPathForAggregate(String path) {
-    String escaped = Uri.encode(path, "/");
+    String escaped = Uri.encode(path, FORWARD_SLASH);
     return escaped;
   }
 

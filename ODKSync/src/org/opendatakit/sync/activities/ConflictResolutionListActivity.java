@@ -5,7 +5,7 @@ import org.opendatakit.common.android.data.DbTable;
 import org.opendatakit.common.android.data.TableProperties;
 import org.opendatakit.common.android.data.UserTable.Row;
 import org.opendatakit.common.android.provider.DataTableColumns;
-import org.opendatakit.sync.TableFileUtils;
+import org.opendatakit.sync.SyncUtil;
 
 import android.app.ListActivity;
 import android.content.Intent;
@@ -34,7 +34,7 @@ public class ConflictResolutionListActivity extends ListActivity {
     // when we come back.
     String appName = getIntent().getStringExtra(Aggregate.INTENT_KEY_APP_NAME);
     if ( appName == null ) {
-      appName = TableFileUtils.getDefaultAppName();
+      appName = SyncUtil.getDefaultAppName();
     }
     String tableId =
         getIntent().getStringExtra(Aggregate.INTENT_KEY_TABLE_ID);
