@@ -1,6 +1,5 @@
 package org.opendatakit.sync;
 
-import org.opendatakit.aggregate.odktables.rest.SyncState;
 
 
 /**
@@ -34,13 +33,6 @@ public class TableResult {
 	  private boolean mHadServerPropChanges;
 	  /** Flat if data had to be pulled from the server. */
 	  private boolean mHadServerDataChanges;
-	  /**
-	   * The state which the table was in when we synched. This matters for
-	   * situations like deleting a table. In this case we might have had data or
-	   * properties to pull from the server, but it wouldn't matter because we're
-	   * deleting it. None of our regular flags apply.
-	   */
-	  private SyncState mSyncState;
 
 	  /**
 	   * Create a table result with a status of {@link Status#FAILURE}. This should
@@ -63,7 +55,6 @@ public class TableResult {
 	    this.mHadServerDataChanges = false;
 	    this.mHadServerPropChanges = false;
 	    this.mHadServerSchemaChanges = false;
-	    this.mSyncState = null;
 	  }
 
 	  public String getTableDisplayName() {
@@ -72,25 +63,6 @@ public class TableResult {
 
 	  public Status getStatus() {
 	    return this.mStatus;
-	  }
-
-	  /**
-	   * Get the action at the time of sync. This matters for
-	   * situations like deleting a table. In this case we might have had data or
-	   * properties to pull from the server, but it wouldn't matter because we're
-	   * deleting it. None of our regular flags apply.
-	   * @return
-	   */
-	  public SyncState getTableAction() {
-	    return this.mSyncState;
-	  }
-
-	  /**
-	   * Set the sync state at the time of the sync.
-	   * @param state
-	   */
-	  public void setTableAction(SyncState state) {
-	    this.mSyncState = state;
 	  }
 
 	  public boolean pulledServerData() {
@@ -209,7 +181,7 @@ public class TableResult {
 	   *
 	   */
 	  public enum Status {
-	    SUCCESS, FAILURE, EXCEPTION;
+	    SUCCESS, FAILURE, EXCEPTION, TABLE_DOES_NOT_EXIST_ON_SERVER, REQUIRE_APP_LEVEL_SYNC;
 	  }
 
 	}

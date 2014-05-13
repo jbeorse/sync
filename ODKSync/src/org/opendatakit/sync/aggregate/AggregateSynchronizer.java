@@ -78,8 +78,6 @@ import org.opendatakit.sync.Synchronizer;
 import org.opendatakit.sync.exceptions.AccessDeniedException;
 import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
 import org.opendatakit.sync.exceptions.RequestFailureException;
-import org.opendatakit.sync.files.SyncUtil;
-import org.opendatakit.sync.files.SyncUtilities;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -90,6 +88,7 @@ import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.http.client.HttpClientAndroidlibRequestFactory;
 import org.springframework.http.converter.HttpMessageConverter;
+import org.springframework.http.converter.ResourceHttpMessageConverter;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.ResponseErrorHandler;
@@ -114,7 +113,10 @@ public class AggregateSynchronizer implements Synchronizer {
   public static final int HTTP_REQUEST_TIMEOUT_MS = 30 * 1000;
   /** Path to the file servlet on the Aggregate server. */
 
+  private static final String FORWARD_SLASH = "/";
+
   private final String appName;
+  private final String odkClientApiVersion;
   private final String aggregateUri;
   private final String accessToken;
   private final RestTemplate tokenRt;
@@ -130,6 +132,22 @@ public class AggregateSynchronizer implements Synchronizer {
    */
   private final DefaultHttpClient mHttpClient;
 
+  private static final URI normalizeUri(String aggregateUri, String additionalPathPortion ) {
+    URI uriBase = URI.create(aggregateUri).normalize();
+    String term = uriBase.getPath();
+    if ( term.endsWith(FORWARD_SLASH) ) {
+      if ( additionalPathPortion.startsWith(FORWARD_SLASH) ) {
+        term = term.substring(0,term.length()-1);
+      }
+    } else if ( !additionalPathPortion.startsWith(FORWARD_SLASH) ) {
+      term = term + FORWARD_SLASH;
+    }
+    term = term + additionalPathPortion;
+    URI uri = uriBase.resolve(term).normalize();
+    Log.d(LOGTAG, "normalizeUri: " + uri.toString());
+    return uri;
+  }
+
   private String getTablesUriFragment() {
     /** Path to the tables servlet (the one that manages table definitions) on the Aggregate server. */
     return "/odktables/" + appName + "/tables/";
@@ -137,10 +155,7 @@ public class AggregateSynchronizer implements Synchronizer {
 
   private String getManifestUriFragment() {
     /** Path to the tables servlet (the one that manages table definitions) on the Aggregate server. */
-    String versionCode = SyncApp.getInstance().getVersionCodeString();
-    // the javascript API and file representation are the 100's and higher place in the versionCode.
-    String odkClientVersion = versionCode.substring(0, versionCode.length()-2);
-    return "/odktables/" + appName + "/manifest/" + odkClientVersion + "/";
+    return "/odktables/" + appName + "/manifest/" + odkClientApiVersion + "/";
   }
 
   /**
@@ -151,18 +166,16 @@ public class AggregateSynchronizer implements Synchronizer {
    * @return
    */
   private String getFilePathURI() {
-    String versionCode = SyncApp.getInstance().getVersionCodeString();
-    // the javascript API and file representation are the 100's and higher place in the versionCode.
-    String odkClientVersion = versionCode.substring(0, versionCode.length()-2);
-    return "/odktables/" + appName + "/files/" + odkClientVersion + "/";
+    return "/odktables/" + appName + "/files/" + odkClientApiVersion + "/";
   }
 
-  public AggregateSynchronizer(String appName, String aggregateUri, String accessToken)
+  public AggregateSynchronizer(String appName, String odkApiVersion, String aggregateUri, String accessToken)
       throws InvalidAuthTokenException {
     this.appName = appName;
+    this.odkClientApiVersion = odkApiVersion;
     this.aggregateUri = aggregateUri;
     Log.e(LOGTAG, "AggregateUri:" + aggregateUri);
-    this.baseUri = SyncUtilities.normalizeUri(aggregateUri, "/");
+    this.baseUri = normalizeUri(aggregateUri, "/");
     Log.e(LOGTAG, "baseUri:" + baseUri);
 
     this.mHttpClient = new DefaultHttpClient(new BasicClientConnectionManager());
@@ -300,7 +313,6 @@ public class AggregateSynchronizer implements Synchronizer {
     } catch (Exception e ) {
       Log.e(LOGTAG, "HttpClientErrorException in checkAccessToken");
       e.printStackTrace();
-      Object o = null;
       throw new InvalidAuthTokenException("Invalid auth token (): " + accessToken, e);
     }
   }
@@ -314,7 +326,7 @@ public class AggregateSynchronizer implements Synchronizer {
 
     TableResourceList tableResources;
     try {
-      URI uri = SyncUtilities.normalizeUri(aggregateUri, getTablesUriFragment());
+      URI uri = normalizeUri(aggregateUri, getTablesUriFragment());
       tableResources = rt.getForObject(uri, TableResourceList.class);
     } catch (ResourceAccessException e) {
       throw new IOException(e.getMessage());
@@ -337,17 +349,6 @@ public class AggregateSynchronizer implements Synchronizer {
     return tables;
   }
 
-  private void verifyResource( String tableId, String propertiesETag, String schemaETag ) {
-    TableResource tr = resources.get(tableId);
-    if ( tr == null ) return;
-    if (!( tr.getSchemaETag() == schemaETag ||
-          (tr.getSchemaETag() != null && tr.getSchemaETag().equals(schemaETag))) ) {
-      // dataETag is stale...
-      resources.remove(tableId);
-      return;
-    }
-  }
-
   private void updateResource( String tableId, SyncTag syncTag) {
     TableResource tr = resources.get(tableId);
     if ( tr == null ) return;
@@ -361,22 +362,19 @@ public class AggregateSynchronizer implements Synchronizer {
     tr.setDataETag(syncTag.getDataETag());
   }
 
-  private void verifyResource( String tableId, String schemaETag ) {
-    TableResource tr = resources.get(tableId);
-    if ( tr == null ) return;
-    if (!( tr.getSchemaETag() == schemaETag ||
-          (tr.getSchemaETag() != null && tr.getSchemaETag().equals(schemaETag))) ) {
-      // dataETag is stale...
-      resources.remove(tableId);
-      return;
-    }
-  }
-
   @Override
   public TableDefinitionResource getTableDefinition(String tableDefinitionUri) {
     TableDefinitionResource definitionRes = rt.getForObject(tableDefinitionUri, TableDefinitionResource.class);
 
-    verifyResource(definitionRes.getTableId(), definitionRes.getSchemaETag());
+    String tableId = definitionRes.getTableId();
+    String schemaETag = definitionRes.getSchemaETag();
+    TableResource tr = resources.get(tableId);
+    if (tr != null &&
+        !( tr.getSchemaETag() == schemaETag ||
+          (tr.getSchemaETag() != null && tr.getSchemaETag().equals(schemaETag))) ) {
+      // dataETag is stale...
+      resources.remove(tableId);
+    }
     return definitionRes;
   }
 
@@ -385,7 +383,7 @@ public class AggregateSynchronizer implements Synchronizer {
       throws IOException {
 
     // build request
-    URI uri = SyncUtilities.normalizeUri(aggregateUri, getTablesUriFragment() + tableId);
+    URI uri = normalizeUri(aggregateUri, getTablesUriFragment() + tableId);
     TableDefinition definition = new TableDefinition(tableId, syncTag.getSchemaETag(), columns);
     HttpEntity<TableDefinition> requestEntity = new HttpEntity<TableDefinition>(definition,
                                                                                 requestHeaders);
@@ -405,16 +403,20 @@ public class AggregateSynchronizer implements Synchronizer {
     return resource;
   }
 
-  public boolean hasTable(String tableId) {
-    return resources.containsKey(tableId);
-  }
-
   @Override
   public TableResource getTable(String tableId) throws IOException {
     if (resources.containsKey(tableId)) {
       return resources.get(tableId);
     } else {
-      return refreshResource(tableId);
+      URI uri = normalizeUri(aggregateUri, getTablesUriFragment() + tableId);
+      TableResource resource;
+      try {
+        resource = rt.getForObject(uri, TableResource.class);
+      } catch (ResourceAccessException e) {
+        throw new IOException(e.getMessage());
+      }
+      resources.put(resource.getTableId(), resource);
+      return resource;
     }
   }
 
@@ -437,18 +439,6 @@ public class AggregateSynchronizer implements Synchronizer {
     return resource;
   }
 
-  private TableResource refreshResource(String tableId) throws IOException {
-    URI uri = SyncUtilities.normalizeUri(aggregateUri, getTablesUriFragment() + tableId);
-    TableResource resource;
-    try {
-      resource = rt.getForObject(uri, TableResource.class);
-    } catch (ResourceAccessException e) {
-      throw new IOException(e.getMessage());
-    }
-    resources.put(resource.getTableId(), resource);
-    return resource;
-  }
-
   /*
    * (non-Javadoc)
    *
@@ -458,7 +448,7 @@ public class AggregateSynchronizer implements Synchronizer {
    */
   @Override
   public void deleteTable(String tableId) {
-    URI uri = SyncUtilities.normalizeUri(aggregateUri, getTablesUriFragment() + tableId);
+    URI uri = normalizeUri(aggregateUri, getTablesUriFragment() + tableId);
     rt.delete(uri);
     this.resources.remove(tableId);
   }
@@ -489,10 +479,10 @@ public class AggregateSynchronizer implements Synchronizer {
         (newTag.getDataETag() == null || !newTag.getDataETag().equals(currentTag.getDataETag()))) {
       URI url;
       if (currentTag.getDataETag() == null) {
-        url = SyncUtilities.normalizeUri(resource.getDataUri(), "/");;
+        url = normalizeUri(resource.getDataUri(), "/");;
       } else {
         String diffUri = resource.getDiffUri();
-        url = SyncUtilities.normalizeUri(diffUri, "?data_etag=" + currentTag.getDataETag());
+        url = normalizeUri(diffUri, "?data_etag=" + currentTag.getDataETag());
       }
       RowResourceList rows;
       try {
@@ -541,7 +531,7 @@ public class AggregateSynchronizer implements Synchronizer {
             rowToInsertOrUpdate.getFilterScope(),
             rowToInsertOrUpdate.getValues());
 
-        URI url = SyncUtilities.normalizeUri(resource.getDataUri(), row.getRowId());
+        URI url = normalizeUri(resource.getDataUri(), row.getRowId());
         HttpEntity<Row> requestEntity = new HttpEntity<Row>(row, requestHeaders);
         ResponseEntity<RowResource> insertedEntity;
         try {
@@ -573,7 +563,7 @@ public class AggregateSynchronizer implements Synchronizer {
     SyncTag syncTag = currentSyncTag;
     String lastKnownServerDataTag = null; // the data tag of the whole table.
     String rowId = rowToDelete.getRowId();
-    URI url = SyncUtilities.normalizeUri(resource.getDataUri(), rowId + "?row_etag=" + Uri.encode(rowToDelete.getRowETag()));
+    URI url = normalizeUri(resource.getDataUri(), rowId + "?row_etag=" + Uri.encode(rowToDelete.getRowETag()));
     try {
       ResponseEntity<String> response = rt.exchange(url, HttpMethod.DELETE, null, String.class);
       lastKnownServerDataTag = response.getBody();
@@ -593,7 +583,7 @@ public class AggregateSynchronizer implements Synchronizer {
     return new RowModification(rowToDelete.getRowId(), null, syncTag);
   }
 
-  public static List<String> filterOutTableIdAssetFiles(List<String> relativePaths) {
+  private static List<String> filterOutTableIdAssetFiles(List<String> relativePaths) {
     List<String> newList = new ArrayList<String>();
     for ( String relativePath : relativePaths ) {
       if ( relativePath.startsWith("assets/csv/") ) {
@@ -606,7 +596,7 @@ public class AggregateSynchronizer implements Synchronizer {
     return newList;
   }
 
-  public static List<String> filterInTableIdFiles(List<String> relativePaths, String tableId) {
+  private static List<String> filterInTableIdFiles(List<String> relativePaths, String tableId) {
     List<String> newList = new ArrayList<String>();
     for ( String relativePath : relativePaths ) {
       if ( relativePath.startsWith("assets/csv/") ) {
@@ -645,7 +635,7 @@ public class AggregateSynchronizer implements Synchronizer {
    * @throws IllegalArgumentException if relativeTo is not a substring of
    * folder.
    */
-  public static List<String> getAllFilesUnderFolder(String folder,
+  private static List<String> getAllFilesUnderFolder(String folder,
       final Set<String> excludingNamedItemsUnderFolder) {
     final File baseFolder = new File(folder);
     String appName = ODKFileUtils.extractAppNameFromPath(baseFolder);
@@ -893,7 +883,7 @@ public class AggregateSynchronizer implements Synchronizer {
   }
 
   public List<OdkTablesFileManifestEntry> getAppLevelFileManifest() throws ResourceAccessException {
-    URI fileManifestUri = SyncUtilities.normalizeUri(aggregateUri, getManifestUriFragment());
+    URI fileManifestUri = normalizeUri(aggregateUri, getManifestUriFragment());
     Uri.Builder uriBuilder = Uri.parse(fileManifestUri.toString()).buildUpon();
     ResponseEntity<OdkTablesFileManifest> responseEntity;
     responseEntity = rt.exchange(uriBuilder.build().toString(),
@@ -902,7 +892,7 @@ public class AggregateSynchronizer implements Synchronizer {
   }
 
   public List<OdkTablesFileManifestEntry> getTableLevelFileManifest(String tableId) throws ResourceAccessException {
-    URI fileManifestUri = SyncUtilities.normalizeUri(aggregateUri, getManifestUriFragment() + tableId);
+    URI fileManifestUri = normalizeUri(aggregateUri, getManifestUriFragment() + tableId);
     Uri.Builder uriBuilder = Uri.parse(fileManifestUri.toString()).buildUpon();
     ResponseEntity<OdkTablesFileManifest> responseEntity;
       responseEntity = rt.exchange(uriBuilder.build().toString(),
@@ -932,11 +922,35 @@ public class AggregateSynchronizer implements Synchronizer {
     return fileList;
   }
 
+  /**
+   * Format a file path to be pushed up to aggregate. Essentially escapes the
+   * string as for an html url, but leaves forward slashes. The path must begin
+   * with a forward slash, as if starting at the root directory.
+   * @return a properly escaped url, with forward slashes remaining.
+   */
+  private String uriEncodeSegments(String path) {
+    String escaped = Uri.encode(path, FORWARD_SLASH);
+    return escaped;
+  }
+
+  /**
+   * Get a {@link RestTemplate} for synchronizing files.
+   * @return
+   */
+  private RestTemplate getRestTemplateForFiles() {
+    // Thanks to this guy for the snippet:
+    // https://github.com/barryku/SpringCloud/blob/master/BoxApp/BoxNetApp/src/com/barryku/android/boxnet/RestUtil.java
+    RestTemplate rt = new RestTemplate();
+    ResourceHttpMessageConverter fileConverter = new ResourceHttpMessageConverter();
+    rt.getMessageConverters().add(fileConverter);
+    return rt;
+  }
+
   private boolean deleteFile(String pathRelativeToAppFolder) {
-    String escapedPath = SyncUtil.formatPathForAggregate(pathRelativeToAppFolder);
-    URI filesUri = SyncUtilities.normalizeUri(aggregateUri, getFilePathURI() + escapedPath);
+    String escapedPath = uriEncodeSegments(pathRelativeToAppFolder);
+    URI filesUri = normalizeUri(aggregateUri, getFilePathURI() + escapedPath);
     Log.i(LOGTAG, "[deleteFile] fileDeleteUri: " + filesUri.toString());
-    RestTemplate rt = SyncUtil.getRestTemplateForFiles();
+    RestTemplate rt = getRestTemplateForFiles();
     List<ClientHttpRequestInterceptor> interceptors = new ArrayList<ClientHttpRequestInterceptor>();
     interceptors.add(new AggregateRequestInterceptor(this.baseUri, accessToken));
     rt.setInterceptors(interceptors);
@@ -948,10 +962,10 @@ public class AggregateSynchronizer implements Synchronizer {
   private boolean uploadFile(String wholePathToFile, String pathRelativeToAppFolder) {
     File file = new File(wholePathToFile);
     FileSystemResource resource = new FileSystemResource(file);
-    String escapedPath = SyncUtil.formatPathForAggregate(pathRelativeToAppFolder);
-    URI filesUri = SyncUtilities.normalizeUri(aggregateUri, getFilePathURI() + escapedPath);
+    String escapedPath = uriEncodeSegments(pathRelativeToAppFolder);
+    URI filesUri = normalizeUri(aggregateUri, getFilePathURI() + escapedPath);
     Log.i(LOGTAG, "[uploadFile] filePostUri: " + filesUri.toString());
-    RestTemplate rt = SyncUtil.getRestTemplateForFiles();
+    RestTemplate rt = getRestTemplateForFiles();
     List<ClientHttpRequestInterceptor> interceptors = new ArrayList<ClientHttpRequestInterceptor>();
     interceptors.add(new AggregateRequestInterceptor(this.baseUri, accessToken));
     rt.setInterceptors(interceptors);
@@ -963,10 +977,10 @@ public class AggregateSynchronizer implements Synchronizer {
   private boolean uploadInstanceFile(String wholePathToFile, String tableId, String pathRelativeToInstancesFolder) {
     File file = new File(wholePathToFile);
     FileSystemResource resource = new FileSystemResource(file);
-    String escapedPath = SyncUtil.formatPathForAggregate(pathRelativeToInstancesFolder);
-    URI filesUri = SyncUtilities.normalizeUri(aggregateUri, getTablesUriFragment() + tableId + "/attachments/file/" + escapedPath);
+    String escapedPath = uriEncodeSegments(pathRelativeToInstancesFolder);
+    URI filesUri = normalizeUri(aggregateUri, getTablesUriFragment() + tableId + "/attachments/file/" + escapedPath);
     Log.i(LOGTAG, "[uploadFile] filePostUri: " + filesUri.toString());
-    RestTemplate rt = SyncUtil.getRestTemplateForFiles();
+    RestTemplate rt = getRestTemplateForFiles();
     List<ClientHttpRequestInterceptor> interceptors = new ArrayList<ClientHttpRequestInterceptor>();
     interceptors.add(new AggregateRequestInterceptor(this.baseUri, accessToken));
     rt.setInterceptors(interceptors);
@@ -982,8 +996,8 @@ public class AggregateSynchronizer implements Synchronizer {
    * @return
    */
   public URI getFilePostUri(String appName, String pathRelativeToAppFolder) {
-    String escapedPath = SyncUtil.formatPathForAggregate(pathRelativeToAppFolder);
-    URI filesUri = SyncUtilities.normalizeUri(aggregateUri, getFilePathURI() + escapedPath);
+    String escapedPath = uriEncodeSegments(pathRelativeToAppFolder);
+    URI filesUri = normalizeUri(aggregateUri, getFilePathURI() + escapedPath);
     return filesUri;
   }
 
@@ -1208,7 +1222,7 @@ public class AggregateSynchronizer implements Synchronizer {
       // 1) Get the manifest of all files under this row's instanceId (rowId)
       List<OdkTablesFileManifestEntry> manifest;
       String escapedInstanceId = Uri.encode(serverRow.getRowId());
-      URI instanceFileManifestUri = SyncUtilities.normalizeUri(aggregateUri, getTablesUriFragment() + tableId + "/attachments/manifest/" + escapedInstanceId );
+      URI instanceFileManifestUri = normalizeUri(aggregateUri, getTablesUriFragment() + tableId + "/attachments/manifest/" + escapedInstanceId );
       Uri.Builder uriBuilder = Uri.parse(instanceFileManifestUri.toString()).buildUpon();
       ResponseEntity<OdkTablesFileManifest> responseEntity;
         responseEntity = rt.exchange(uriBuilder.build().toString(),
@@ -1273,7 +1287,7 @@ public class AggregateSynchronizer implements Synchronizer {
       // 1) Get the manifest of all files under this row's instanceId (rowId)
       List<OdkTablesFileManifestEntry> manifest;
       String escapedInstanceId = Uri.encode(localRow.getRowId());
-      URI instanceFileManifestUri = SyncUtilities.normalizeUri(aggregateUri, getTablesUriFragment() + tableId + "/attachments/manifest/" + escapedInstanceId );
+      URI instanceFileManifestUri = normalizeUri(aggregateUri, getTablesUriFragment() + tableId + "/attachments/manifest/" + escapedInstanceId );
       Uri.Builder uriBuilder = Uri.parse(instanceFileManifestUri.toString()).buildUpon();
       ResponseEntity<OdkTablesFileManifest> responseEntity;
         responseEntity = rt.exchange(uriBuilder.build().toString(),

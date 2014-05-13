@@ -25,6 +25,7 @@ import org.opendatakit.sync.SyncConsts;
 import org.opendatakit.sync.SyncPreferences;
 import org.opendatakit.sync.SynchronizationResult;
 import org.opendatakit.sync.TableResult;
+import org.opendatakit.sync.TableResult.Status;
 import org.opendatakit.sync.files.SyncUtil;
 
 import android.accounts.Account;
@@ -53,7 +54,7 @@ import android.widget.Toast;
 public class SyncActivity extends Activity {
 
 	private static final String LOGTAG = SyncActivity.class.getSimpleName();
-	
+
 	private static final String ACCOUNT_TYPE_G = "com.google";
 	private static final String URI_FIELD_EMPTY = "http://";
 
@@ -188,6 +189,105 @@ public class SyncActivity extends Activity {
 		return builder;
 	}
 
+	  /**
+	   * Get a string to display to the user based on the {@link TableResult} after
+	   * a sync. Handles the logic for generating an appropriate message.
+	   * <p>
+	   * Presents something along the lines of:
+	   * Your Table: Insert on the server--Success.
+	   * Your Table: Pulled data from server. Failed to push properties. Etc.
+	   * @param context
+	   * @param result
+	   * @return
+	   */
+	  private static String getMessageForTableResult(Context context,
+	      TableResult result) {
+	    StringBuilder msg = new StringBuilder();
+	    msg.append(result.getTableDisplayName() + ": ");
+       msg.append(
+	            context.getString(R.string.sync_action_message_insert) + "--");
+	    // Now add the result of the status.
+
+	    Status status = result.getStatus();
+	    String name;
+	    switch (status) {
+	    case EXCEPTION:
+	      name = context.getString(R.string.sync_table_result_exception);
+	      break;
+	    case FAILURE:
+	      name = context.getString(R.string.sync_table_result_failure);
+	      break;
+	    case SUCCESS:
+	      name = context.getString(R.string.sync_table_result_success);
+	      break;
+	    default:
+	      Log.e(LOGTAG, "unrecognized TableResult status: " + status + ". Setting " +
+	            "to failure.");
+	      name = context.getString(R.string.sync_table_result_failure);
+	    }
+
+	    msg.append(name);
+	    if (result.getStatus() == TableResult.Status.EXCEPTION) {
+	      // We'll append the message as well.
+	      msg.append(result.getMessage());
+	    }
+	    msg.append("--");
+	    // Now we need to add some information about the individual actions that
+	    // should have been performed.
+	    if (result.hadLocalDataChanges()) {
+	      if (result.pushedLocalData()) {
+	        msg.append("Pushed local data. ");
+	      } else {
+	        msg.append("Failed to push local data. ");
+	      }
+	    } else {
+	      msg.append("No local data changes. ");
+	    }
+
+	    if (result.hadLocalPropertiesChanges()) {
+	      if (result.pushedLocalProperties()) {
+	        msg.append("Pushed local properties. ");
+	      } else {
+	        msg.append("Failed to push local properties. ");
+	      }
+	    } else {
+	      msg.append("No local properties changes. ");
+	    }
+
+	    if (result.serverHadDataChanges()) {
+	      if (result.pulledServerData()) {
+	        msg.append("Pulled data from server. ");
+	      } else {
+	        msg.append("Failed to pull data from server. ");
+	      }
+	    } else {
+	      msg.append("Data not re-fetched from server. ");
+	    }
+
+	    if (result.serverHadPropertiesChanges()) {
+	      if (result.pulledServerProperties()) {
+	        msg.append("Pulled properties from server. ");
+	      } else {
+	        msg.append("Failed to pull properties from server. ");
+	      }
+	    } else {
+	      msg.append("Properties not re-fetched from server.");
+	    }
+
+	    if (result.serverHadSchemaChanges()) {
+	      if (result.pulledServerSchema()) {
+	        msg.append("Pulled schema from server. ");
+	      } else {
+	        msg.append("Failed to pull schema from server. ");
+	      }
+	    } else {
+	      msg.append("Schema not re-fetched from server.");
+	    }
+
+	    return msg.toString();
+	  }
+
+
 	AlertDialog.Builder buildResultMessage(String title,
 			SynchronizationResult result) {
 		AlertDialog.Builder builder = new AlertDialog.Builder(this);
@@ -199,7 +299,7 @@ public class SyncActivity extends Activity {
 		StringBuilder stringBuilder = new StringBuilder();
 		for (int i = 0; i < result.getTableResults().size(); i++) {
 			TableResult tableResult = result.getTableResults().get(i);
-			stringBuilder.append(SyncUtil.getMessageForTableResult(this,
+			stringBuilder.append(getMessageForTableResult(this,
 					tableResult));
 			// stringBuilder.append(tableResult.getTableDisplayName() + ": " +
 			// SyncUtil.getLocalizedNameForTableResultStatus(this,
