@@ -1,6 +1,5 @@
-package org.opendatakit.sync.service.test;
+package org.opendatakit.sync;
 
-import org.opendatakit.sync.SyncConsts;
 import org.opendatakit.sync.files.SyncUtil;
 import org.opendatakit.sync.service.OdkSyncService;
 import org.opendatakit.sync.service.OdkSyncServiceInterface;
@@ -11,44 +10,27 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.test.ServiceTestCase;
 
-public class SyncServiceTest extends ServiceTestCase<OdkSyncService> {
+public abstract class AbstractSyncServiceTest extends ServiceTestCase<OdkSyncService> {
 
-	public SyncServiceTest() {
+	protected AbstractSyncServiceTest() {
 		super(OdkSyncService.class);
 	}
 
-	public SyncServiceTest(Class<OdkSyncService> serviceClass) {
+	protected AbstractSyncServiceTest(Class<OdkSyncService> serviceClass) {
 		super(serviceClass);
 	}
-
-
-	public void testBinding() {
-		OdkSyncServiceInterface odkSyncServiceInterface = bindToService();
-
-		assertStatusCorrect(odkSyncServiceInterface, SyncStatus.INIT);
-
-	}
-
 	
-//	public void testRunning() {
-//		setupService();
-//
-//		try {
-//			OdkSyncServiceInterface odkSyncServiceInterface = bindToService();
-//			odkSyncServiceInterface.synchronize();
-//			assertStatusCorrect(odkSyncServiceInterface, SyncStatus.SYNC_COMPLETE);
-//		} catch (RemoteException e) {
-//			assertTrue(false);
-//		}
-//		
-//		shutdownService();
-//	}
+	@Override
+	protected void setUp () throws Exception {
+		super.setUp();
+		setupService();		
+	}
 
 	// ///////////////////////////////////////////
 	// ///////// HELPER FUNCTIONS ////////////////
 	// ///////////////////////////////////////////
 
-	private OdkSyncServiceInterface bindToService() {
+	protected OdkSyncServiceInterface bindToService() {
 		Intent bind_intent = new Intent();
 		bind_intent.setClassName(SyncConsts.SYNC_SERVICE_PACKAGE,
 				SyncConsts.SYNC_SERVICE_CLASS);
@@ -58,7 +40,7 @@ public class SyncServiceTest extends ServiceTestCase<OdkSyncService> {
 		return odkSyncServiceInterface;
 	}
 
-	private void assertStatusCorrect(
+	protected void assertStatusCorrect(
 			OdkSyncServiceInterface syncServiceInterface,
 			SyncStatus syncStatus) {
 		try {

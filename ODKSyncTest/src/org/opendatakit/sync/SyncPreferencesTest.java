@@ -3,19 +3,13 @@ package org.opendatakit.sync;
 import java.io.IOException;
 
 import org.opendatakit.sync.exceptions.NoAppNameSpecifiedException;
-import org.opendatakit.sync.service.OdkSyncService;
 
-import android.test.ServiceTestCase;
-
-public class SyncPreferencesTest extends ServiceTestCase<OdkSyncService> {
+public class SyncPreferencesTest extends AbstractSyncServiceTest {
 
 	public SyncPreferencesTest() {
-		super(OdkSyncService.class);
+		super();
 	}
 
-	public SyncPreferencesTest(Class<OdkSyncService> serviceClass) {
-		super(serviceClass);
-	}
 	
 	public void testBasicParamChange() {
 		String testAccount1 = "SYNC_ACCOUNT";

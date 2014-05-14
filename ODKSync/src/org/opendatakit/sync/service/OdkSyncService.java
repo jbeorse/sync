@@ -14,11 +14,14 @@ public class OdkSyncService extends Service {
 
 	private Map<String, AppSynchronizer> syncs;
 	private OdkSyncServiceInterfaceImpl serviceInterface;
-
+	private NotificationManager notificationManager;
+	
+	
 	@Override
 	public void onCreate() {
 		serviceInterface = new OdkSyncServiceInterfaceImpl(this);
 		syncs = new HashMap<String, AppSynchronizer>();
+		notificationManager = new NotificationManager(this);
 	}
 
 	@Override
@@ -35,7 +38,8 @@ public class OdkSyncService extends Service {
 	private AppSynchronizer getSync(String appName) {
 		AppSynchronizer sync = syncs.get(appName);
 		if(sync == null) {
-			sync = new AppSynchronizer(this, appName);
+			sync = new AppSynchronizer(this, appName,notificationManager);
+			syncs.put(appName, sync);
 		}
 		return sync;
 		
@@ -56,6 +60,7 @@ public class OdkSyncService extends Service {
 		return sync.getStatus();
 	}
 
-	
 
+
+	
 }
