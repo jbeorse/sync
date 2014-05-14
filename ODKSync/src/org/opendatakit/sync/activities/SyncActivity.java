@@ -382,13 +382,13 @@ public class SyncActivity extends Activity {
 	 * Hooked to syncNowButton's onClick in aggregate_activity.xml
 	 */
 	public void onClickSyncNowPush(View v) {
-		Log.d(LOGTAG, "in onClickSyncNow");
+		Log.d(LOGTAG, "in onClickSyncNowPush");
 		// ask whether to sync app files and table-level files
 
 		try {
 			SyncPreferences prefs = new SyncPreferences(this, appName);
 		String accountName = prefs.getAccount();
-		Log.e(LOGTAG, "[onClickSyncNow] timestamp: " + System.currentTimeMillis());
+		Log.e(LOGTAG, "[onClickSyncNowPush] timestamp: " + System.currentTimeMillis());
 		if (accountName == null) {
 			Toast.makeText(this, getString(R.string.choose_account),
 					Toast.LENGTH_SHORT).show();
@@ -412,26 +412,23 @@ public class SyncActivity extends Activity {
 	 * Hooked to syncNowButton's onClick in aggregate_activity.xml
 	 */
 	public void onClickSyncNowPull(View v) {
-		Log.d(LOGTAG, "in onClickSyncNow");
+		Log.d(LOGTAG, "in onClickSyncNowPull");
 		// ask whether to sync app files and table-level files
 		try {
 			SyncPreferences prefs = new SyncPreferences(this, appName);
 			String accountName = prefs.getAccount();
 			Log.e(LOGTAG,
-					"[onClickSyncNow] timestamp: " + System.currentTimeMillis());
+					"[onClickSyncNowPull] timestamp: " + System.currentTimeMillis());
 			if (accountName == null) {
 				Toast.makeText(this, getString(R.string.choose_account),
 						Toast.LENGTH_SHORT).show();
+			} else {
 				 try {
-                     syncProxy.synchronizeFromServer(appName);
+                 syncProxy.synchronizeFromServer(appName);
              } catch (RemoteException e) {
                      Log.e(LOGTAG, "Problem with pull command");
              }
-
-
-
 			}
-
 			updateButtonsEnabled(prefs);
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
