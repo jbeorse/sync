@@ -1,0 +1,152 @@
+package org.opendatakit.sync.service;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import org.opendatakit.sync.activities.SyncActivity;
+import org.opendatakit.sync.exceptions.NoAppNameSpecifiedException;
+
+import android.app.Notification;
+import android.app.PendingIntent;
+import android.app.Service;
+import android.content.Intent;
+
+public final class NotificationManager {
+	private static final String LOGTAG = NotificationManager.class
+			.getSimpleName();
+	private static final int UNIQUE_ID = 1337;
+
+	private final Service service;
+	private final boolean test;
+
+	private boolean displayNotification;
+
+	private List<AppSyncStatus> statusList;
+
+	NotificationManager(Service service) {
+		this.test = false;
+		this.service = service;
+		this.displayNotification = false;
+		this.statusList = new ArrayList<AppSyncStatus>();
+	}
+
+	NotificationManager(Service service, boolean test) {
+		this.test = test;
+		this.service = service;
+		this.displayNotification = false;
+		this.statusList = new ArrayList<AppSyncStatus>();
+	}
+
+	public synchronized void startingSync(String appName)
+			throws NoAppNameSpecifiedException {
+		AppSyncStatus appStatus = getAppStatus(appName);
+		appStatus.setSyncing(true);
+		updateNotification();
+	}
+
+	public synchronized void stopingSync(String appName)
+			throws NoAppNameSpecifiedException {
+		AppSyncStatus appStatus = getAppStatus(appName);
+		appStatus.setSyncing(false);
+		updateNotification();
+	}
+
+	public synchronized boolean isDisplayingNotification() {
+		return displayNotification;
+	}
+
+	private AppSyncStatus getAppStatus(String appName)
+			throws NoAppNameSpecifiedException {
+		if (appName == null) {
+			throw new NoAppNameSpecifiedException(
+					"Cannot update NotificationManager without appName");
+		}
+
+		AppSyncStatus appStatus = null;
+
+		// see if manager already knows about the app
+		for (AppSyncStatus status : statusList) {
+			if (status.getAppName().equals(appName)) {
+				appStatus = status;
+			}
+		}
+
+		// if manager does not know about app, create it
+		if (appStatus == null) {
+			appStatus = new AppSyncStatus(appName);
+			statusList.add(appStatus);
+		}
+		return appStatus;
+	}
+
+	private void updateNotification() {
+		// check if NotificationManager should be displaying notification
+		boolean shouldDisplay = false;
+		for (AppSyncStatus status : statusList) {
+			if (status.isSyncing()) {
+				shouldDisplay = true;
+			}
+		}
+
+		// if should and actual do not match fix
+		if (shouldDisplay && !displayNotification) {
+			createNotification();
+		} else if (!shouldDisplay && displayNotification) {
+			removeNotification();
+		}
+
+		assert (shouldDisplay == displayNotification);
+	}
+
+	private void createNotification() {
+		// The intent to launch when the user clicks the expanded notification
+		Intent tmpIntent = new Intent(service, SyncActivity.class);
+		tmpIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP
+				| Intent.FLAG_ACTIVITY_SINGLE_TOP);
+		PendingIntent pendIntent = PendingIntent.getActivity(service, 0,
+				tmpIntent, 0);
+
+		Notification.Builder builder = new Notification.Builder(service);
+		builder.setTicker("ODK Syncing").setContentTitle(LOGTAG)
+				.setContentText("ODK is syncing an Application")
+				.setWhen(System.currentTimeMillis()).setAutoCancel(false)
+				.setOngoing(true).setContentIntent(pendIntent);
+
+		Notification runningNotification = builder.getNotification();
+		runningNotification.flags |= Notification.FLAG_NO_CLEAR;
+		if (!test) {
+			service.startForeground(UNIQUE_ID, runningNotification);
+		}
+		displayNotification = true;
+	}
+
+	private void removeNotification() {
+		if (!test) {
+			service.stopForeground(true);
+		}
+		displayNotification = false;
+	}
+
+	private final class AppSyncStatus {
+		private final String appName;
+		private boolean syncing;
+
+		AppSyncStatus(String appName) {
+			this.appName = appName;
+			this.syncing = false;
+		}
+
+		public String getAppName() {
+			return appName;
+		}
+
+		public void setSyncing(boolean syncing) {
+			this.syncing = syncing;
+		}
+
+		public boolean isSyncing() {
+			return syncing;
+		}
+
+	}
+}
