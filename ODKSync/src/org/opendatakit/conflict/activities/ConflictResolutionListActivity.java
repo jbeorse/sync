@@ -39,9 +39,12 @@ public class ConflictResolutionListActivity extends ListActivity {
     }
     String tableId =
         getIntent().getStringExtra(SyncConsts.INTENT_KEY_TABLE_ID);
-    TableProperties tableProperties =
+    TableProperties tp =
         TableProperties.refreshTablePropertiesForTable(this, appName, tableId);
-    DbTable dbTable = DbTable.getDbTable(tableProperties);
+    if ( tp.getDbTableName() == null ) {
+      throw new IllegalStateException("Unexpected missing tableId!");
+    }
+    DbTable dbTable = DbTable.getDbTable(tp);
     this.mConflictTable = dbTable.getConflictTable();
     this.mAdapter = new ArrayAdapter<String>(
         getActionBar().getThemedContext(),

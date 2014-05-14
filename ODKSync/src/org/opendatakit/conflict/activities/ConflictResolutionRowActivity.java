@@ -125,9 +125,12 @@ public class ConflictResolutionRowActivity extends ListActivity
     String tableId =
         getIntent().getStringExtra(SyncConsts.INTENT_KEY_TABLE_ID);
     this.mRowId = getIntent().getStringExtra(INTENT_KEY_ROW_ID);
-    TableProperties tableProperties =
+    TableProperties tp =
         TableProperties.refreshTablePropertiesForTable(this, appName, tableId);
-    DbTable dbTable = DbTable.getDbTable(tableProperties);
+    if ( tp.getDbTableName() == null ) {
+      throw new IllegalStateException("Unexpectedly missing tableid!");
+    }
+    DbTable dbTable = DbTable.getDbTable(tp);
     this.mConflictTable = dbTable.getConflictTable();
     this.mLocal = mConflictTable.getLocalTable();
     this.mServer = mConflictTable.getServerTable();
@@ -143,7 +146,6 @@ public class ConflictResolutionRowActivity extends ListActivity
     Row localRow = this.mLocal.getRowAtIndex(this.mRowNumber);
     this.mServerRowETag = localRow.getDataOrMetadataByElementKey(
         DataTableColumns.ROW_ETAG);
-    TableProperties tp = mConflictTable.getLocalTable().getTableProperties();
     List<String> columnOrder = tp.getColumnOrder();
     // This will be the number of rows down we are in the adapter. Each
     // heading and each cell value gets its own row. Columns in conflict get
