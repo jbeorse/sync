@@ -1318,7 +1318,6 @@ public class SyncProcessor {
         tp.setSyncTag(new SyncTag(null, definitionResource.getSchemaETag()));
       }
     }
-    tp.setIsSetToSync(true);
     return tp;
   }
 

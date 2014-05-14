@@ -72,7 +72,6 @@ import org.opendatakit.httpclientandroidlib.params.HttpConnectionParams;
 import org.opendatakit.httpclientandroidlib.params.HttpParams;
 import org.opendatakit.sync.IncomingRowModifications;
 import org.opendatakit.sync.RowModification;
-import org.opendatakit.sync.SyncApp;
 import org.opendatakit.sync.SyncRow;
 import org.opendatakit.sync.Synchronizer;
 import org.opendatakit.sync.exceptions.AccessDeniedException;

@@ -56,7 +56,7 @@ public class AppSynchronizer {
 
 		public SyncTask(Context context, boolean push) {
 			this.cntxt = context;
-			this.push = false;
+			this.push = push;
 		}
 
 
