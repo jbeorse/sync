@@ -364,16 +364,6 @@ public class AggregateSynchronizer implements Synchronizer {
   @Override
   public TableDefinitionResource getTableDefinition(String tableDefinitionUri) {
     TableDefinitionResource definitionRes = rt.getForObject(tableDefinitionUri, TableDefinitionResource.class);
-
-    String tableId = definitionRes.getTableId();
-    String schemaETag = definitionRes.getSchemaETag();
-    TableResource tr = resources.get(tableId);
-    if (tr != null &&
-        !( tr.getSchemaETag() == schemaETag ||
-          (tr.getSchemaETag() != null && tr.getSchemaETag().equals(schemaETag))) ) {
-      // dataETag is stale...
-      resources.remove(tableId);
-    }
     return definitionRes;
   }
 

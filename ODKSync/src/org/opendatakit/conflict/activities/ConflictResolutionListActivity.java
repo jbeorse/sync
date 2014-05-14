@@ -40,7 +40,7 @@ public class ConflictResolutionListActivity extends ListActivity {
     String tableId =
         getIntent().getStringExtra(SyncConsts.INTENT_KEY_TABLE_ID);
     TableProperties tableProperties =
-        TableProperties.getTablePropertiesForTable(this, appName, tableId);
+        TableProperties.refreshTablePropertiesForTable(this, appName, tableId);
     DbTable dbTable = DbTable.getDbTable(tableProperties);
     this.mConflictTable = dbTable.getConflictTable();
     this.mAdapter = new ArrayAdapter<String>(
