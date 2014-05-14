@@ -126,7 +126,7 @@ public class ConflictResolutionRowActivity extends ListActivity
         getIntent().getStringExtra(SyncConsts.INTENT_KEY_TABLE_ID);
     this.mRowId = getIntent().getStringExtra(INTENT_KEY_ROW_ID);
     TableProperties tableProperties =
-        TableProperties.getTablePropertiesForTable(this, appName, tableId);
+        TableProperties.refreshTablePropertiesForTable(this, appName, tableId);
     DbTable dbTable = DbTable.getDbTable(tableProperties);
     this.mConflictTable = dbTable.getConflictTable();
     this.mLocal = mConflictTable.getLocalTable();
