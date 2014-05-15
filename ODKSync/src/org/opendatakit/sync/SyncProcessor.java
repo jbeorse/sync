@@ -177,6 +177,9 @@ public class SyncProcessor {
         Log.i(TAG, "[synchronizeConfigurationAndContent] synchronizing table " + localTableId);
 
         TableProperties tp = TableProperties.refreshTablePropertiesForTable(context, appName, localTableId);
+        if ( tp.getDbTableName() == null ) {
+          tp = null;
+        }
         synchronizeTableConfigurationAndContent(tp, matchingResource, true);
       }
     } else {
@@ -199,6 +202,9 @@ public class SyncProcessor {
           if (localTableId.equals(serverTableId)) {
             localTableIdsToDelete.remove(localTableId);
             tp = TableProperties.refreshTablePropertiesForTable(context, appName, localTableId);
+            if ( tp.getDbTableName() == null ) {
+              tp = null;
+            }
             break;
           }
         }
@@ -235,7 +241,9 @@ public class SyncProcessor {
       // and now loop through the ones to delete...
       for (String localTableId : localTableIdsToDelete) {
         TableProperties tp = TableProperties.refreshTablePropertiesForTable(context, appName, localTableId);
-        tp.deleteTable();
+        if ( tp.getDbTableName() != null ) {
+          tp.deleteTable();
+        }
       }
     }
 
@@ -421,6 +429,9 @@ public class SyncProcessor {
 
       // refresh the tp
       tp = TableProperties.refreshTablePropertiesForTable(context, appName, tp.getTableId());
+      if ( tp.getDbTableName() == null ) {
+        tp = null;
+      }
 
       success = true;
     } finally {
@@ -957,6 +968,9 @@ public class SyncProcessor {
 
       // It is possible the table properties changed. Refresh just in case.
       tp = TableProperties.refreshTablePropertiesForTable(context, appName, tp.getTableId());
+      if ( tp.getDbTableName() == null ) {
+        tp = null;
+      }
       if (success && tp != null) // null in case we deleted the tp.
         tp.setLastSyncTime(du.formatNowForDb());
     } finally {
