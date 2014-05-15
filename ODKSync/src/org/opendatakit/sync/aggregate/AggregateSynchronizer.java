@@ -890,28 +890,6 @@ public class AggregateSynchronizer implements Synchronizer {
   }
 
   /**
-   * Get the files that need to be uploaded. i.e. those files that are on the
-   * phone but that do not appear on the manifest. Both the manifest and the
-   * filesOnPhone are assumed to contain relative paths, not including the first
-   * separator. Paths all relative to the app folder.
-   *
-   * @param filesOnPhone
-   * @param manifest
-   * @return
-   */
-  private List<String> getFilesToBeUploaded(List<String> relativePathsOnDevice,
-                                            List<OdkTablesFileManifestEntry> manifest) {
-    Set<String> filesToRetain = new HashSet<String>();
-    filesToRetain.addAll(relativePathsOnDevice);
-    for (OdkTablesFileManifestEntry entry : manifest) {
-      filesToRetain.remove(entry.filename);
-    }
-    List<String> fileList = new ArrayList<String>();
-    fileList.addAll(filesToRetain);
-    return fileList;
-  }
-
-  /**
    * Format a file path to be pushed up to aggregate. Essentially escapes the
    * string as for an html url, but leaves forward slashes. The path must begin
    * with a forward slash, as if starting at the root directory.
@@ -1083,7 +1061,7 @@ public class AggregateSynchronizer implements Synchronizer {
       req.setHeader(ApiConstants.OPEN_DATA_KIT_VERSION_HEADER, ApiConstants.OPEN_DATA_KIT_VERSION);
       GregorianCalendar g = new GregorianCalendar(TimeZone.getTimeZone("GMT"));
       g.setTime(new Date());
-      SimpleDateFormat formatter = new SimpleDateFormat("E, dd MMM yyyy HH:mm:ss zz");
+      SimpleDateFormat formatter = new SimpleDateFormat("E, dd MMM yyyy HH:mm:ss zz", Locale.US);
       formatter.setCalendar(g);
       req.setHeader(ApiConstants.DATE_HEADER, formatter.format(new Date()));
 

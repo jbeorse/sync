@@ -17,7 +17,6 @@ package org.opendatakit.sync;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -258,10 +257,9 @@ public class SyncProcessor {
    * parameter will become out of date. It should be refreshed after calling
    * this method.
    * <p>
-   * This method does NOT synchronize the application files. This means that if
-   * any html files downloaded require the {@link TableFileUtils#DIR_FRAMEWORK}
-   * directory, for instance, the caller must ensure that the app files are
-   * synchronized as well.
+   * This method does NOT synchronize the framework files. The management of
+   * the contents of the framework directory is managed by the individual
+   * APKs themselves.
    *
    * @param tp
    *          the table to synchronize
@@ -513,10 +511,8 @@ public class SyncProcessor {
    * parameter will become out of date. It should be refreshed after calling
    * this method.
    * <p>
-   * This method does NOT synchronize the application files. This means that if
-   * any html files downloaded require the {@link TableFileUtils#DIR_FRAMEWORK}
-   * directory, for instance, the caller must ensure that the app files are
-   * synchronized as well.
+   * This method does NOT synchronize any non-instance files; it assumes
+   * the database schema has already been sync'd.
    *
    * @param tp
    *          the table to synchronize

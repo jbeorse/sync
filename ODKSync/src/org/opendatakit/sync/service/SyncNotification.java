@@ -1,13 +1,9 @@
 package org.opendatakit.sync.service;
 
-import org.opendatakit.sync.activities.SyncActivity;
-
 import android.R;
 import android.app.Notification;
 import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.content.Context;
-import android.content.Intent;
 import android.util.Log;
 
 public final class SyncNotification {
