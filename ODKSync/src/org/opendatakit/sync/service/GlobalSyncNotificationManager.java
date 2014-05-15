@@ -11,8 +11,8 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
 
-public final class NotificationManager {
-	private static final String LOGTAG = NotificationManager.class
+public final class GlobalSyncNotificationManager {
+	private static final String LOGTAG = GlobalSyncNotificationManager.class
 			.getSimpleName();
 	private static final int UNIQUE_ID = 1337;
 
@@ -23,14 +23,14 @@ public final class NotificationManager {
 
 	private List<AppSyncStatus> statusList;
 
-	NotificationManager(Service service) {
+	GlobalSyncNotificationManager(Service service) {
 		this.test = false;
 		this.service = service;
 		this.displayNotification = false;
 		this.statusList = new ArrayList<AppSyncStatus>();
 	}
 
-	NotificationManager(Service service, boolean test) {
+	GlobalSyncNotificationManager(Service service, boolean test) {
 		this.test = test;
 		this.service = service;
 		this.displayNotification = false;
@@ -41,14 +41,14 @@ public final class NotificationManager {
 			throws NoAppNameSpecifiedException {
 		AppSyncStatus appStatus = getAppStatus(appName);
 		appStatus.setSyncing(true);
-		updateNotification();
+		update();
 	}
 
 	public synchronized void stopingSync(String appName)
 			throws NoAppNameSpecifiedException {
 		AppSyncStatus appStatus = getAppStatus(appName);
 		appStatus.setSyncing(false);
-		updateNotification();
+		update();
 	}
 
 	public synchronized boolean isDisplayingNotification() {
@@ -79,7 +79,7 @@ public final class NotificationManager {
 		return appStatus;
 	}
 
-	private void updateNotification() {
+	private void update() {
 		// check if NotificationManager should be displaying notification
 		boolean shouldDisplay = false;
 		for (AppSyncStatus status : statusList) {
@@ -114,6 +114,7 @@ public final class NotificationManager {
 
 		Notification runningNotification = builder.getNotification();
 		runningNotification.flags |= Notification.FLAG_NO_CLEAR;
+
 		if (!test) {
 			service.startForeground(UNIQUE_ID, runningNotification);
 		}

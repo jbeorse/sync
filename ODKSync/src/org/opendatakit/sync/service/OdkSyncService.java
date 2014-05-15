@@ -14,14 +14,14 @@ public class OdkSyncService extends Service {
 
 	private Map<String, AppSynchronizer> syncs;
 	private OdkSyncServiceInterfaceImpl serviceInterface;
-	private NotificationManager notificationManager;
+	private GlobalSyncNotificationManager notificationManager;
 	
 	
 	@Override
 	public void onCreate() {
 		serviceInterface = new OdkSyncServiceInterfaceImpl(this);
 		syncs = new HashMap<String, AppSynchronizer>();
-		notificationManager = new NotificationManager(this);
+		notificationManager = new GlobalSyncNotificationManager(this);
 	}
 
 	@Override

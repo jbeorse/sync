@@ -14,7 +14,7 @@ public class NotificationManagerTest extends AbstractSyncServiceTest {
 		String appName1 = "survey";
 		try {
 
-			NotificationManager manager = new NotificationManager(getService(), true);
+			GlobalSyncNotificationManager manager = new GlobalSyncNotificationManager(getService(), true);
 			manager.startingSync(appName1);
 			assertTrue(manager.isDisplayingNotification());
 			manager.stopingSync(appName1);
@@ -30,7 +30,7 @@ public class NotificationManagerTest extends AbstractSyncServiceTest {
 		String appName1 = "survey";
 		String appName2 = "tables";
 		try {
-			NotificationManager manager = new NotificationManager(getService(), true);
+			GlobalSyncNotificationManager manager = new GlobalSyncNotificationManager(getService(), true);
 			manager.startingSync(appName1);
 			assertTrue(manager.isDisplayingNotification());
 			manager.startingSync(appName2);
@@ -51,7 +51,7 @@ public class NotificationManagerTest extends AbstractSyncServiceTest {
 		String appName2 = "tables";
 		String appName3 = "syncing";
 		try {
-			NotificationManager manager = new NotificationManager(getService(), true);
+			GlobalSyncNotificationManager manager = new GlobalSyncNotificationManager(getService(), true);
 			manager.startingSync(appName1);
 			assertTrue(manager.isDisplayingNotification());
 			manager.startingSync(appName2);
@@ -81,7 +81,7 @@ public class NotificationManagerTest extends AbstractSyncServiceTest {
 	public void testNull() {
 		
 		try {
-			NotificationManager manager = new NotificationManager(getService());
+			GlobalSyncNotificationManager manager = new GlobalSyncNotificationManager(getService());
 			manager.startingSync(null);
 			assertTrue(false);
 			
