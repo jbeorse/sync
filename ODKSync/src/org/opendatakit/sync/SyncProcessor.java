@@ -127,7 +127,7 @@ public class SyncProcessor {
     Log.i(TAG, "entered synchronizeConfigurationAndContent()");
     ODKFileUtils.assertDirectoryStructure(appName);
 
-    android.os.Debug.waitForDebugger();
+    // android.os.Debug.waitForDebugger();
     // First we're going to synchronize the app level files.
     try {
       synchronizer.syncAppLevelFiles(pushToServer);
@@ -1340,7 +1340,7 @@ public class SyncProcessor {
       }
 
       SyncTag syncTag = tp.getSyncTag();
-      if (syncTag == null || !syncTag.getSchemaETag().equals(definitionResource.getSchemaETag())) {
+      if (syncTag == null || syncTag.getSchemaETag() == null || !syncTag.getSchemaETag().equals(definitionResource.getSchemaETag())) {
         // server has changed its schema
         // this means that the server may have none of our local data
         // or may not have any of the original server conflict rows.
