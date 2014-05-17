@@ -53,6 +53,7 @@ import org.opendatakit.common.android.utils.CsvUtil;
 import org.opendatakit.common.android.utils.DataUtil;
 import org.opendatakit.sync.Synchronizer.OnTablePropertiesChanged;
 import org.opendatakit.sync.TableResult.Status;
+import org.opendatakit.sync.service.SyncNotification;
 import org.springframework.web.client.ResourceAccessException;
 
 import android.content.ContentValues;
@@ -72,6 +73,7 @@ public class SyncProcessor {
 
   private static final String TAG = SyncProcessor.class.getSimpleName();
 
+  private static final int OVERALL_PROGRESS_BAR_LENGTH = 6350400;
   private static final ObjectMapper mapper;
 
   static {
@@ -79,9 +81,16 @@ public class SyncProcessor {
     mapper.setVisibilityChecker(mapper.getVisibilityChecker().withFieldVisibility(Visibility.ANY));
   }
 
+  private int nMajorSyncSteps;
+  private int iMajorSyncStep;
+  private int nMinorStep;
+  private int iMinorStep;
+  private int GRAINS_PER_MAJOR_SYNC_STEP;
+
   private final Context context;
   private final String appName;
   private final DataUtil du;
+  private final SyncNotification syncProgress;
   private final SyncResult syncResult;
   private final Synchronizer synchronizer;
   /**
@@ -91,12 +100,12 @@ public class SyncProcessor {
    */
   private final SynchronizationResult mUserResult;
 
-  public SyncProcessor(Context context, String appName, Synchronizer synchronizer,
+  public SyncProcessor(Context context, String appName, Synchronizer synchronizer, SyncNotification syncProgress,
       SyncResult syncResult) {
     this.context = context;
     this.appName = appName;
     this.du = new DataUtil(Locale.ENGLISH, TimeZone.getDefault());
-    ;
+    this.syncProgress = syncProgress;
     this.syncResult = syncResult;
     this.synchronizer = synchronizer;
     this.mUserResult = new SynchronizationResult();
@@ -128,15 +137,9 @@ public class SyncProcessor {
     ODKFileUtils.assertDirectoryStructure(appName);
 
     // android.os.Debug.waitForDebugger();
-    // First we're going to synchronize the app level files.
-    try {
-      synchronizer.syncAppLevelFiles(pushToServer);
-    } catch (ResourceAccessException e) {
-      // TODO: update a synchronization result to report back to them as well.
-      Log.e(TAG,
-          "[synchronizeConfigurationAndContent] error trying to synchronize app-level files.");
-      e.printStackTrace();
-    }
+
+    syncProgress.updateNotification(context.getString(R.string.starting_sync),
+        OVERALL_PROGRESS_BAR_LENGTH, 0, false);
 
     // get tables (tableId -> schemaETag) from server
     List<TableResource> tables = new ArrayList<TableResource>();
@@ -151,6 +154,16 @@ public class SyncProcessor {
     } catch (Exception e) {
       Log.e(TAG, "[synchronizeConfigurationAndContent] Unexpected exception getting table list", e);
       return null;
+    }
+
+    // First we're going to synchronize the app level files.
+    try {
+      synchronizer.syncAppLevelFiles(pushToServer);
+    } catch (ResourceAccessException e) {
+      // TODO: update a synchronization result to report back to them as well.
+      Log.e(TAG,
+          "[synchronizeConfigurationAndContent] error trying to synchronize app-level files.");
+      e.printStackTrace();
     }
 
     // get the tables on the local device

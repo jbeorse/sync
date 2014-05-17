@@ -37,7 +37,7 @@ import android.widget.Toast;
 /**
  * Activity to authenticate against an account and generate a token into the
  * shared preferences.
- * 
+ *
  * @author cswenson@google.com (Christopher Swenson) (original author)
  * @author the.dylan.price@gmail.com (modified by)
  */
@@ -46,7 +46,7 @@ public class AccountInfoActivity extends Activity {
 	public static final String INTENT_EXTRAS_ACCOUNT = "account";
 
   private static final String LOGTAG = AccountInfoActivity.class.getSimpleName();
-  
+
 	private final static int WAITING_ID = 1;
 	private final static int CALLBACK_DIALOG_INTENT_ID = 2;
 	private final static String authString = "oauth2:https://www.googleapis.com/auth/userinfo.email";
@@ -149,7 +149,7 @@ public class AccountInfoActivity extends Activity {
 
 	/**
 	 * If we got one, store it in shared preferences.
-	 * 
+	 *
 	 * @param bundle
 	 */
 	protected void gotAuthToken(Bundle bundle) {
@@ -165,7 +165,7 @@ public class AccountInfoActivity extends Activity {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		
+
 		dismissDialog(WAITING_ID);
 		setResult(Activity.RESULT_OK);
 		finish();

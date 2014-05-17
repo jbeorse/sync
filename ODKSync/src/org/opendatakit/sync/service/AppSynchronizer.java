@@ -2,6 +2,7 @@ package org.opendatakit.sync.service;
 
 import java.util.Arrays;
 
+import org.opendatakit.sync.R;
 import org.opendatakit.sync.SyncApp;
 import org.opendatakit.sync.SyncPreferences;
 import org.opendatakit.sync.SyncProcessor;
@@ -67,11 +68,11 @@ public class AppSynchronizer {
     public void run() {
 
       try {
-        SyncNotification syncNotif = new SyncNotification(cntxt, appName);
+        SyncNotification syncProgress = new SyncNotification(cntxt, appName);
         globalNotifManager.startingSync(appName);
-        syncNotif.updateNotification("Staring to Sync", 100, 0, false);
-        sync(syncNotif);
-        syncNotif.clearNotification();
+        syncProgress.updateNotification(cntxt.getString(R.string.starting_sync), 100, 0, false);
+        sync(syncProgress);
+        syncProgress.clearNotification();
         globalNotifManager.stopingSync(appName);
 
       } catch (NoAppNameSpecifiedException e) {
@@ -81,22 +82,31 @@ public class AppSynchronizer {
 
     }
 
-    private void sync(SyncNotification syncNotif) {
+    private void sync(SyncNotification syncProgress) {
       try {
         SyncPreferences prefs = new SyncPreferences(cntxt, appName);
         Log.e(LOGTAG, "APPNAME IN SERVICE: " + appName);
         Log.e(LOGTAG, "TOKEN IN SERVICE:" + prefs.getAuthToken());
         Log.e(LOGTAG, "URI IN SEVERICE:" + prefs.getServerUri());
 
-        // TODO: this should probably come in from the client???
+        // TODO: should use the APK manager to search for org.opendatakit.N
+        // packages, and collect N:V strings e.g., 'survey:1', 'tables:1',
+        // 'scan:1' etc. where V is the > 100's digit of the version code.
+        // The javascript API and file representation are the 100's and
+        // higher place in the versionCode. N is the next package in the
+        // package chain.
+        // TODO: Future: Add config option to specify a list of other APK
+        // prefixes to the set of APKs to discover (e.g., for 3rd party
+        // app support).
+        //
+        // NOTE: server limits this string to 10 characters
+        // For now, assume all APKs are sync'd to the same API version.
         String versionCode = SyncApp.getInstance().getVersionCodeString();
-        // the javascript API and file representation are the 100's and
-        // higher place in the versionCode.
         String odkClientVersion = versionCode.substring(0, versionCode.length() - 2);
 
         Synchronizer synchronizer = new AggregateSynchronizer(appName, odkClientVersion,
             prefs.getServerUri(), prefs.getAuthToken());
-        SyncProcessor processor = new SyncProcessor(cntxt, appName, synchronizer, new SyncResult());
+        SyncProcessor processor = new SyncProcessor(cntxt, appName, synchronizer, syncProgress, new SyncResult());
 
         status = SyncStatus.SYNCING;
 
