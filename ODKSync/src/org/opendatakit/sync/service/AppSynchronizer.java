@@ -7,16 +7,15 @@ import org.opendatakit.sync.SyncApp;
 import org.opendatakit.sync.SyncPreferences;
 import org.opendatakit.sync.SyncProcessor;
 import org.opendatakit.sync.SynchronizationResult;
+import org.opendatakit.sync.SynchronizationResult.Status;
 import org.opendatakit.sync.Synchronizer;
 import org.opendatakit.sync.TableResult;
-import org.opendatakit.sync.TableResult.Status;
 import org.opendatakit.sync.aggregate.AggregateSynchronizer;
 import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
 import org.opendatakit.sync.exceptions.NoAppNameSpecifiedException;
 
 import android.app.Service;
 import android.content.Context;
-import android.content.SyncResult;
 import android.util.Log;
 
 public class AppSynchronizer {
@@ -85,9 +84,9 @@ public class AppSynchronizer {
     private void sync(SyncNotification syncProgress) {
       try {
         SyncPreferences prefs = new SyncPreferences(cntxt, appName);
-        Log.e(LOGTAG, "APPNAME IN SERVICE: " + appName);
-        Log.e(LOGTAG, "TOKEN IN SERVICE:" + prefs.getAuthToken());
-        Log.e(LOGTAG, "URI IN SEVERICE:" + prefs.getServerUri());
+        Log.i(LOGTAG, "APPNAME IN SERVICE: " + appName);
+        Log.i(LOGTAG, "TOKEN IN SERVICE:" + prefs.getAuthToken());
+        Log.i(LOGTAG, "URI IN SEVERICE:" + prefs.getServerUri());
 
         // TODO: should use the APK manager to search for org.opendatakit.N
         // packages, and collect N:V strings e.g., 'survey:1', 'tables:1',
@@ -106,34 +105,23 @@ public class AppSynchronizer {
 
         Synchronizer synchronizer = new AggregateSynchronizer(appName, odkClientVersion,
             prefs.getServerUri(), prefs.getAuthToken());
-        SyncProcessor processor = new SyncProcessor(cntxt, appName, synchronizer, syncProgress, new SyncResult());
+        SyncProcessor processor = new SyncProcessor(cntxt, appName, synchronizer, syncProgress);
 
         status = SyncStatus.SYNCING;
 
         // sync the app-level files, table schemas and table-level files
-        SynchronizationResult configResults = processor.synchronizeConfigurationAndContent(push);
+        processor.synchronizeConfigurationAndContent(push);
+
+        // and now sync the data rows. This does not proceed if there
+        // was an app-level sync failure or if the particular tableId
+        // experienced a table-level sync failure in the preceeding step.
+
+        processor.synchronizeDataRowsAndAttachments();
+
         // examine results
-        for (TableResult result : configResults.getTableResults()) {
-          TableResult.Status tableStatus = result.getStatus();
-          // TODO: decide how to handle the status
-          if (tableStatus != Status.SUCCESS) {
-            status = SyncStatus.NETWORK_ERROR;
-          }
-        }
-
-        // if the app isn't configured, fail
-        if (status != SyncStatus.SYNCING) {
-          return;
-        }
-
-        // TODO: should probably return to app to re-scan
-        // initialization??
-        // or maybe there isn't anything more to do?
-
-        // now sync the data rows and attachments
-        SynchronizationResult dataResults = processor.synchronizeDataRowsAndAttachments();
-        for (TableResult result : dataResults.getTableResults()) {
-          TableResult.Status tableStatus = result.getStatus();
+        SynchronizationResult overallResults = processor.getOverallResults();
+        for (TableResult result : overallResults.getTableResults()) {
+          org.opendatakit.sync.SynchronizationResult.Status tableStatus = result.getStatus();
           // TODO: decide how to handle the status
           if (tableStatus != Status.SUCCESS) {
             status = SyncStatus.NETWORK_ERROR;
@@ -147,11 +135,11 @@ public class AppSynchronizer {
 
         // success
         status = SyncStatus.SYNC_COMPLETE;
-        Log.e(LOGTAG, "[SyncThread] timestamp: " + System.currentTimeMillis());
+        Log.i(LOGTAG, "[SyncThread] timestamp: " + System.currentTimeMillis());
       } catch (InvalidAuthTokenException e) {
         status = SyncStatus.AUTH_RESOLUTION;
       } catch (Exception e) {
-        Log.e(
+        Log.i(
             LOGTAG,
             "[exception during synchronization. stack trace:\n"
                 + Arrays.toString(e.getStackTrace()));

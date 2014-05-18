@@ -24,8 +24,8 @@ import org.opendatakit.sync.R;
 import org.opendatakit.sync.SyncConsts;
 import org.opendatakit.sync.SyncPreferences;
 import org.opendatakit.sync.SynchronizationResult;
+import org.opendatakit.sync.SynchronizationResult.Status;
 import org.opendatakit.sync.TableResult;
-import org.opendatakit.sync.TableResult.Status;
 import org.opendatakit.sync.files.SyncUtil;
 
 import android.accounts.Account;
@@ -208,7 +208,7 @@ public class SyncActivity extends Activity {
 	            context.getString(R.string.sync_action_message_insert) + "--");
 	    // Now add the result of the status.
 
-	    Status status = result.getStatus();
+	    org.opendatakit.sync.SynchronizationResult.Status status = result.getStatus();
 	    String name;
 	    switch (status) {
 	    case EXCEPTION:
@@ -227,7 +227,7 @@ public class SyncActivity extends Activity {
 	    }
 
 	    msg.append(name);
-	    if (result.getStatus() == TableResult.Status.EXCEPTION) {
+	    if (result.getStatus() == Status.EXCEPTION) {
 	      // We'll append the message as well.
 	      msg.append(result.getMessage());
 	    }
