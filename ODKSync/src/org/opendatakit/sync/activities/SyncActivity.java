@@ -234,7 +234,7 @@ public class SyncActivity extends Activity {
     }
 
     msg.append(name);
-    if (result.getStatus() == TableResult.Status.EXCEPTION) {
+    if (result.getStatus() == SynchronizationResult.Status.EXCEPTION) {
       // We'll append the message as well.
       msg.append(result.getMessage());
     }

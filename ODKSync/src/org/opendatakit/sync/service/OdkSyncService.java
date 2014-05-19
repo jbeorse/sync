@@ -62,14 +62,14 @@ public class OdkSyncService extends Service {
 
   
    public SyncProgressState getSyncProgress(String appName){
-     // TODO: PIPE IN REAL IMPLEMENTATION
-     return SyncProgressState.FILES;
+     AppSynchronizer sync = getSync(appName);
+     return sync.getProgressState();
    }
    
   
    public String getSyncUpdateMessage(String appName) {
-     // TODO: PIPE IN REAL IMPLEMENTATION
-     return "NEED TO IMPLEMENT";
+     AppSynchronizer sync = getSync(appName);
+     return sync.getSyncUpdateText();
    }
 
 	

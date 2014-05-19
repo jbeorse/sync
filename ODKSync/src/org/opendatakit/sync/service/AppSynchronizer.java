@@ -29,13 +29,15 @@ public class AppSynchronizer {
   private SyncStatus status;
   private Thread curThread;
   private SyncTask curTask;
+  private SyncNotification syncProgress;
 
-  AppSynchronizer(Service context, String appName, GlobalSyncNotificationManager notificationManager) {
-    this.service = context;
+  AppSynchronizer(Service srvc, String appName, GlobalSyncNotificationManager notificationManager) {
+    this.service = srvc;
     this.appName = appName;
     this.status = SyncStatus.INIT;
     this.curThread = null;
     this.globalNotifManager = notificationManager;
+    this.syncProgress = new SyncNotification(srvc, appName);
   }
 
   public boolean synchronize(boolean push) {
@@ -53,6 +55,14 @@ public class AppSynchronizer {
     return status;
   }
 
+  public String getSyncUpdateText() {
+    return syncProgress.getUpdateText();
+  }
+
+  public SyncProgressState getProgressState() {
+    return syncProgress.getProgressState();
+  }
+  
   private class SyncTask implements Runnable {
 
     private Context cntxt;
@@ -67,9 +77,9 @@ public class AppSynchronizer {
     public void run() {
 
       try {
-        SyncNotification syncProgress = new SyncNotification(cntxt, appName);
+       
         globalNotifManager.startingSync(appName);
-        syncProgress.updateNotification(cntxt.getString(R.string.starting_sync), 100, 0, false);
+        syncProgress.updateNotification(SyncProgressState.INIT, cntxt.getString(R.string.starting_sync), 100, 0, false);
         sync(syncProgress);
         syncProgress.clearNotification();
         globalNotifManager.stopingSync(appName);

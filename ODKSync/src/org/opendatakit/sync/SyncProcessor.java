@@ -22,8 +22,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.TimeZone;
 
 import org.codehaus.jackson.JsonGenerationException;
@@ -57,6 +57,7 @@ import org.opendatakit.sync.SynchronizationResult.Status;
 import org.opendatakit.sync.Synchronizer.OnTablePropertiesChanged;
 import org.opendatakit.sync.Synchronizer.SynchronizerStatus;
 import org.opendatakit.sync.service.SyncNotification;
+import org.opendatakit.sync.service.SyncProgressState;
 import org.springframework.web.client.ResourceAccessException;
 
 import android.content.ContentValues;
@@ -122,10 +123,10 @@ public class SyncProcessor implements SynchronizerStatus {
         text = String.format(fmt, formatArgVals);
       }
     }
-    syncProgress.updateNotification(text, OVERALL_PROGRESS_BAR_LENGTH,
-        (int) (iMajorSyncStep * GRAINS_PER_MAJOR_SYNC_STEP +
-            ((progressPercentage != null) ?
-               (progressPercentage * GRAINS_PER_MAJOR_SYNC_STEP / 100.0) : 0.0)), indeterminateProgress);
+    syncProgress.updateNotification(SyncProgressState.INIT, text,
+        OVERALL_PROGRESS_BAR_LENGTH, (int) (iMajorSyncStep * GRAINS_PER_MAJOR_SYNC_STEP +
+                  ((progressPercentage != null) ?
+                     (progressPercentage * GRAINS_PER_MAJOR_SYNC_STEP / 100.0) : 0.0)), indeterminateProgress);
   }
 
   /**
@@ -151,8 +152,8 @@ public class SyncProcessor implements SynchronizerStatus {
 
     android.os.Debug.waitForDebugger();
 
-    syncProgress.updateNotification(context.getString(R.string.retrieving_tables_list_from_server),
-        OVERALL_PROGRESS_BAR_LENGTH, 0, false);
+    syncProgress.updateNotification(SyncProgressState.INIT,
+        context.getString(R.string.retrieving_tables_list_from_server), OVERALL_PROGRESS_BAR_LENGTH, 0, false);
 
     // get tables (tableId -> schemaETag) from server
     List<TableResource> tables = new ArrayList<TableResource>();
