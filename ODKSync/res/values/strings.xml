@@ -57,6 +57,7 @@
 	<string name="deleting_server_row">Deleting %1$s dataset row %2$d of %3$d on server.</string>
 	<string name="uploading_attachments_server_row">Uploading %1$s dataset attachment %2$d of %3$d to server.</string>
 	<string name="table_data_sync_complete">Completed sync of %1$s dataset with server.</string>
+	<string name="table_contains_checkpoints">Checkpoints must be resolved before sync can proceed.</string>
 
 	<string name="sync_action_message_insert">Insert on Server.</string>
 	<string name="sync_table_result_success">Success</string>

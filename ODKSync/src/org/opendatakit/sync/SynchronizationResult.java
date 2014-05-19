@@ -24,8 +24,15 @@ public class SynchronizationResult {
    *
    * WORKING should never be returned (the initial value)
    */
-  public enum Status { WORKING,
-    SUCCESS, FAILURE, EXCEPTION, TABLE_DOES_NOT_EXIST_ON_SERVER, REQUIRE_APP_LEVEL_SYNC;
+  public enum Status {
+    WORKING,
+    SUCCESS,
+    FAILURE,
+    EXCEPTION,
+    TABLE_DOES_NOT_EXIST_ON_SERVER,
+    TABLE_CONTAINS_CHECKPOINTS,
+    TABLE_CONTAINS_CONFLICTS,
+    TABLE_REQUIRES_APP_LEVEL_SYNC;
   }
 
   private Status appLevelStatus = Status.WORKING;

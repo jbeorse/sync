@@ -628,6 +628,8 @@ public class SyncProcessor implements SynchronizerStatus {
       return;
     }
 
+    boolean containsConflicts = false;
+
     beginTableTransaction(tp);
     try {
       {
@@ -666,7 +668,7 @@ public class SyncProcessor implements SynchronizerStatus {
               tableResult.setServerHadSchemaChanges(true);
               tableResult
                   .setMessage("Server schemaETag differs! Sync app-level files and configuration in order to sync this table.");
-              tableResult.setStatus(Status.REQUIRE_APP_LEVEL_SYNC);
+              tableResult.setStatus(Status.TABLE_REQUIRES_APP_LEVEL_SYNC);
               return;
             }
 
@@ -708,9 +710,14 @@ public class SyncProcessor implements SynchronizerStatus {
 
             // get all the rows in the data table -- we will iterate through
             // them all.
-            UserTable localDataTable = table.rawSqlQuery(DataTableColumns.SAVEPOINT_TYPE
-                + " IS NOT NULL", null, null, null, null, null);
+            UserTable localDataTable = table.rawSqlQuery(null, null, null, null, null, null);
+            containsConflicts = localDataTable.hasConflictRows();
 
+            if ( localDataTable.hasCheckpointRows() ) {
+              tableResult.setMessage(context.getString(R.string.table_contains_checkpoints));
+              tableResult.setStatus(Status.TABLE_CONTAINS_CHECKPOINTS);
+              return;
+            }
             // these are all the various actions we will need to take:
 
             // serverRow updated; no matching localRow
@@ -910,6 +917,8 @@ public class SyncProcessor implements SynchronizerStatus {
                 rowsToDeleteOnServer.size() +
                 rowsToPushFileAttachments.size();
 
+            containsConflicts = containsConflicts || !rowsToMoveToConflictingLocally.isEmpty();
+
             perRowIncrement = 90.0 / ((double) (totalChange + 1));
             rowsProcessed = 0;
 
@@ -1095,7 +1104,7 @@ public class SyncProcessor implements SynchronizerStatus {
               " was " + tableResult.getStatus().name() +
               ", and yet success returned true. This shouldn't be possible.");
         } else {
-          tableResult.setStatus(Status.SUCCESS);
+          tableResult.setStatus(containsConflicts ? Status.TABLE_CONTAINS_CONFLICTS : Status.SUCCESS);
           this.updateNotification(R.string.table_data_sync_complete, new Object[] {tp.getTableId()}, 100.0, false);
         }
       }
