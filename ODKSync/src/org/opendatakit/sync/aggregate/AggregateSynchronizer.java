@@ -75,7 +75,6 @@ import org.opendatakit.sync.R;
 import org.opendatakit.sync.RowModification;
 import org.opendatakit.sync.SyncRow;
 import org.opendatakit.sync.Synchronizer;
-import org.opendatakit.sync.Synchronizer.SynchronizerStatus;
 import org.opendatakit.sync.exceptions.AccessDeniedException;
 import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
 import org.opendatakit.sync.exceptions.RequestFailureException;
