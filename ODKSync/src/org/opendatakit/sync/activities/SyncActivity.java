@@ -24,8 +24,8 @@ import org.opendatakit.sync.R;
 import org.opendatakit.sync.SyncConsts;
 import org.opendatakit.sync.SyncPreferences;
 import org.opendatakit.sync.SynchronizationResult;
+import org.opendatakit.sync.SynchronizationResult.Status;
 import org.opendatakit.sync.TableResult;
-import org.opendatakit.sync.TableResult.Status;
 import org.opendatakit.sync.files.SyncUtil;
 import org.opendatakit.sync.service.SyncProgressState;
 

@@ -35,6 +35,18 @@ import org.springframework.web.client.ResourceAccessException;
  */
 public interface Synchronizer {
 
+  public interface SynchronizerStatus {
+    /**
+     * Status of this action.
+     *
+     * @param text
+     * @param progressPercentage  0..100
+     * @param indeterminateProgress true if progressGrains is N/A
+     */
+    void updateNotification(int textResource, Object[] formatArgVals, Double progressPercentage,
+                              boolean indeterminateProgress);
+  }
+
   public interface OnTablePropertiesChanged {
     void onTablePropertiesChanged(String tableId);
   }
@@ -149,9 +161,11 @@ public interface Synchronizer {
    *
    * @param true if local files should be pushed. Otherwise they are only
    *        pulled down.
+   * @param SynchronizerStatus for reporting detailed progress of app-level file sync
+   * @return true if successful
    * @throws ResourceAccessException
    */
-  public void syncAppLevelFiles(boolean pushLocalFiles) throws ResourceAccessException;
+  public boolean syncAppLevelFiles(boolean pushLocalFiles, SynchronizerStatus syncStatus) throws ResourceAccessException;
 
   /**
    * Sync only the files associated with the specified table. This does NOT
@@ -164,7 +178,7 @@ public interface Synchronizer {
    *          true if the local files should be pushed
    * @throws ResourceAccessException
    */
-  public void syncTableLevelFiles(String tableId, OnTablePropertiesChanged onChange, boolean pushLocal) throws ResourceAccessException;
+  public void syncTableLevelFiles(String tableId, OnTablePropertiesChanged onChange, boolean pushLocal, SynchronizerStatus syncStatus) throws ResourceAccessException;
 
 
   /**

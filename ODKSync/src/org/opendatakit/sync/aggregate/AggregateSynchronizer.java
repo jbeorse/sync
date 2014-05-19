@@ -71,6 +71,7 @@ import org.opendatakit.httpclientandroidlib.impl.conn.BasicClientConnectionManag
 import org.opendatakit.httpclientandroidlib.params.HttpConnectionParams;
 import org.opendatakit.httpclientandroidlib.params.HttpParams;
 import org.opendatakit.sync.IncomingRowModifications;
+import org.opendatakit.sync.R;
 import org.opendatakit.sync.RowModification;
 import org.opendatakit.sync.SyncRow;
 import org.opendatakit.sync.Synchronizer;
@@ -686,8 +687,9 @@ public class AggregateSynchronizer implements Synchronizer {
   }
 
   @Override
-  public void syncAppLevelFiles(boolean pushLocalFiles) throws ResourceAccessException {
+  public boolean syncAppLevelFiles(boolean pushLocalFiles, SynchronizerStatus syncStatus) throws ResourceAccessException {
     // Get the app-level files on the server.
+    syncStatus.updateNotification(R.string.getting_app_level_manifest, null, 1.0, false);
     List<OdkTablesFileManifestEntry> manifest = getAppLevelFileManifest();
 
     // Get the app-level files on our device.
@@ -696,6 +698,10 @@ public class AggregateSynchronizer implements Synchronizer {
     List<String> relativePathsOnDevice = getAllFilesUnderFolder(appFolder,
         dirsToExclude);
     relativePathsOnDevice = filterOutTableIdAssetFiles(relativePathsOnDevice);
+
+    boolean success = true;
+    double stepSize = 100.0 / (1 + relativePathsOnDevice.size() + manifest.size());
+    int stepCount = 1;
 
     if ( pushLocalFiles ) {
       // if we are pushing, we want to push the local files that are different
@@ -714,41 +720,56 @@ public class AggregateSynchronizer implements Synchronizer {
         }
       }
 
-      boolean success = true;
       for (String relativePath : relativePathsOnDevice) {
+
+        syncStatus.updateNotification(R.string.uploading_local_file, new Object[] { relativePath },
+            stepCount*stepSize, false);
+
         File localFile = ODKFileUtils.asAppFile(appName, relativePath);
         String wholePathToFile = localFile.getAbsolutePath();
         if ( !uploadFile(wholePathToFile, relativePath)) {
           success = false;
           Log.e(LOGTAG, "Unable to upload file to server: " + relativePath);
         }
+
+        ++stepCount;
       }
 
       for ( String relativePath : serverFilesToDelete ) {
+
+        syncStatus.updateNotification(R.string.deleting_file_on_server, new Object[] { relativePath },
+            stepCount*stepSize, false);
+
         if ( !deleteFile(relativePath) ) {
           success = false;
           Log.e(LOGTAG, "Unable to delete file on server: " +  relativePath);
         }
-      }
 
-      if ( !success ) {
-        Log.i(LOGTAG, "unable to delete one or more files!");
+        ++stepCount;
       }
-
     } else {
       // if we are pulling, we want to pull the server files that are different
       // down from the server, then remove the local files that are not present
       // on the server.
 
       for (OdkTablesFileManifestEntry entry : manifest) {
+
+        syncStatus.updateNotification(R.string.verifying_local_file, new Object[] { entry.filename },
+            stepCount*stepSize, false);
+
         // make sure our copy is current
         compareAndDownloadFile(entry);
         // remove it from the set of app-level files we found before the sync
         relativePathsOnDevice.remove(entry.filename);
+
+        ++stepCount;
       }
 
-      boolean success = true;
       for ( String relativePath : relativePathsOnDevice ) {
+
+        syncStatus.updateNotification(R.string.deleting_local_file, new Object[] { relativePath },
+            stepCount*stepSize, false);
+
         // and remove any remaining files, as these do not match anything on
         // the server.
         File f = ODKFileUtils.asAppFile(appName, relativePath);
@@ -756,18 +777,18 @@ public class AggregateSynchronizer implements Synchronizer {
           success = false;
           Log.e(LOGTAG, "Unable to delete " +  f.getAbsolutePath());
         }
-      }
 
-      if ( !success ) {
-        Log.i(LOGTAG, "unable to delete one or more files!");
+        ++stepCount;
       }
-
-      // should we return our status?
     }
+
+    return success;
   }
 
   @Override
-  public void syncTableLevelFiles(String tableId, OnTablePropertiesChanged onChange, boolean pushLocalFiles) throws ResourceAccessException {
+  public void syncTableLevelFiles(String tableId, OnTablePropertiesChanged onChange, boolean pushLocalFiles, SynchronizerStatus syncStatus) throws ResourceAccessException {
+
+    syncStatus.updateNotification(R.string.getting_table_manifest, new Object[] { tableId }, 1.0, false);
 
     String tableIdPropertiesFile = "tables" + File.separator + tableId + File.separator + "properties.csv";
 
@@ -793,6 +814,9 @@ public class AggregateSynchronizer implements Synchronizer {
     // get the table files on the server
     List<OdkTablesFileManifestEntry> manifest = getTableLevelFileManifest(tableId);
 
+    double stepSize = 100.0 / (1 + relativePathsOnDevice.size() + manifest.size());
+    int stepCount = 1;
+
     if ( pushLocalFiles ) {
       // if we are pushing, we want to push the local files that are different
       // up to the server, then remove the files on the server that are not
@@ -812,19 +836,31 @@ public class AggregateSynchronizer implements Synchronizer {
 
       boolean success = true;
       for (String relativePath : relativePathsOnDevice) {
+
+        syncStatus.updateNotification(R.string.uploading_local_file, new Object[] { relativePath },
+            stepCount*stepSize, false);
+
         File localFile = ODKFileUtils.asAppFile(appName, relativePath);
         String wholePathToFile = localFile.getAbsolutePath();
         if ( !uploadFile(wholePathToFile, relativePath)) {
           success = false;
           Log.e(LOGTAG, "Unable to upload file to server: " + relativePath);
         }
+
+        ++stepCount;
       }
 
       for ( String relativePath : serverFilesToDelete ) {
+
+        syncStatus.updateNotification(R.string.deleting_file_on_server, new Object[] { relativePath },
+            stepCount*stepSize, false);
+
         if ( !deleteFile(relativePath) ) {
           success = false;
           Log.e(LOGTAG, "Unable to delete file on server: " +  relativePath);
         }
+
+       ++stepCount;
       }
 
       if ( !success ) {
@@ -837,6 +873,10 @@ public class AggregateSynchronizer implements Synchronizer {
       // on the server.
 
       for (OdkTablesFileManifestEntry entry : manifest) {
+
+        syncStatus.updateNotification(R.string.verifying_local_file, new Object[] { entry.filename },
+            stepCount*stepSize, false);
+
         // make sure our copy is current
         boolean outcome = compareAndDownloadFile(entry);
         // and if it was the table properties file, remember whether it changed.
@@ -845,10 +885,16 @@ public class AggregateSynchronizer implements Synchronizer {
         }
         // remove it from the set of app-level files we found before the sync
         relativePathsOnDevice.remove(entry.filename);
+
+        ++stepCount;
       }
 
       boolean success = true;
       for ( String relativePath : relativePathsOnDevice ) {
+
+        syncStatus.updateNotification(R.string.deleting_local_file, new Object[] { relativePath },
+            stepCount*stepSize, false);
+
         // and remove any remaining files, as these do not match anything on
         // the server.
         File f = ODKFileUtils.asAppFile(appName, relativePath);
@@ -856,6 +902,8 @@ public class AggregateSynchronizer implements Synchronizer {
           success = false;
           Log.e(LOGTAG, "Unable to delete " +  f.getAbsolutePath());
         }
+
+        ++stepCount;
       }
 
       if ( tablePropertiesChanged && (onChange != null) ) {

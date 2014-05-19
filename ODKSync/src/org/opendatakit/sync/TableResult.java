@@ -1,5 +1,7 @@
 package org.opendatakit.sync;
 
+import org.opendatakit.sync.SynchronizationResult.Status;
+
 
 
 /**
@@ -9,10 +11,10 @@ package org.opendatakit.sync;
  */
 public class TableResult {
 
-	  private String mDisplayName;
-	  private String mTableId;
-	  private Status mStatus;
-	  private String mMessage;
+	  private final String mTableId;
+     private String mDisplayName;
+	  private Status mStatus = Status.WORKING;
+	  private String mMessage = Status.WORKING.name();
 	  /** Flag if schema was pulled from the server. */
 	  private boolean mPulledServerSchema;
 	  /** Flag if properties were pulled from the server. */
@@ -34,6 +36,42 @@ public class TableResult {
 	  /** Flat if data had to be pulled from the server. */
 	  private boolean mHadServerDataChanges;
 
+	  private int mServerNumUpserts = 0;
+	  private int mServerNumDeletes = 0;
+	  private int mLocalNumInserts = 0;
+	  private int mLocalNumUpdates = 0;
+	  private int mLocalNumDeletes = 0;
+	  private int mLocalNumConflicts = 0;
+	  private int mLocalNumAttachmentRetries = 0;
+
+	  public void incServerUpserts() {
+	    ++mServerNumUpserts;
+	  }
+
+	  public void incServerDeletes() {
+	    ++mServerNumDeletes;
+	  }
+
+	  public void incLocalInserts() {
+	    ++mLocalNumInserts;
+	  }
+
+	  public void incLocalUpdates() {
+	    ++mLocalNumUpdates;
+	  }
+
+     public void incLocalDeletes() {
+       ++mLocalNumDeletes;
+     }
+
+     public void incLocalConflicts() {
+       ++mLocalNumConflicts;
+     }
+
+	  public void incLocalAttachmentRetries() {
+	    ++mLocalNumAttachmentRetries;
+	  }
+
 	  /**
 	   * Create a table result with a status of {@link Status#FAILURE}. This should
 	   * then only be updated in the case of success or exceptions. The boolean
@@ -41,10 +79,9 @@ public class TableResult {
 	   * @param dbTableName
 	   * @param status
 	   */
-	  public TableResult(String tableDisplayName, String tableId) {
-	    this.mDisplayName = tableDisplayName;
-	    this.mStatus = Status.FAILURE;
-	    this.mMessage = Status.FAILURE.name();
+	  public TableResult(String tableId) {
+	    this.mTableId = tableId;
+	    this.mDisplayName = tableId;
 	    this.mPulledServerData = false;
 	    this.mPulledServerProps = false;
 	    this.mPulledServerSchema = false;
@@ -55,6 +92,14 @@ public class TableResult {
 	    this.mHadServerDataChanges = false;
 	    this.mHadServerPropChanges = false;
 	    this.mHadServerSchemaChanges = false;
+	  }
+
+	  public String getTableId() {
+	    return this.mTableId;
+	  }
+
+	  public void setTableDisplayName(String displayName) {
+	    this.mDisplayName = displayName;
 	  }
 
 	  public String getTableDisplayName() {
@@ -173,15 +218,6 @@ public class TableResult {
 	                " to exception.");
 	    }
 	    this.mStatus = newStatus;
-	  }
-
-	  /**
-	   * The result of an individual table.
-	   * @author sudar.sam@gmail.com
-	   *
-	   */
-	  public enum Status {
-	    SUCCESS, FAILURE, EXCEPTION, TABLE_DOES_NOT_EXIST_ON_SERVER, REQUIRE_APP_LEVEL_SYNC;
 	  }
 
 	}
