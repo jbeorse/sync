@@ -44,8 +44,8 @@ public abstract class AbstractSyncServiceTest extends ServiceTestCase<OdkSyncSer
 			OdkSyncServiceInterface syncServiceInterface,
 			SyncStatus syncStatus) {
 		try {
-			String status = syncServiceInterface.getSyncStatus(SyncUtil.getDefaultAppName());
-			assertTrue(status.equals(syncStatus.name()));
+			SyncStatus status = syncServiceInterface.getSyncStatus(SyncUtil.getDefaultAppName());
+			assertTrue(status.equals(syncStatus));
 		} catch (RemoteException e) {
 			e.printStackTrace();
 			assertTrue(false);

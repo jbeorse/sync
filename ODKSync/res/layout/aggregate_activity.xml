@@ -63,6 +63,28 @@
         android:layout_gravity="bottom"
         android:onClick="onClickSyncNowPush"
         android:text="@+string/sync_now_push" />
+    
+    <TextView
+        android:id="@+id/aggregate_activity_progress_state_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@+string/sync_progress_state_label" />
+    
+    <TextView
+        android:id="@+id/aggregate_activity_progress_state"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content" />
+    
+    <TextView
+        android:id="@+id/aggregate_activity_progress_message_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content" 
+		android:text="@+string/sync_progress_message_label" />
+    
+    <TextView
+        android:id="@+id/aggregate_activity_progress_message"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content" />
 
 </LinearLayout>
 </ScrollView>

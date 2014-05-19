@@ -23,6 +23,8 @@
 	<string name="sync_result">Sync Results</string>
 	<string name="file_picker_not_found">OI File Manager is missing.\n\nPlease install the OI File Manager application.</string>
 	<string name="account">Account:</string>
+	<string name="sync_progress_state_label">Sync Progress State</string>
+	<string name="sync_progress_message_label">Sync Progress Message</string>
 	<string name="save_settings">Save settings</string>
 	<string name="auth_account">Authorize account</string>
 	<string name="choose_sync_set">Choose set of tables to sync</string>
