@@ -1,5 +1,6 @@
 package org.opendatakit.sync.service;
 
+import java.io.IOException;
 import java.util.Arrays;
 
 import org.opendatakit.sync.R;
@@ -10,6 +11,7 @@ import org.opendatakit.sync.SynchronizationResult;
 import org.opendatakit.sync.SynchronizationResult.Status;
 import org.opendatakit.sync.Synchronizer;
 import org.opendatakit.sync.TableResult;
+import org.opendatakit.sync.activities.SyncActivity;
 import org.opendatakit.sync.aggregate.AggregateSynchronizer;
 import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
 import org.opendatakit.sync.exceptions.NoAppNameSpecifiedException;
@@ -90,10 +92,24 @@ public class AppSynchronizer {
       }
 
     }
-
+    
     private void sync(SyncNotification syncProgress) {
+      
+      SyncPreferences prefs = null;
       try {
-        SyncPreferences prefs = new SyncPreferences(cntxt, appName);
+        prefs = new SyncPreferences(cntxt, appName);
+      } catch (Exception e1) {
+        e1.printStackTrace();
+      }
+      
+      if(prefs == null) {
+        status = SyncStatus.FILE_ERROR;
+        syncProgress.updateNotification(SyncProgressState.INIT, "Unable to open SyncPreferences" , 100, 0, true);
+        return;
+      }
+      
+      try {
+        
         Log.i(LOGTAG, "APPNAME IN SERVICE: " + appName);
         Log.i(LOGTAG, "TOKEN IN SERVICE:" + prefs.getAuthToken());
         Log.i(LOGTAG, "URI IN SEVERICE:" + prefs.getServerUri());
@@ -147,7 +163,16 @@ public class AppSynchronizer {
         status = SyncStatus.SYNC_COMPLETE;
         Log.i(LOGTAG, "[SyncThread] timestamp: " + System.currentTimeMillis());
       } catch (InvalidAuthTokenException e) {
+        try {
+          prefs.setAuthToken(null);
+        } catch (IOException e1) {
+          status = SyncStatus.FILE_ERROR;
+          syncProgress.updateNotification(SyncProgressState.INIT, "Unable to open SyncPreferences" , 100, 0, true);
+          e1.printStackTrace();
+        }
         status = SyncStatus.AUTH_RESOLUTION;
+        SyncActivity.refreshActivityUINeeded();
+        
       } catch (Exception e) {
         Log.i(
             LOGTAG,

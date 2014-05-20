@@ -18,6 +18,7 @@ package org.opendatakit.sync.activities;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.opendatakit.sync.OdkSyncServiceProxy;
 import org.opendatakit.sync.R;
@@ -63,6 +64,12 @@ public class SyncActivity extends Activity {
 
   private static final int AUTHORIZE_ACCOUNT_RESULT_ID = 1;
 
+  private static final AtomicBoolean refreshRequired = new AtomicBoolean(false);
+
+  public static final void refreshActivityUINeeded() {
+    refreshRequired.set(true);
+  } 
+  
   private EditText uriField;
   private Spinner accountListSpinner;
 
@@ -75,7 +82,8 @@ public class SyncActivity extends Activity {
   private TextView progressMessage;
 
   private UpdateStatusTask updateStatusTask;
-
+  
+  
   @Override
   public void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
@@ -84,9 +92,10 @@ public class SyncActivity extends Activity {
       appName = SyncUtil.getDefaultAppName();
     }
     accountManager = AccountManager.get(this);
-
+    
     syncProxy = new OdkSyncServiceProxy(this);
 
+    
     setTitle("");
     setContentView(R.layout.aggregate_activity);
     findViewComponents();
@@ -492,9 +501,19 @@ public class SyncActivity extends Activity {
 
   }
 
+  private void updateButtonsWrappedWithPreferencesNIgnoreExceptions() {
+
+    try {
+      SyncPreferences prefs = new SyncPreferences(this, appName);
+      updateButtonsEnabled(prefs);
+    } catch (Exception e) {
+      e.printStackTrace();
+    }    
+  }
+  
   private class UpdateStatusTask extends AsyncTask<Void, Void, Void> {
 
-    private static final int DELAY_PROGRESS_REFRESH = 20000;
+    private static final int DELAY_PROGRESS_REFRESH = 5000;
 
     @Override
     protected Void doInBackground(Void... params) {
@@ -503,7 +522,14 @@ public class SyncActivity extends Activity {
         while (true) {
           Thread.sleep(DELAY_PROGRESS_REFRESH);
           //Log.e(LOGTAG, "Wake up");
-          updateProgress();
+          updateProgress();  
+          
+          // check to see if another class has requested the activity to
+          // redraw the UI, for now update the buttons
+          if(refreshRequired.get()) {
+            updateButtonsWrappedWithPreferencesNIgnoreExceptions();
+            refreshRequired.set(false);
+          }
         }
       } catch (InterruptedException e) {
         // TODO Auto-generated catch block

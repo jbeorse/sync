@@ -53,8 +53,8 @@ public class OdkSyncServiceInterfaceImpl extends Stub {
 	@Override
 	public SyncProgressState getSyncProgress(String appName) throws RemoteException {
 	  try {
-       Log.i(LOGTAG, "SERVICE INTERFACE: getSyncProgress WITH appName:"
-             + appName);
+//       Log.v(LOGTAG, "SERVICE INTERFACE: getSyncProgress WITH appName:"
+//             + appName);
        return syncService.getSyncProgress(appName);
     } catch (Throwable throwable) {
        throwable.printStackTrace();
@@ -65,8 +65,8 @@ public class OdkSyncServiceInterfaceImpl extends Stub {
 	@Override
    public String getSyncUpdateMessage(String appName) throws RemoteException {
 	  try {
-       Log.i(LOGTAG, "SERVICE INTERFACE: getSyncUpdateMessage WITH appName:"
-             + appName);
+//       Log.v(LOGTAG, "SERVICE INTERFACE: getSyncUpdateMessage WITH appName:"
+//             + appName);
        return syncService.getSyncUpdateMessage(appName);
     } catch (Throwable throwable) {
        throwable.printStackTrace();
