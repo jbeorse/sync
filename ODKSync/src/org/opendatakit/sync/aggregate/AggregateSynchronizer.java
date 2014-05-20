@@ -720,6 +720,9 @@ public class AggregateSynchronizer implements Synchronizer {
         }
       }
 
+      // this is the actual step size when we are pushing...
+      stepSize = 100.0 / (1 + relativePathsOnDevice.size() + serverFilesToDelete.size());
+
       for (String relativePath : relativePathsOnDevice) {
 
         syncStatus.updateNotification(R.string.uploading_local_file, new Object[] { relativePath },
@@ -753,7 +756,6 @@ public class AggregateSynchronizer implements Synchronizer {
       // on the server.
 
       for (OdkTablesFileManifestEntry entry : manifest) {
-
         syncStatus.updateNotification(R.string.verifying_local_file, new Object[] { entry.filename },
             stepCount*stepSize, false);
 
@@ -761,6 +763,9 @@ public class AggregateSynchronizer implements Synchronizer {
         compareAndDownloadFile(entry);
         // remove it from the set of app-level files we found before the sync
         relativePathsOnDevice.remove(entry.filename);
+
+        // this is the corrected step size based upon matching files
+        stepSize = 100.0 / (1 + relativePathsOnDevice.size() + manifest.size());
 
         ++stepCount;
       }
@@ -834,6 +839,9 @@ public class AggregateSynchronizer implements Synchronizer {
         }
       }
 
+      // this is the actual step size when we are pushing...
+      stepSize = 100.0 / (1 + relativePathsOnDevice.size() + serverFilesToDelete.size());
+
       boolean success = true;
       for (String relativePath : relativePathsOnDevice) {
 
@@ -885,6 +893,9 @@ public class AggregateSynchronizer implements Synchronizer {
         }
         // remove it from the set of app-level files we found before the sync
         relativePathsOnDevice.remove(entry.filename);
+
+        // this is the corrected step size based upon matching files
+        stepSize = 100.0 / (1 + relativePathsOnDevice.size() + manifest.size());
 
         ++stepCount;
       }

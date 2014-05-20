@@ -77,6 +77,7 @@ public class SyncProcessor implements SynchronizerStatus {
 
   private static final String TAG = SyncProcessor.class.getSimpleName();
 
+  private static final int ROWS_BETWEEN_PROGRESS_UPDATES = 10;
   private static final int OVERALL_PROGRESS_BAR_LENGTH = 6350400;
   private static final ObjectMapper mapper;
 
@@ -150,7 +151,7 @@ public class SyncProcessor implements SynchronizerStatus {
     Log.i(TAG, "entered synchronizeConfigurationAndContent()");
     ODKFileUtils.assertDirectoryStructure(appName);
 
-    android.os.Debug.waitForDebugger();
+    // android.os.Debug.waitForDebugger();
 
     syncProgress.updateNotification(SyncProgressState.INIT,
         context.getString(R.string.retrieving_tables_list_from_server), OVERALL_PROGRESS_BAR_LENGTH, 0, false);
@@ -1009,7 +1010,7 @@ public class SyncProcessor implements SynchronizerStatus {
                 }
                 ++count;
                 ++rowsProcessed;
-                if ( rowsProcessed % 0 == 0 ) {
+                if ( rowsProcessed % ROWS_BETWEEN_PROGRESS_UPDATES == 0 ) {
                   this.updateNotification(R.string.upserting_server_row,
                       new Object[] { tp.getTableId(), count, allUpsertRows.size() }, 10.0 + rowsProcessed * perRowIncrement, false);
                 }
@@ -1026,7 +1027,7 @@ public class SyncProcessor implements SynchronizerStatus {
                 }
                 ++count;
                 ++rowsProcessed;
-                if ( rowsProcessed % 0 == 0 ) {
+                if ( rowsProcessed % ROWS_BETWEEN_PROGRESS_UPDATES == 0 ) {
                   this.updateNotification(R.string.deleting_server_row,
                       new Object[] { tp.getTableId(), count, rowsToDeleteOnServer.size() }, 10.0 + rowsProcessed * perRowIncrement, false);
                 }
@@ -1047,7 +1048,7 @@ public class SyncProcessor implements SynchronizerStatus {
                 tableResult.incLocalAttachmentRetries();
                 ++count;
                 ++rowsProcessed;
-                if ( rowsProcessed % 0 == 0 ) {
+                if ( rowsProcessed % ROWS_BETWEEN_PROGRESS_UPDATES == 0 ) {
                   this.updateNotification(R.string.uploading_attachments_server_row,
                       new Object[] { tp.getTableId(), count, rowsToPushFileAttachments.size() }, 10.0 + rowsProcessed * perRowIncrement, false);
                 }
@@ -1249,7 +1250,7 @@ public class SyncProcessor implements SynchronizerStatus {
       }
       ++count;
       ++rowsProcessed;
-      if ( rowsProcessed % 0 == 0 ) {
+      if ( rowsProcessed % ROWS_BETWEEN_PROGRESS_UPDATES == 0 ) {
         this.updateNotification(R.string.marking_conflicting_local_row,
             new Object[] { tp.getTableId(), count, changes.size() }, 10.0 + rowsProcessed * perRowIncrement, false);
       }
@@ -1288,7 +1289,7 @@ public class SyncProcessor implements SynchronizerStatus {
       }
       ++count;
       ++rowsProcessed;
-      if ( rowsProcessed % 0 == 0 ) {
+      if ( rowsProcessed % ROWS_BETWEEN_PROGRESS_UPDATES == 0 ) {
         this.updateNotification(R.string.inserting_local_row,
             new Object[] { tp.getTableId(), count, changes.size() }, 10.0 + rowsProcessed * perRowIncrement, false);
       }
@@ -1348,7 +1349,7 @@ public class SyncProcessor implements SynchronizerStatus {
       }
       ++count;
       ++rowsProcessed;
-      if ( rowsProcessed % 0 == 0 ) {
+      if ( rowsProcessed % ROWS_BETWEEN_PROGRESS_UPDATES == 0 ) {
         this.updateNotification(R.string.updating_local_row,
             new Object[] { tp.getTableId(), count, changes.size() }, 10.0 + rowsProcessed * perRowIncrement, false);
       }
@@ -1372,7 +1373,7 @@ public class SyncProcessor implements SynchronizerStatus {
       }
       ++count;
       ++rowsProcessed;
-      if ( rowsProcessed % 0 == 0 ) {
+      if ( rowsProcessed % ROWS_BETWEEN_PROGRESS_UPDATES == 0 ) {
         this.updateNotification(R.string.deleting_local_row,
             new Object[] { tp.getTableId(), count, changes.size() }, 10.0 + rowsProcessed * perRowIncrement, false);
       }
