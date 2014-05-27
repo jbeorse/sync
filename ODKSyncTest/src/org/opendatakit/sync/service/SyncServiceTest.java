@@ -17,6 +17,10 @@ public class SyncServiceTest extends AbstractSyncServiceTest {
 
 	}
 
+	public void testFailureForCheckins() {
+	  assertTrue(true);
+	}
+	
 	
 //	public void testRunning() {
 //		setupService();
