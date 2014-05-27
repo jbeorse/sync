@@ -146,6 +146,7 @@ public class ConflictResolutionRowActivity extends ListActivity
     Row localRow = this.mLocal.getRowAtIndex(this.mRowNumber);
     this.mServerRowETag = localRow.getDataOrMetadataByElementKey(
         DataTableColumns.ROW_ETAG);
+    Row serverRow = this.mServer.getRowAtIndex(this.mRowNumber);
     List<String> columnOrder = tp.getColumnOrder();
     // This will be the number of rows down we are in the adapter. Each
     // heading and each cell value gets its own row. Columns in conflict get
@@ -162,10 +163,8 @@ public class ConflictResolutionRowActivity extends ListActivity
       Section newSection = new Section(adapterOffset, columnDisplayName);
       ++adapterOffset;
       sections.add(newSection);
-      String localValue = mLocal.getDisplayTextOfData(this, mRowNumber,
-          elementKey, true);
-      String serverValue = mServer.getDisplayTextOfData(this, mRowNumber,
-          elementKey, true);
+      String localValue = localRow.getDisplayTextOfData(this, elementKey, true);
+      String serverValue = serverRow.getDisplayTextOfData(this, elementKey, true);
       if ((localValue == null && serverValue == null) ||
     	  (localValue != null && localValue.equals(serverValue))) {
         // TODO: this doesn't compare actual equality of blobs if their display
