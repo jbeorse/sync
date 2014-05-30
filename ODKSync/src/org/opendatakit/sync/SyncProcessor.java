@@ -388,7 +388,8 @@ public class SyncProcessor implements SynchronizerStatus {
         // the insert of the table was incomplete -- try again
 
         // we are creating data on the server
-        // change our 'rest' state rows into 'inserting' rows
+        // change row sync and conflict status to handle new server schema.
+        // Clean up this table and set the dataETag to null.
         DbTable dbt = DbTable.getDbTable(tp);
         dbt.changeDataRowsToInsertingState();
 
@@ -1524,8 +1525,7 @@ public class SyncProcessor implements SynchronizerStatus {
       SyncTag syncTag = tp.getSyncTag();
       if (syncTag == null || syncTag.getSchemaETag() == null || !syncTag.getSchemaETag().equals(definitionResource.getSchemaETag())) {
         // server has changed its schema
-        // this means that the server may have none of our local data
-        // or may not have any of the original server conflict rows.
+        // change row sync and conflict status to handle new server schema.
         // Clean up this table and set the dataETag to null.
         DbTable table = DbTable.getDbTable(tp);
         table.changeDataRowsToInsertingState();
