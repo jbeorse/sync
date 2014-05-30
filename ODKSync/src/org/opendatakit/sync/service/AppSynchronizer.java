@@ -64,7 +64,7 @@ public class AppSynchronizer {
   public SyncProgressState getProgressState() {
     return syncProgress.getProgressState();
   }
-  
+
   private class SyncTask implements Runnable {
 
     private Context cntxt;
@@ -79,37 +79,46 @@ public class AppSynchronizer {
     public void run() {
 
       try {
-       
+
+        // android.os.Debug.waitForDebugger();
+
         globalNotifManager.startingSync(appName);
         syncProgress.updateNotification(SyncProgressState.INIT, cntxt.getString(R.string.starting_sync), 100, 0, false);
         sync(syncProgress);
-        syncProgress.clearNotification();
-        globalNotifManager.stopingSync(appName);
-
+        // leave the last notification available for review
+        // syncProgress.clearNotification();
       } catch (NoAppNameSpecifiedException e) {
         e.printStackTrace();
         status = SyncStatus.NETWORK_ERROR;
+        syncProgress.updateNotification(SyncProgressState.COMPLETE, "There were failures..." , 100, 0, false);
+      } finally {
+        try {
+          globalNotifManager.stoppingSync(appName);
+        } catch (NoAppNameSpecifiedException e) {
+          // impossible to get here
+        }
+        SyncActivity.refreshActivityUINeeded();
       }
 
     }
-    
+
     private void sync(SyncNotification syncProgress) {
-      
+
       SyncPreferences prefs = null;
       try {
         prefs = new SyncPreferences(cntxt, appName);
       } catch (Exception e1) {
         e1.printStackTrace();
       }
-      
+
       if(prefs == null) {
         status = SyncStatus.FILE_ERROR;
-        syncProgress.updateNotification(SyncProgressState.INIT, "Unable to open SyncPreferences" , 100, 0, true);
+        syncProgress.updateNotification(SyncProgressState.INIT, "Unable to open SyncPreferences" , 100, 0, false);
         return;
       }
-      
+
       try {
-        
+
         Log.i(LOGTAG, "APPNAME IN SERVICE: " + appName);
         Log.i(LOGTAG, "TOKEN IN SERVICE:" + prefs.getAuthToken());
         Log.i(LOGTAG, "URI IN SEVERICE:" + prefs.getServerUri());
@@ -156,28 +165,38 @@ public class AppSynchronizer {
 
         // if rows aren't successful, fail.
         if (status != SyncStatus.SYNCING) {
+          syncProgress.updateNotification(SyncProgressState.COMPLETE, "There were failures..." , 100, 0, false);
           return;
         }
 
         // success
         status = SyncStatus.SYNC_COMPLETE;
+        syncProgress.updateNotification(SyncProgressState.COMPLETE, "Successful Sync" , 100, 100, false);
         Log.i(LOGTAG, "[SyncThread] timestamp: " + System.currentTimeMillis());
       } catch (InvalidAuthTokenException e) {
         try {
           prefs.setAuthToken(null);
         } catch (IOException e1) {
           status = SyncStatus.FILE_ERROR;
-          syncProgress.updateNotification(SyncProgressState.INIT, "Unable to open SyncPreferences" , 100, 0, true);
+          syncProgress.updateNotification(SyncProgressState.COMPLETE, "Unable to open SyncPreferences" , 100, 0, false);
           e1.printStackTrace();
         }
+
+        syncProgress.updateNotification(SyncProgressState.COMPLETE, "Account Re-Authorization Required", 100, 0, false);
         status = SyncStatus.AUTH_RESOLUTION;
-        SyncActivity.refreshActivityUINeeded();
-        
       } catch (Exception e) {
         Log.i(
             LOGTAG,
             "[exception during synchronization. stack trace:\n"
                 + Arrays.toString(e.getStackTrace()));
+        String msg = e.getLocalizedMessage();
+        if ( msg == null ) {
+          msg = e.getMessage();
+        }
+        if ( msg == null ) {
+          msg = e.toString();
+        }
+        syncProgress.updateNotification(SyncProgressState.COMPLETE, "Failed Sync: " + msg , 100, 0, false);
         status = SyncStatus.NETWORK_ERROR;
       }
     }

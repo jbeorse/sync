@@ -44,7 +44,7 @@ public final class GlobalSyncNotificationManager {
 		update();
 	}
 
-	public synchronized void stopingSync(String appName)
+	public synchronized void stoppingSync(String appName)
 			throws NoAppNameSpecifiedException {
 		AppSyncStatus appStatus = getAppStatus(appName);
 		appStatus.setSyncing(false);

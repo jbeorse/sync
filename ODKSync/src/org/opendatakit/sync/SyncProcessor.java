@@ -114,7 +114,7 @@ public class SyncProcessor implements SynchronizerStatus {
   }
 
   @Override
-  public void updateNotification(int textResource, Object[] formatArgVals, Double progressPercentage, boolean indeterminateProgress) {
+  public void updateNotification(SyncProgressState state, int textResource, Object[] formatArgVals, Double progressPercentage, boolean indeterminateProgress) {
     String text = "Bad text resource id: " + textResource + "!";
     String fmt = this.context.getString(textResource);
     if ( fmt != null ) {
@@ -124,7 +124,7 @@ public class SyncProcessor implements SynchronizerStatus {
         text = String.format(fmt, formatArgVals);
       }
     }
-    syncProgress.updateNotification(SyncProgressState.INIT, text,
+    syncProgress.updateNotification(state, text,
         OVERALL_PROGRESS_BAR_LENGTH, (int) (iMajorSyncStep * GRAINS_PER_MAJOR_SYNC_STEP +
                   ((progressPercentage != null) ?
                      (progressPercentage * GRAINS_PER_MAJOR_SYNC_STEP / 100.0) : 0.0)), indeterminateProgress);
@@ -150,8 +150,6 @@ public class SyncProcessor implements SynchronizerStatus {
   public void synchronizeConfigurationAndContent(boolean pushToServer) {
     Log.i(TAG, "entered synchronizeConfigurationAndContent()");
     ODKFileUtils.assertDirectoryStructure(appName);
-
-    // android.os.Debug.waitForDebugger();
 
     syncProgress.updateNotification(SyncProgressState.INIT,
         context.getString(R.string.retrieving_tables_list_from_server), OVERALL_PROGRESS_BAR_LENGTH, 0, false);
@@ -244,7 +242,7 @@ public class SyncProcessor implements SynchronizerStatus {
           tp = null;
         }
         synchronizeTableConfigurationAndContent(tp, matchingResource, true);
-        this.updateNotification(R.string.table_level_file_sync_complete, new Object[] {localTableId}, 100.0, false);
+        this.updateNotification(SyncProgressState.TABLE_FILES, R.string.table_level_file_sync_complete, new Object[] {localTableId}, 100.0, false);
         ++iMajorSyncStep;
       }
     } else {
@@ -277,7 +275,7 @@ public class SyncProcessor implements SynchronizerStatus {
         }
         TableResult tableResult = mUserResult.getTableResult(serverTableId);
 
-        updateNotification(((tp == null) ?
+        updateNotification(SyncProgressState.TABLE_FILES, ((tp == null) ?
             R.string.creating_local_table : R.string.verifying_table_schema_on_server),
             new Object[] { serverTableId },
             0.0, false);
@@ -313,13 +311,13 @@ public class SyncProcessor implements SynchronizerStatus {
         // existed locally before we attempted downloading it.
 
         synchronizeTableConfigurationAndContent(tp, table, false);
-        this.updateNotification(R.string.table_level_file_sync_complete, new Object[] {serverTableId}, 100.0, false);
+        this.updateNotification(SyncProgressState.TABLE_FILES, R.string.table_level_file_sync_complete, new Object[] {serverTableId}, 100.0, false);
       }
       ++iMajorSyncStep;
 
       // and now loop through the ones to delete...
       for (String localTableId : localTableIdsToDelete) {
-        updateNotification(R.string.dropping_local_table, new Object[] {localTableId},
+        updateNotification(SyncProgressState.TABLE_FILES, R.string.dropping_local_table, new Object[] {localTableId},
             0.0, false);
         TableProperties tp = TableProperties.refreshTablePropertiesForTable(context, appName, localTableId);
         // eventually might not be true if there are multiple syncs running simultaneously...
@@ -367,7 +365,7 @@ public class SyncProcessor implements SynchronizerStatus {
     // if we're successful at the end.
     String tableId = tp.getTableId();
 
-    this.updateNotification(R.string.verifying_table_schema_on_server, new Object[] {tableId}, 0.0, false);
+    this.updateNotification(SyncProgressState.TABLE_FILES, R.string.verifying_table_schema_on_server, new Object[] {tableId}, 0.0, false);
     TableResult tableResult = mUserResult.getTableResult(tableId);
     if ( tp != null ) {
       tableResult.setTableDisplayName(tp.getLocalizedDisplayName());
@@ -619,6 +617,7 @@ public class SyncProcessor implements SynchronizerStatus {
     // think of one. one thing is that if it fails you'll see a table but won't
     // be able to open it, as there won't be any KVS stuff appropriate for it.
     boolean success = true;
+    boolean instanceFileSuccess = true;
     // Prepare the tableResult. We'll start it as failure, and only update it
     // if we're successful at the end.
     String tableId = tp.getTableId();
@@ -642,7 +641,7 @@ public class SyncProcessor implements SynchronizerStatus {
           once = false;
           try {
 
-            this.updateNotification(R.string.verifying_table_schema_on_server, new Object[] { tp.getTableId() }, 0.0, false);
+            this.updateNotification(SyncProgressState.ROWS, R.string.verifying_table_schema_on_server, new Object[] { tp.getTableId() }, 0.0, false);
 
             // confirm that the local schema matches the one on the server.
             TableResource resource = synchronizer.getTableOrNull(tp.getTableId());
@@ -685,7 +684,7 @@ public class SyncProcessor implements SynchronizerStatus {
             // RESTRUCTURE THIS FOR FILE ATTACHMENTS!!!
             // and now sync the data rows...
 
-            this.updateNotification(R.string.getting_changed_rows_on_server, new Object[] { tp.getTableId() }, 5.0, false);
+            this.updateNotification(SyncProgressState.ROWS, R.string.getting_changed_rows_on_server, new Object[] { tp.getTableId() }, 5.0, false);
 
             IncomingRowModifications modification;
             try {
@@ -700,7 +699,7 @@ public class SyncProcessor implements SynchronizerStatus {
             }
 
 
-            this.updateNotification(R.string.anaylzing_row_changes, new Object[] { tp.getTableId() }, 7.0, false);
+            this.updateNotification(SyncProgressState.ROWS, R.string.anaylzing_row_changes, new Object[] { tp.getTableId() }, 7.0, false);
 
             /**************************
              * PART 2: UPDATE THE DATA
@@ -935,11 +934,19 @@ public class SyncProcessor implements SynchronizerStatus {
             // / PERFORM LOCAL DATABASE CHANGES
 
             success = deleteRowsInDb(tp, table, rowsToDeleteLocally, tableResult);
-            insertRowsInDb(tp, table, rowsToInsertLocally, tableResult);
-            if (!updateRowsInDb(tp, table, rowsToUpdateLocally, tableResult)) {
+            if (!insertRowsInDb(tp, table, rowsToInsertLocally, tableResult)) {
+              instanceFileSuccess = false;
+            }
+            boolean[] results = updateRowsInDb(tp, table, rowsToUpdateLocally, tableResult);
+            if ( !results[0] ) {
               success = false;
             }
-            conflictRowsInDb(tp, table, rowsToMoveToConflictingLocally, tableResult);
+            if ( !results[1] ) {
+              instanceFileSuccess = false;
+            }
+            if ( !conflictRowsInDb(tp, table, rowsToMoveToConflictingLocally, tableResult)) {
+              instanceFileSuccess = false;
+            }
 
             // If we made it here and there was data, then we successfully
             // updated the
@@ -996,12 +1003,14 @@ public class SyncProcessor implements SynchronizerStatus {
                 table.actualUpdateRowByRowId(rm.getRowId(), values);
                 tableResult.incServerUpserts();
 
-                boolean outcome = synchronizer.putFileAttachments(tp.getTableId(), syncRow);
+                boolean outcome = synchronizer.putFileAttachments(tp.getTableId(), tp.getSyncTag().getSchemaETag(), syncRow);
                 if (outcome) {
                   // move to rest state
                   values.clear();
                   values.put(DataTableColumns.SYNC_STATE, SyncState.rest.name());
                   table.actualUpdateRowByRowId(syncRow.getRowId(), values);
+                } else {
+                  instanceFileSuccess = false;
                 }
 
                 revisedTag = rm.getTableSyncTag();
@@ -1011,7 +1020,7 @@ public class SyncProcessor implements SynchronizerStatus {
                 ++count;
                 ++rowsProcessed;
                 if ( rowsProcessed % ROWS_BETWEEN_PROGRESS_UPDATES == 0 ) {
-                  this.updateNotification(R.string.upserting_server_row,
+                  this.updateNotification(SyncProgressState.ROWS, R.string.upserting_server_row,
                       new Object[] { tp.getTableId(), count, allUpsertRows.size() }, 10.0 + rowsProcessed * perRowIncrement, false);
                 }
               }
@@ -1028,7 +1037,7 @@ public class SyncProcessor implements SynchronizerStatus {
                 ++count;
                 ++rowsProcessed;
                 if ( rowsProcessed % ROWS_BETWEEN_PROGRESS_UPDATES == 0 ) {
-                  this.updateNotification(R.string.deleting_server_row,
+                  this.updateNotification(SyncProgressState.ROWS, R.string.deleting_server_row,
                       new Object[] { tp.getTableId(), count, rowsToDeleteOnServer.size() }, 10.0 + rowsProcessed * perRowIncrement, false);
                 }
               }
@@ -1036,20 +1045,23 @@ public class SyncProcessor implements SynchronizerStatus {
               // And try to push the file attachments...
               count = 0;
               for (SyncRow syncRow : rowsToPushFileAttachments) {
-                boolean outcome = synchronizer.putFileAttachments(tableId, syncRow);
+                boolean outcome = synchronizer.putFileAttachments(tableId, tp.getSyncTag().getSchemaETag(), syncRow);
                 if (outcome) {
-                  outcome = synchronizer.getFileAttachments(tableId, syncRow, true);
+                  outcome = synchronizer.getFileAttachments(tableId, tp.getSyncTag().getSchemaETag(), syncRow, true);
                   if (outcome) {
                     ContentValues values = new ContentValues();
                     values.put(DataTableColumns.SYNC_STATE, SyncState.rest.name());
                     table.actualUpdateRowByRowId(syncRow.getRowId(), values);
                   }
                 }
+                if ( !outcome ) {
+                  instanceFileSuccess = false;
+                }
                 tableResult.incLocalAttachmentRetries();
                 ++count;
                 ++rowsProcessed;
                 if ( rowsProcessed % ROWS_BETWEEN_PROGRESS_UPDATES == 0 ) {
-                  this.updateNotification(R.string.uploading_attachments_server_row,
+                  this.updateNotification(SyncProgressState.ROWS, R.string.uploading_attachments_server_row,
                       new Object[] { tp.getTableId(), count, rowsToPushFileAttachments.size() }, 10.0 + rowsProcessed * perRowIncrement, false);
                 }
               }
@@ -1106,8 +1118,16 @@ public class SyncProcessor implements SynchronizerStatus {
               " was " + tableResult.getStatus().name() +
               ", and yet success returned true. This shouldn't be possible.");
         } else {
-          tableResult.setStatus(containsConflicts ? Status.TABLE_CONTAINS_CONFLICTS : Status.SUCCESS);
-          this.updateNotification(R.string.table_data_sync_complete, new Object[] {tp.getTableId()}, 100.0, false);
+          if ( containsConflicts ) {
+            tableResult.setStatus(Status.TABLE_CONTAINS_CONFLICTS);
+            this.updateNotification(SyncProgressState.ROWS, R.string.table_data_sync_with_conflicts, new Object[] {tp.getTableId()}, 100.0, false);
+          } else if ( !instanceFileSuccess ) {
+            tableResult.setStatus(Status.TABLE_PENDING_ATTACHMENTS);
+            this.updateNotification(SyncProgressState.ROWS, R.string.table_data_sync_pending_attachments, new Object[] {tp.getTableId()}, 100.0, false);
+          } else {
+            tableResult.setStatus(Status.SUCCESS);
+            this.updateNotification(SyncProgressState.ROWS, R.string.table_data_sync_complete, new Object[] {tp.getTableId()}, 100.0, false);
+          }
         }
       }
     }
@@ -1155,9 +1175,10 @@ public class SyncProcessor implements SynchronizerStatus {
     tableResult.setMessage(e.getMessage());
   }
 
-  private void conflictRowsInDb(TableProperties tp, DbTable table, List<FileSyncRow> changes, TableResult tableResult)
+  private boolean conflictRowsInDb(TableProperties tp, DbTable table, List<FileSyncRow> changes, TableResult tableResult)
       throws IOException {
 
+    boolean fileSuccess = true;
     int count = 0;
     for (FileSyncRow change : changes) {
       SyncRow serverRow = change.serverRow;
@@ -1241,23 +1262,26 @@ public class SyncProcessor implements SynchronizerStatus {
         // ensure we have the file attachments for the conflicting row
         // it is OK if we can't get them, but they may be useful for
         // reconciliation
-        boolean outcome = synchronizer.getFileAttachments(tp.getTableId(), serverRow, false);
+        boolean outcome = synchronizer.getFileAttachments(tp.getTableId(), tp.getSyncTag().getSchemaETag(), serverRow, false);
         if (!outcome) {
           // we don't do anything on failure -- just log a warning.
           // we need to leave the sync state as conflicting.
+          fileSuccess = false;
           Log.w(TAG, "Unable to fetch file attachments from conflicting row on server");
         }
       }
       ++count;
       ++rowsProcessed;
       if ( rowsProcessed % ROWS_BETWEEN_PROGRESS_UPDATES == 0 ) {
-        this.updateNotification(R.string.marking_conflicting_local_row,
+        this.updateNotification(SyncProgressState.ROWS, R.string.marking_conflicting_local_row,
             new Object[] { tp.getTableId(), count, changes.size() }, 10.0 + rowsProcessed * perRowIncrement, false);
       }
     }
+    return fileSuccess;
   }
 
-  private void insertRowsInDb(TableProperties tp, DbTable table, List<FileSyncRow> changes, TableResult tableResult) {
+  private boolean insertRowsInDb(TableProperties tp, DbTable table, List<FileSyncRow> changes, TableResult tableResult) {
+    boolean fileSuccess = true;
     int count = 0;
     for (FileSyncRow change : changes) {
       SyncRow serverRow = change.serverRow;
@@ -1280,24 +1304,28 @@ public class SyncProcessor implements SynchronizerStatus {
       tableResult.incLocalInserts();
 
       // ensure we have the file attachments for the inserted row
-      boolean outcome = synchronizer.getFileAttachments(tp.getTableId(), serverRow, true);
+      boolean outcome = synchronizer.getFileAttachments(tp.getTableId(), tp.getSyncTag().getSchemaETag(), serverRow, true);
       if (outcome) {
         // move to rest state
         values.clear();
         values.put(DataTableColumns.SYNC_STATE, SyncState.rest.name());
         table.actualUpdateRowByRowId(serverRow.getRowId(), values);
+      } else {
+        fileSuccess = false;
       }
       ++count;
       ++rowsProcessed;
       if ( rowsProcessed % ROWS_BETWEEN_PROGRESS_UPDATES == 0 ) {
-        this.updateNotification(R.string.inserting_local_row,
+        this.updateNotification(SyncProgressState.ROWS, R.string.inserting_local_row,
             new Object[] { tp.getTableId(), count, changes.size() }, 10.0 + rowsProcessed * perRowIncrement, false);
       }
     }
+    return fileSuccess;
   }
 
-  private boolean updateRowsInDb(TableProperties tp, DbTable table, List<FileSyncRow> changes, TableResult tableResult) {
+  private boolean[] updateRowsInDb(TableProperties tp, DbTable table, List<FileSyncRow> changes, TableResult tableResult) {
     boolean success = true;
+    boolean fileSuccess = true;
 
     int count = 0;
     for (FileSyncRow change : changes) {
@@ -1308,13 +1336,14 @@ public class SyncProcessor implements SynchronizerStatus {
       boolean outcome = true;
       if (change.isRestPendingFiles) {
         // we need to push our changes to the server first...
-        outcome = synchronizer.putFileAttachments(tp.getTableId(), change.localRow);
+        outcome = synchronizer.putFileAttachments(tp.getTableId(), tp.getSyncTag().getSchemaETag(), change.localRow);
       }
 
       if (!outcome) {
         // leave this row stale because we haven't been able to
         // finish the post of the older row's file.
         success = false;
+        fileSuccess = false;
       } else {
         // OK we have the files sync'd (if we needed to do that).
 
@@ -1338,23 +1367,26 @@ public class SyncProcessor implements SynchronizerStatus {
         tableResult.incLocalUpdates();
 
         // and try to get the file attachments for the row
-        outcome = synchronizer.getFileAttachments(tp.getTableId(), serverRow, true);
+        outcome = synchronizer.getFileAttachments(tp.getTableId(), tp.getSyncTag().getSchemaETag(), serverRow, true);
         if (outcome) {
           // move to rest state
           values.clear();
           values.put(DataTableColumns.SYNC_STATE, SyncState.rest.name());
           table.actualUpdateRowByRowId(serverRow.getRowId(), values);
+        } else {
+          fileSuccess = false;
         }
         // otherwise, leave in rest_pending_files state.
       }
       ++count;
       ++rowsProcessed;
       if ( rowsProcessed % ROWS_BETWEEN_PROGRESS_UPDATES == 0 ) {
-        this.updateNotification(R.string.updating_local_row,
+        this.updateNotification(SyncProgressState.ROWS, R.string.updating_local_row,
             new Object[] { tp.getTableId(), count, changes.size() }, 10.0 + rowsProcessed * perRowIncrement, false);
       }
     }
-    return success;
+    boolean[] results = {success, fileSuccess};
+    return results;
   }
 
   private boolean deleteRowsInDb(TableProperties tp, DbTable table, List<FileSyncRow> changes, TableResult tableResult)
@@ -1363,7 +1395,7 @@ public class SyncProcessor implements SynchronizerStatus {
     boolean deletesAllSuccessful = true;
     for (FileSyncRow change : changes) {
       if (change.isRestPendingFiles) {
-        boolean outcome = synchronizer.putFileAttachments(tp.getTableId(), change.localRow);
+        boolean outcome = synchronizer.putFileAttachments(tp.getTableId(), tp.getSyncTag().getSchemaETag(), change.localRow);
         if (outcome) {
           table.deleteRowActual(change.serverRow.getRowId());
           tableResult.incLocalDeletes();
@@ -1374,7 +1406,7 @@ public class SyncProcessor implements SynchronizerStatus {
       ++count;
       ++rowsProcessed;
       if ( rowsProcessed % ROWS_BETWEEN_PROGRESS_UPDATES == 0 ) {
-        this.updateNotification(R.string.deleting_local_row,
+        this.updateNotification(SyncProgressState.ROWS, R.string.deleting_local_row,
             new Object[] { tp.getTableId(), count, changes.size() }, 10.0 + rowsProcessed * perRowIncrement, false);
       }
     }

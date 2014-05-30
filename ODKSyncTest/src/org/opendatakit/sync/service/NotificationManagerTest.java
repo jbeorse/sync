@@ -17,7 +17,7 @@ public class NotificationManagerTest extends AbstractSyncServiceTest {
 			GlobalSyncNotificationManager manager = new GlobalSyncNotificationManager(getService(), true);
 			manager.startingSync(appName1);
 			assertTrue(manager.isDisplayingNotification());
-			manager.stopingSync(appName1);
+			manager.stoppingSync(appName1);
 			assertFalse(manager.isDisplayingNotification());
 		} catch (NoAppNameSpecifiedException e) {
 			e.printStackTrace();
@@ -35,9 +35,9 @@ public class NotificationManagerTest extends AbstractSyncServiceTest {
 			assertTrue(manager.isDisplayingNotification());
 			manager.startingSync(appName2);
 			assertTrue(manager.isDisplayingNotification());
-			manager.stopingSync(appName1);
+			manager.stoppingSync(appName1);
 			assertTrue(manager.isDisplayingNotification());
-			manager.stopingSync(appName2);
+			manager.stoppingSync(appName2);
 			assertFalse(manager.isDisplayingNotification());
 			
 		} catch (NoAppNameSpecifiedException e) {
@@ -57,19 +57,19 @@ public class NotificationManagerTest extends AbstractSyncServiceTest {
 			manager.startingSync(appName2);
 			manager.startingSync(appName3);
 			assertTrue(manager.isDisplayingNotification());
-			manager.stopingSync(appName1);
+			manager.stoppingSync(appName1);
 			assertTrue(manager.isDisplayingNotification());
-			manager.stopingSync(appName2);
+			manager.stoppingSync(appName2);
 			assertTrue(manager.isDisplayingNotification());
-			manager.stopingSync(appName3);
+			manager.stoppingSync(appName3);
 			assertFalse(manager.isDisplayingNotification());
 			manager.startingSync(appName2);
 			manager.startingSync(appName3);
 			assertTrue(manager.isDisplayingNotification());
-			manager.stopingSync(appName1);
+			manager.stoppingSync(appName1);
 			assertTrue(manager.isDisplayingNotification());
-			manager.stopingSync(appName2);
-			manager.stopingSync(appName3);
+			manager.stoppingSync(appName2);
+			manager.stoppingSync(appName3);
 			assertFalse(manager.isDisplayingNotification());
 			
 		} catch (NoAppNameSpecifiedException e) {

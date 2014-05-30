@@ -78,6 +78,7 @@ import org.opendatakit.sync.Synchronizer;
 import org.opendatakit.sync.exceptions.AccessDeniedException;
 import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
 import org.opendatakit.sync.exceptions.RequestFailureException;
+import org.opendatakit.sync.service.SyncProgressState;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -146,6 +147,30 @@ public class AggregateSynchronizer implements Synchronizer {
     URI uri = uriBase.resolve(term).normalize();
     Log.d(LOGTAG, "normalizeUri: " + uri.toString());
     return uri;
+  }
+
+  private static final String escapeSegment(String segment) {
+    // the segment can have URI-inappropriate characters. Encode it first...
+    String encodedSegment = Uri.encode(segment, null);
+//
+//    try {
+//      encodedSegment = UriUtils.encodePathSegment(segment, CharEncoding.US_ASCII);
+//    } catch (UnsupportedEncodingException e) {
+//      e.printStackTrace();
+//      throw new IllegalStateException("Should be able to encode with ASCII");
+//    }
+    return encodedSegment;
+  }
+
+  /**
+   * Format a file path to be pushed up to aggregate. Essentially escapes the
+   * string as for an html url, but leaves forward slashes. The path must begin
+   * with a forward slash, as if starting at the root directory.
+   * @return a properly escaped url, with forward slashes remaining.
+   */
+  private String uriEncodeSegments(String path) {
+    String escaped = Uri.encode(path, FORWARD_SLASH);
+    return escaped;
   }
 
   private String getTablesUriFragment() {
@@ -472,7 +497,7 @@ public class AggregateSynchronizer implements Synchronizer {
         url = normalizeUri(resource.getDataUri(), "/");;
       } else {
         String diffUri = resource.getDiffUri();
-        url = normalizeUri(diffUri, "?data_etag=" + currentTag.getDataETag());
+        url = normalizeUri(diffUri, "?data_etag=" + escapeSegment(currentTag.getDataETag()));
       }
       RowResourceList rows;
       try {
@@ -521,7 +546,7 @@ public class AggregateSynchronizer implements Synchronizer {
             rowToInsertOrUpdate.getFilterScope(),
             rowToInsertOrUpdate.getValues());
 
-        URI url = normalizeUri(resource.getDataUri(), row.getRowId());
+        URI url = normalizeUri(resource.getDataUri(), escapeSegment(row.getRowId()));
         HttpEntity<Row> requestEntity = new HttpEntity<Row>(row, requestHeaders);
         ResponseEntity<RowResource> insertedEntity;
         try {
@@ -553,7 +578,7 @@ public class AggregateSynchronizer implements Synchronizer {
     SyncTag syncTag = currentSyncTag;
     String lastKnownServerDataTag = null; // the data tag of the whole table.
     String rowId = rowToDelete.getRowId();
-    URI url = normalizeUri(resource.getDataUri(), rowId + "?row_etag=" + Uri.encode(rowToDelete.getRowETag()));
+    URI url = normalizeUri(resource.getDataUri(), escapeSegment(rowId) + "?row_etag=" + escapeSegment(rowToDelete.getRowETag()));
     try {
       ResponseEntity<String> response = rt.exchange(url, HttpMethod.DELETE, null, String.class);
       lastKnownServerDataTag = response.getBody();
@@ -689,7 +714,7 @@ public class AggregateSynchronizer implements Synchronizer {
   @Override
   public boolean syncAppLevelFiles(boolean pushLocalFiles, SynchronizerStatus syncStatus) throws ResourceAccessException {
     // Get the app-level files on the server.
-    syncStatus.updateNotification(R.string.getting_app_level_manifest, null, 1.0, false);
+    syncStatus.updateNotification(SyncProgressState.APP_FILES, R.string.getting_app_level_manifest, null, 1.0, false);
     List<OdkTablesFileManifestEntry> manifest = getAppLevelFileManifest();
 
     // Get the app-level files on our device.
@@ -725,7 +750,7 @@ public class AggregateSynchronizer implements Synchronizer {
 
       for (String relativePath : relativePathsOnDevice) {
 
-        syncStatus.updateNotification(R.string.uploading_local_file, new Object[] { relativePath },
+        syncStatus.updateNotification(SyncProgressState.APP_FILES, R.string.uploading_local_file, new Object[] { relativePath },
             stepCount*stepSize, false);
 
         File localFile = ODKFileUtils.asAppFile(appName, relativePath);
@@ -740,7 +765,7 @@ public class AggregateSynchronizer implements Synchronizer {
 
       for ( String relativePath : serverFilesToDelete ) {
 
-        syncStatus.updateNotification(R.string.deleting_file_on_server, new Object[] { relativePath },
+        syncStatus.updateNotification(SyncProgressState.APP_FILES, R.string.deleting_file_on_server, new Object[] { relativePath },
             stepCount*stepSize, false);
 
         if ( !deleteFile(relativePath) ) {
@@ -756,7 +781,7 @@ public class AggregateSynchronizer implements Synchronizer {
       // on the server.
 
       for (OdkTablesFileManifestEntry entry : manifest) {
-        syncStatus.updateNotification(R.string.verifying_local_file, new Object[] { entry.filename },
+        syncStatus.updateNotification(SyncProgressState.APP_FILES, R.string.verifying_local_file, new Object[] { entry.filename },
             stepCount*stepSize, false);
 
         // make sure our copy is current
@@ -772,7 +797,7 @@ public class AggregateSynchronizer implements Synchronizer {
 
       for ( String relativePath : relativePathsOnDevice ) {
 
-        syncStatus.updateNotification(R.string.deleting_local_file, new Object[] { relativePath },
+        syncStatus.updateNotification(SyncProgressState.APP_FILES, R.string.deleting_local_file, new Object[] { relativePath },
             stepCount*stepSize, false);
 
         // and remove any remaining files, as these do not match anything on
@@ -793,7 +818,7 @@ public class AggregateSynchronizer implements Synchronizer {
   @Override
   public void syncTableLevelFiles(String tableId, OnTablePropertiesChanged onChange, boolean pushLocalFiles, SynchronizerStatus syncStatus) throws ResourceAccessException {
 
-    syncStatus.updateNotification(R.string.getting_table_manifest, new Object[] { tableId }, 1.0, false);
+    syncStatus.updateNotification(SyncProgressState.TABLE_FILES, R.string.getting_table_manifest, new Object[] { tableId }, 1.0, false);
 
     String tableIdPropertiesFile = "tables" + File.separator + tableId + File.separator + "properties.csv";
 
@@ -845,7 +870,7 @@ public class AggregateSynchronizer implements Synchronizer {
       boolean success = true;
       for (String relativePath : relativePathsOnDevice) {
 
-        syncStatus.updateNotification(R.string.uploading_local_file, new Object[] { relativePath },
+        syncStatus.updateNotification(SyncProgressState.TABLE_FILES, R.string.uploading_local_file, new Object[] { relativePath },
             stepCount*stepSize, false);
 
         File localFile = ODKFileUtils.asAppFile(appName, relativePath);
@@ -860,7 +885,7 @@ public class AggregateSynchronizer implements Synchronizer {
 
       for ( String relativePath : serverFilesToDelete ) {
 
-        syncStatus.updateNotification(R.string.deleting_file_on_server, new Object[] { relativePath },
+        syncStatus.updateNotification(SyncProgressState.TABLE_FILES, R.string.deleting_file_on_server, new Object[] { relativePath },
             stepCount*stepSize, false);
 
         if ( !deleteFile(relativePath) ) {
@@ -882,7 +907,7 @@ public class AggregateSynchronizer implements Synchronizer {
 
       for (OdkTablesFileManifestEntry entry : manifest) {
 
-        syncStatus.updateNotification(R.string.verifying_local_file, new Object[] { entry.filename },
+        syncStatus.updateNotification(SyncProgressState.TABLE_FILES, R.string.verifying_local_file, new Object[] { entry.filename },
             stepCount*stepSize, false);
 
         // make sure our copy is current
@@ -903,7 +928,7 @@ public class AggregateSynchronizer implements Synchronizer {
       boolean success = true;
       for ( String relativePath : relativePathsOnDevice ) {
 
-        syncStatus.updateNotification(R.string.deleting_local_file, new Object[] { relativePath },
+        syncStatus.updateNotification(SyncProgressState.TABLE_FILES, R.string.deleting_local_file, new Object[] { relativePath },
             stepCount*stepSize, false);
 
         // and remove any remaining files, as these do not match anything on
@@ -949,17 +974,6 @@ public class AggregateSynchronizer implements Synchronizer {
   }
 
   /**
-   * Format a file path to be pushed up to aggregate. Essentially escapes the
-   * string as for an html url, but leaves forward slashes. The path must begin
-   * with a forward slash, as if starting at the root directory.
-   * @return a properly escaped url, with forward slashes remaining.
-   */
-  private String uriEncodeSegments(String path) {
-    String escaped = Uri.encode(path, FORWARD_SLASH);
-    return escaped;
-  }
-
-  /**
    * Get a {@link RestTemplate} for synchronizing files.
    * @return
    */
@@ -1000,11 +1014,11 @@ public class AggregateSynchronizer implements Synchronizer {
     return true;
   }
 
-  private boolean uploadInstanceFile(String wholePathToFile, String tableId, String pathRelativeToInstancesFolder) {
+  private boolean uploadInstanceFile(String wholePathToFile, String tableId, String escapedSchemaETag, String escapedInstanceId, String pathRelativeToInstanceIdFolder) {
     File file = new File(wholePathToFile);
     FileSystemResource resource = new FileSystemResource(file);
-    String escapedPath = uriEncodeSegments(pathRelativeToInstancesFolder);
-    URI filesUri = normalizeUri(aggregateUri, getTablesUriFragment() + tableId + "/attachments/file/" + escapedPath);
+    String escapedPath = uriEncodeSegments(pathRelativeToInstanceIdFolder);
+    URI filesUri = normalizeUri(aggregateUri, getTablesUriFragment() + tableId + "/" + escapedSchemaETag + "/attachments/" + escapedInstanceId + "/file/" + escapedPath);
     Log.i(LOGTAG, "[uploadFile] filePostUri: " + filesUri.toString());
     RestTemplate rt = getRestTemplateForFiles();
     List<ClientHttpRequestInterceptor> interceptors = new ArrayList<ClientHttpRequestInterceptor>();
@@ -1241,14 +1255,15 @@ public class AggregateSynchronizer implements Synchronizer {
   }
 
   @Override
-  public boolean getFileAttachments(String tableId, SyncRow serverRow, boolean shouldDeleteLocal ) {
+  public boolean getFileAttachments(String tableId, String schemaETag, SyncRow serverRow, boolean shouldDeleteLocal ) {
 
     boolean success = true;
     try {
       // 1) Get the manifest of all files under this row's instanceId (rowId)
       List<OdkTablesFileManifestEntry> manifest;
-      String escapedInstanceId = Uri.encode(serverRow.getRowId());
-      URI instanceFileManifestUri = normalizeUri(aggregateUri, getTablesUriFragment() + tableId + "/attachments/manifest/" + escapedInstanceId );
+      String escapedSchemaETag = escapeSegment(schemaETag);
+      String escapedInstanceId = escapeSegment(serverRow.getRowId());
+      URI instanceFileManifestUri = normalizeUri(aggregateUri, getTablesUriFragment() + tableId + "/" + escapedSchemaETag + "/attachments/" + escapedInstanceId + "/manifest");
       Uri.Builder uriBuilder = Uri.parse(instanceFileManifestUri.toString()).buildUpon();
       ResponseEntity<OdkTablesFileManifest> responseEntity;
         responseEntity = rt.exchange(uriBuilder.build().toString(),
@@ -1267,10 +1282,7 @@ public class AggregateSynchronizer implements Synchronizer {
 
       // we are getting files. So iterate over the remote files...
       for ( OdkTablesFileManifestEntry entry : manifest ) {
-        // remove the instanceId, as the actual directory name on the
-        // device is transformed to remove special characters
-        String withoutInstanceId = entry.filename.substring(serverRow.getRowId().length() + 1);
-        File localFile = new File(instanceFolder, withoutInstanceId);
+        File localFile = new File(instanceFolder, entry.filename);
 
         if ( !localFile.exists() ) {
           if ( !downloadFile(localFile, entry.downloadUrl) ) {
@@ -1306,14 +1318,15 @@ public class AggregateSynchronizer implements Synchronizer {
 
 
   @Override
-  public boolean putFileAttachments(String tableId, SyncRow localRow) {
+  public boolean putFileAttachments(String tableId, String schemaETag, SyncRow localRow) {
 
     boolean success = true;
     try {
       // 1) Get the manifest of all files under this row's instanceId (rowId)
       List<OdkTablesFileManifestEntry> manifest;
-      String escapedInstanceId = Uri.encode(localRow.getRowId());
-      URI instanceFileManifestUri = normalizeUri(aggregateUri, getTablesUriFragment() + tableId + "/attachments/manifest/" + escapedInstanceId );
+      String escapedSchemaETag = escapeSegment(schemaETag);
+      String escapedInstanceId = escapeSegment(localRow.getRowId());
+      URI instanceFileManifestUri = normalizeUri(aggregateUri, getTablesUriFragment() + tableId + "/" + escapedSchemaETag + "/attachments/" + escapedInstanceId + "/manifest" );
       Uri.Builder uriBuilder = Uri.parse(instanceFileManifestUri.toString()).buildUpon();
       ResponseEntity<OdkTablesFileManifest> responseEntity;
         responseEntity = rt.exchange(uriBuilder.build().toString(),
@@ -1334,10 +1347,8 @@ public class AggregateSynchronizer implements Synchronizer {
       for ( String relativePath : relativePathsToAppFolderOnDevice ) {
         File localFile = ODKFileUtils.asAppFile(appName, relativePath);
 
-        // strip off the instance folder and slash and add the instanceId.
-        // The instance folder name is a sanitized version of the instanceID
-        // that does not contain any special characters.
-        String partialPath = localRow.getRowId() + File.separator + relativePath.substring(pathPrefix.length() + 1);
+        // strip off the instance folder and slash.
+        String partialPath = relativePath.substring(pathPrefix.length() + 1);
         OdkTablesFileManifestEntry entry = null;
         for ( OdkTablesFileManifestEntry e : manifest ) {
           if ( e.filename.equals(partialPath) ) {
@@ -1347,7 +1358,7 @@ public class AggregateSynchronizer implements Synchronizer {
         }
         if ( entry == null ) {
           // upload the file
-          boolean outcome = uploadInstanceFile(localFile.getAbsolutePath(), tableId, partialPath);
+          boolean outcome = uploadInstanceFile(localFile.getAbsolutePath(), tableId, escapedSchemaETag, escapedInstanceId, partialPath);
           if ( !outcome ) {
             success = false;
           }

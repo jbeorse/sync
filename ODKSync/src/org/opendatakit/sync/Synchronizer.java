@@ -24,6 +24,7 @@ import org.opendatakit.aggregate.odktables.rest.entity.TableDefinitionResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResource;
 import org.opendatakit.common.android.data.ColumnType;
 import org.opendatakit.common.android.sync.aggregate.SyncTag;
+import org.opendatakit.sync.service.SyncProgressState;
 import org.springframework.web.client.ResourceAccessException;
 
 /**
@@ -43,7 +44,7 @@ public interface Synchronizer {
      * @param progressPercentage  0..100
      * @param indeterminateProgress true if progressGrains is N/A
      */
-    void updateNotification(int textResource, Object[] formatArgVals, Double progressPercentage,
+    void updateNotification(SyncProgressState state, int textResource, Object[] formatArgVals, Double progressPercentage,
                               boolean indeterminateProgress);
   }
 
@@ -186,11 +187,12 @@ public interface Synchronizer {
    * to the local system.
    *
    * @param tableId
+   * @param schemaETag
    * @param serverRow
    * @param shouldDeleteLocal - true if all other files in the local instance folder should be removed.
    * @return true if successful
    */
-  public boolean getFileAttachments(String tableId, SyncRow serverRow, boolean shouldDeleteLocal);
+  public boolean getFileAttachments(String tableId, String schemaETag, SyncRow serverRow, boolean shouldDeleteLocal);
 
   /**
    * Ensure that the file attachments for the indicated row values exist on the
@@ -198,8 +200,9 @@ public interface Synchronizer {
    * never destroyed.
    *
    * @param tableId
+   * @param schemaETag
    * @param localRow
    * @return true if successful
    */
-  public boolean putFileAttachments(String tableId, SyncRow localRow);
+  public boolean putFileAttachments(String tableId, String schemaETag, SyncRow localRow);
 }
