@@ -80,6 +80,7 @@ import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
 import org.opendatakit.sync.exceptions.RequestFailureException;
 import org.opendatakit.sync.service.SyncProgressState;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -115,6 +116,49 @@ public class AggregateSynchronizer implements Synchronizer {
   /** Path to the file servlet on the Aggregate server. */
 
   private static final String FORWARD_SLASH = "/";
+
+  static Map<String,String> mimeMapping;
+  static {
+    Map<String,String> m = new HashMap<String,String>();
+    m.put("jpeg", "image/jpeg");
+    m.put("jpg", "image/jpeg");
+    m.put("png", "image/png");
+    m.put("gif", "image/gif");
+    m.put("pbm", "image/x-portable-bitmap");
+    m.put("ico", "image/x-icon");
+    m.put("bmp", "image/bmp");
+    m.put("tiff", "image/tiff");
+
+    m.put("mp2", "audio/mpeg");
+    m.put("mp3", "audio/mpeg");
+    m.put("wav", "audio/x-wav");
+
+    m.put("asf", "video/x-ms-asf");
+    m.put("avi", "video/x-msvideo");
+    m.put("mov", "video/quicktime");
+    m.put("mpa", "video/mpeg");
+    m.put("mpeg", "video/mpeg");
+    m.put("mpg", "video/mpeg");
+    m.put("mp4", "video/mp4");
+    m.put("qt", "video/quicktime");
+
+    m.put("css", "text/css");
+    m.put("htm", "text/html");
+    m.put("html", "text/html");
+    m.put("csv", "text/csv");
+    m.put("txt", "text/plain");
+    m.put("log", "text/plain");
+    m.put("rtf", "application/rtf");
+    m.put("pdf", "application/pdf");
+    m.put("zip", "application/zip");
+    m.put("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    m.put("docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    m.put("pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+    m.put("xml", "application/xml");
+    m.put("js", "application/x-javascript");
+    m.put("json", "application/x-javascript");
+    mimeMapping = m;
+  }
 
   private final String appName;
   private final String odkClientApiVersion;
@@ -175,12 +219,12 @@ public class AggregateSynchronizer implements Synchronizer {
 
   private String getTablesUriFragment() {
     /** Path to the tables servlet (the one that manages table definitions) on the Aggregate server. */
-    return "/odktables/" + appName + "/tables/";
+    return "/odktables/" + escapeSegment(appName) + "/tables/";
   }
 
   private String getManifestUriFragment() {
     /** Path to the tables servlet (the one that manages table definitions) on the Aggregate server. */
-    return "/odktables/" + appName + "/manifest/" + odkClientApiVersion + "/";
+    return "/odktables/" + escapeSegment(appName) + "/manifest/" + escapeSegment(odkClientApiVersion) + "/";
   }
 
   /**
@@ -191,7 +235,7 @@ public class AggregateSynchronizer implements Synchronizer {
    * @return
    */
   private String getFilePathURI() {
-    return "/odktables/" + appName + "/files/" + odkClientApiVersion + "/";
+    return "/odktables/" + escapeSegment(appName) + "/files/" + escapeSegment(odkClientApiVersion) + "/";
   }
 
   public AggregateSynchronizer(String appName, String odkApiVersion, String aggregateUri, String accessToken)
@@ -346,7 +390,7 @@ public class AggregateSynchronizer implements Synchronizer {
    * Return a map of tableId to schemaETag.
    */
   @Override
-  public List<TableResource> getTables() throws IOException {
+  public List<TableResource> getTables() throws ResourceAccessException {
     List<TableResource> tables = new ArrayList<TableResource>();
 
     TableResourceList tableResources;
@@ -354,7 +398,8 @@ public class AggregateSynchronizer implements Synchronizer {
       URI uri = normalizeUri(aggregateUri, getTablesUriFragment());
       tableResources = rt.getForObject(uri, TableResourceList.class);
     } catch (ResourceAccessException e) {
-      throw new IOException(e.getMessage());
+      Log.e(LOGTAG, "Exception while requesting list of tables from server: " + e.toString());
+      throw e;
     }
 
     for (TableResource tableResource : tableResources.getEntries()) {
@@ -395,7 +440,7 @@ public class AggregateSynchronizer implements Synchronizer {
 
   @Override
   public TableResource createTable(String tableId, SyncTag syncTag, ArrayList<Column> columns)
-      throws IOException {
+      throws ResourceAccessException {
 
     // build request
     URI uri = normalizeUri(aggregateUri, getTablesUriFragment() + tableId);
@@ -408,8 +453,8 @@ public class AggregateSynchronizer implements Synchronizer {
       // TODO: we also need to put up the key value store/properties.
       resourceEntity = rt.exchange(uri, HttpMethod.PUT, requestEntity, TableResource.class);
     } catch (ResourceAccessException e) {
-      Log.e(LOGTAG, "ResourceAccessException in createTable");
-      throw new IOException(e.getMessage());
+      Log.e(LOGTAG, "ResourceAccessException in createTable: " + tableId + " exception: " + e.toString());
+      throw e;
     }
     TableResource resource = resourceEntity.getBody();
 
@@ -419,7 +464,7 @@ public class AggregateSynchronizer implements Synchronizer {
   }
 
   @Override
-  public TableResource getTable(String tableId) throws IOException {
+  public TableResource getTable(String tableId) throws ResourceAccessException {
     if (resources.containsKey(tableId)) {
       return resources.get(tableId);
     } else {
@@ -428,7 +473,8 @@ public class AggregateSynchronizer implements Synchronizer {
       try {
         resource = rt.getForObject(uri, TableResource.class);
       } catch (ResourceAccessException e) {
-        throw new IOException(e.getMessage());
+        Log.e(LOGTAG, "Exception while requesting table from server: " + tableId + " exception: " + e.toString());
+        throw e;
       }
       resources.put(resource.getTableId(), resource);
       return resource;
@@ -503,7 +549,8 @@ public class AggregateSynchronizer implements Synchronizer {
       try {
         rows = rt.getForObject(url, RowResourceList.class);
       } catch (ResourceAccessException e) {
-        throw new IOException(e.getMessage());
+        Log.e(LOGTAG, "Exception while requesting list of rows from server: " + tableId + " exception: " + e.toString());
+        throw e;
       }
 
       Map<String, SyncRow> syncRows = new HashMap<String, SyncRow>();
@@ -535,7 +582,7 @@ public class AggregateSynchronizer implements Synchronizer {
    * @return a RowModification containing the (rowId, rowETag, table dataETag) after the modification
    */
   public RowModification insertOrUpdateRow(String tableId, SyncTag currentSyncTag, SyncRow rowToInsertOrUpdate)
-      throws IOException {
+      throws ResourceAccessException {
         TableResource resource = getTable(tableId);
         SyncTag lastKnownServerSyncTag = new SyncTag(currentSyncTag.getDataETag(), currentSyncTag.getSchemaETag());
 
@@ -552,7 +599,8 @@ public class AggregateSynchronizer implements Synchronizer {
         try {
           insertedEntity = rt.exchange(url, HttpMethod.PUT, requestEntity, RowResource.class);
         } catch (ResourceAccessException e) {
-          throw new IOException(e.getMessage());
+          Log.e(LOGTAG, "Exception while updating row on server: " +  tableId + " rowId: " + rowToInsertOrUpdate.getRowId() + " exception: " + e.toString());
+          throw e;
         }
         RowResource inserted = insertedEntity.getBody();
         Log.i(LOGTAG, "[insertOrUpdateRows] setting data etag to row's last "
@@ -573,7 +621,7 @@ public class AggregateSynchronizer implements Synchronizer {
    */
   @Override
   public RowModification deleteRow(String tableId, SyncTag currentSyncTag, SyncRow rowToDelete)
-      throws IOException {
+      throws ResourceAccessException {
     TableResource resource = getTable(tableId);
     SyncTag syncTag = currentSyncTag;
     String lastKnownServerDataTag = null; // the data tag of the whole table.
@@ -583,7 +631,8 @@ public class AggregateSynchronizer implements Synchronizer {
       ResponseEntity<String> response = rt.exchange(url, HttpMethod.DELETE, null, String.class);
       lastKnownServerDataTag = response.getBody();
     } catch (ResourceAccessException e) {
-      throw new IOException(e.getMessage());
+      Log.e(LOGTAG, "Exception while deleting row " + url.toASCIIString() + " exception: " + e.toString());
+      throw e;
     }
     if (lastKnownServerDataTag == null) {
       // do something--b/c the delete hasn't worked.
@@ -815,6 +864,19 @@ public class AggregateSynchronizer implements Synchronizer {
     return success;
   }
 
+  private String determineContentType(String fileName) {
+    int ext = fileName.lastIndexOf('.');
+    if ( ext == -1 ) {
+      return "application/octet-stream";
+    }
+    String type = fileName.substring(ext+1);
+    String mimeType = mimeMapping.get(type);
+    if ( mimeType == null ) {
+      return "application/octet-stream";
+    }
+    return mimeType;
+  }
+
   @Override
   public void syncTableLevelFiles(String tableId, OnTablePropertiesChanged onChange, boolean pushLocalFiles, SynchronizerStatus syncStatus) throws ResourceAccessException {
 
@@ -974,14 +1036,36 @@ public class AggregateSynchronizer implements Synchronizer {
   }
 
   /**
+   * Wrapper for the simple ResourceHttpMessageConverter that provides
+   * a specific contentType for the post request.
+   *
+   * @author mitchellsundt@gmail.com
+   *
+   */
+  static class ContentTypeFileConverter extends ResourceHttpMessageConverter {
+
+    final String contentType;
+
+    ContentTypeFileConverter(String contentType) {
+      this.contentType = contentType;
+    }
+
+    @Override
+    protected MediaType getDefaultContentType(Resource resource) {
+      return MediaType.parseMediaType(contentType);
+    }
+
+  }
+
+  /**
    * Get a {@link RestTemplate} for synchronizing files.
    * @return
    */
-  private RestTemplate getRestTemplateForFiles() {
+  private RestTemplate getRestTemplateForFiles(String contentType) {
     // Thanks to this guy for the snippet:
     // https://github.com/barryku/SpringCloud/blob/master/BoxApp/BoxNetApp/src/com/barryku/android/boxnet/RestUtil.java
     RestTemplate rt = new RestTemplate();
-    ResourceHttpMessageConverter fileConverter = new ResourceHttpMessageConverter();
+    ResourceHttpMessageConverter fileConverter = new ContentTypeFileConverter(contentType);
     rt.getMessageConverters().add(fileConverter);
     return rt;
   }
@@ -990,10 +1074,6 @@ public class AggregateSynchronizer implements Synchronizer {
     String escapedPath = uriEncodeSegments(pathRelativeToAppFolder);
     URI filesUri = normalizeUri(aggregateUri, getFilePathURI() + escapedPath);
     Log.i(LOGTAG, "[deleteFile] fileDeleteUri: " + filesUri.toString());
-    RestTemplate rt = getRestTemplateForFiles();
-    List<ClientHttpRequestInterceptor> interceptors = new ArrayList<ClientHttpRequestInterceptor>();
-    interceptors.add(new AggregateRequestInterceptor(this.baseUri, accessToken));
-    rt.setInterceptors(interceptors);
     rt.delete(filesUri);
     // TODO: verify whether or not this worked.
     return true;
@@ -1005,7 +1085,7 @@ public class AggregateSynchronizer implements Synchronizer {
     String escapedPath = uriEncodeSegments(pathRelativeToAppFolder);
     URI filesUri = normalizeUri(aggregateUri, getFilePathURI() + escapedPath);
     Log.i(LOGTAG, "[uploadFile] filePostUri: " + filesUri.toString());
-    RestTemplate rt = getRestTemplateForFiles();
+    RestTemplate rt = getRestTemplateForFiles(determineContentType(file.getName()));
     List<ClientHttpRequestInterceptor> interceptors = new ArrayList<ClientHttpRequestInterceptor>();
     interceptors.add(new AggregateRequestInterceptor(this.baseUri, accessToken));
     rt.setInterceptors(interceptors);
@@ -1020,7 +1100,7 @@ public class AggregateSynchronizer implements Synchronizer {
     String escapedPath = uriEncodeSegments(pathRelativeToInstanceIdFolder);
     URI filesUri = normalizeUri(aggregateUri, getTablesUriFragment() + tableId + "/" + escapedSchemaETag + "/attachments/" + escapedInstanceId + "/file/" + escapedPath);
     Log.i(LOGTAG, "[uploadFile] filePostUri: " + filesUri.toString());
-    RestTemplate rt = getRestTemplateForFiles();
+    RestTemplate rt = getRestTemplateForFiles(determineContentType(file.getName()));
     List<ClientHttpRequestInterceptor> interceptors = new ArrayList<ClientHttpRequestInterceptor>();
     interceptors.add(new AggregateRequestInterceptor(this.baseUri, accessToken));
     rt.setInterceptors(interceptors);
@@ -1255,7 +1335,7 @@ public class AggregateSynchronizer implements Synchronizer {
   }
 
   @Override
-  public boolean getFileAttachments(String tableId, String schemaETag, SyncRow serverRow, boolean shouldDeleteLocal ) {
+  public boolean getFileAttachments(String tableId, String schemaETag, SyncRow serverRow, boolean shouldDeleteLocal ) throws ResourceAccessException {
 
     boolean success = true;
     try {
@@ -1310,6 +1390,9 @@ public class AggregateSynchronizer implements Synchronizer {
         }
       }
       return success;
+    } catch ( ResourceAccessException e ) {
+      Log.e(LOGTAG, "Exception while getting attachment: " + e.toString());
+      throw e;
     } catch ( Exception e ) {
       e.printStackTrace();
       return false;
@@ -1318,7 +1401,7 @@ public class AggregateSynchronizer implements Synchronizer {
 
 
   @Override
-  public boolean putFileAttachments(String tableId, String schemaETag, SyncRow localRow) {
+  public boolean putFileAttachments(String tableId, String schemaETag, SyncRow localRow) throws ResourceAccessException {
 
     boolean success = true;
     try {
@@ -1368,6 +1451,9 @@ public class AggregateSynchronizer implements Synchronizer {
         }
       }
       return success;
+    } catch ( ResourceAccessException e ) {
+      Log.e(LOGTAG, "Exception while putting attachment: " + e.toString());
+      throw e;
     } catch ( Exception e ) {
       Log.e(LOGTAG, "Exception during sync: " + e.toString());
       return false;

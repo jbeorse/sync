@@ -161,8 +161,8 @@ public class SyncProcessor implements SynchronizerStatus {
       if (tables == null) {
         tables = new ArrayList<TableResource>();
       }
-    } catch (IOException e) {
-      mUserResult.setAppLevelStatus(Status.EXCEPTION);
+    } catch (ResourceAccessException e) {
+      mUserResult.setAppLevelStatus(Status.AUTH_EXCEPTION);
       Log.i(TAG, "[synchronizeConfigurationAndContent] Could not retrieve server table list", e);
       return;
     } catch (Exception e) {
@@ -210,7 +210,7 @@ public class SyncProcessor implements SynchronizerStatus {
       mUserResult.setAppLevelStatus(success ? Status.SUCCESS : Status.FAILURE);
     } catch (ResourceAccessException e) {
       // TODO: update a synchronization result to report back to them as well.
-      mUserResult.setAppLevelStatus(Status.EXCEPTION);
+      mUserResult.setAppLevelStatus(Status.AUTH_EXCEPTION);
       Log.e(TAG,
           "[synchronizeConfigurationAndContent] error trying to synchronize app-level files.");
       e.printStackTrace();
@@ -1160,7 +1160,7 @@ public class SyncProcessor implements SynchronizerStatus {
       ResourceAccessException e, TableResult tableResult) {
     Log.e(TAG,
         String.format("ResourceAccessException in %s for table: %s", method, tp.getTableId()), e);
-    tableResult.setStatus(Status.EXCEPTION);
+    tableResult.setStatus(Status.AUTH_EXCEPTION);
     tableResult.setMessage(e.getMessage());
   }
 
@@ -1177,7 +1177,7 @@ public class SyncProcessor implements SynchronizerStatus {
   }
 
   private boolean conflictRowsInDb(TableProperties tp, DbTable table, List<FileSyncRow> changes, TableResult tableResult)
-      throws IOException {
+      throws ResourceAccessException {
 
     boolean fileSuccess = true;
     int count = 0;
@@ -1281,7 +1281,7 @@ public class SyncProcessor implements SynchronizerStatus {
     return fileSuccess;
   }
 
-  private boolean insertRowsInDb(TableProperties tp, DbTable table, List<FileSyncRow> changes, TableResult tableResult) {
+  private boolean insertRowsInDb(TableProperties tp, DbTable table, List<FileSyncRow> changes, TableResult tableResult) throws ResourceAccessException {
     boolean fileSuccess = true;
     int count = 0;
     for (FileSyncRow change : changes) {
@@ -1324,7 +1324,7 @@ public class SyncProcessor implements SynchronizerStatus {
     return fileSuccess;
   }
 
-  private boolean[] updateRowsInDb(TableProperties tp, DbTable table, List<FileSyncRow> changes, TableResult tableResult) {
+  private boolean[] updateRowsInDb(TableProperties tp, DbTable table, List<FileSyncRow> changes, TableResult tableResult) throws ResourceAccessException {
     boolean success = true;
     boolean fileSuccess = true;
 

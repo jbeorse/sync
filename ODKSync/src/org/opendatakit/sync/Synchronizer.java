@@ -57,7 +57,7 @@ public interface Synchronizer {
    *
    * @return a list of the table resources on the server
    */
-  public List<TableResource> getTables() throws IOException;
+  public List<TableResource> getTables() throws ResourceAccessException;
 
   /**
    * Discover the current sync state of a given tableId.
@@ -191,8 +191,9 @@ public interface Synchronizer {
    * @param serverRow
    * @param shouldDeleteLocal - true if all other files in the local instance folder should be removed.
    * @return true if successful
+   * @throws ResourceAccessException
    */
-  public boolean getFileAttachments(String tableId, String schemaETag, SyncRow serverRow, boolean shouldDeleteLocal);
+  public boolean getFileAttachments(String tableId, String schemaETag, SyncRow serverRow, boolean shouldDeleteLocal) throws ResourceAccessException;
 
   /**
    * Ensure that the file attachments for the indicated row values exist on the
@@ -203,6 +204,7 @@ public interface Synchronizer {
    * @param schemaETag
    * @param localRow
    * @return true if successful
+   * @throws ResourceAccessException
    */
-  public boolean putFileAttachments(String tableId, String schemaETag, SyncRow localRow);
+  public boolean putFileAttachments(String tableId, String schemaETag, SyncRow localRow) throws ResourceAccessException;
 }

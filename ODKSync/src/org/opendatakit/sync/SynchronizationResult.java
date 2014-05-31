@@ -27,6 +27,7 @@ public class SynchronizationResult {
     WORKING,
     SUCCESS,
     FAILURE,
+    AUTH_EXCEPTION,
     EXCEPTION,
     TABLE_DOES_NOT_EXIST_ON_SERVER,
     TABLE_CONTAINS_CHECKPOINTS,

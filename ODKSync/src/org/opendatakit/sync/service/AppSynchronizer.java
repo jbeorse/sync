@@ -153,14 +153,25 @@ public class AppSynchronizer {
 
         processor.synchronizeDataRowsAndAttachments();
 
+        boolean authProblems = false;
         // examine results
         SynchronizationResult overallResults = processor.getOverallResults();
+        if ( overallResults.getAppLevelStatus() != Status.SUCCESS ) {
+          authProblems = (overallResults.getAppLevelStatus() == Status.AUTH_EXCEPTION);
+          status = SyncStatus.NETWORK_ERROR;
+        }
+
         for (TableResult result : overallResults.getTableResults()) {
           org.opendatakit.sync.SynchronizationResult.Status tableStatus = result.getStatus();
           // TODO: decide how to handle the status
           if (tableStatus != Status.SUCCESS) {
+            authProblems = authProblems || (tableStatus == Status.AUTH_EXCEPTION);
             status = SyncStatus.NETWORK_ERROR;
           }
+        }
+
+        if ( authProblems ) {
+          throw new InvalidAuthTokenException("Synthesized");
         }
 
         // if rows aren't successful, fail.
