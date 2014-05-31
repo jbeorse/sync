@@ -934,18 +934,18 @@ public class SyncProcessor implements SynchronizerStatus {
             // / PERFORM LOCAL DATABASE CHANGES
             // / PERFORM LOCAL DATABASE CHANGES
 
-            success = deleteRowsInDb(tp, table, rowsToDeleteLocally, tableResult);
-            if (!insertRowsInDb(tp, table, rowsToInsertLocally, tableResult)) {
+            success = deleteRowsInDb(resource, tp, table, rowsToDeleteLocally, tableResult);
+            if (!insertRowsInDb(resource, tp, table, rowsToInsertLocally, tableResult)) {
               instanceFileSuccess = false;
             }
-            boolean[] results = updateRowsInDb(tp, table, rowsToUpdateLocally, tableResult);
+            boolean[] results = updateRowsInDb(resource, tp, table, rowsToUpdateLocally, tableResult);
             if ( !results[0] ) {
               success = false;
             }
             if ( !results[1] ) {
               instanceFileSuccess = false;
             }
-            if ( !conflictRowsInDb(tp, table, rowsToMoveToConflictingLocally, tableResult)) {
+            if ( !conflictRowsInDb(resource, tp, table, rowsToMoveToConflictingLocally, tableResult)) {
               instanceFileSuccess = false;
             }
 
@@ -1004,7 +1004,7 @@ public class SyncProcessor implements SynchronizerStatus {
                 table.actualUpdateRowByRowId(rm.getRowId(), values);
                 tableResult.incServerUpserts();
 
-                boolean outcome = synchronizer.putFileAttachments(tp.getTableId(), tp.getSyncTag().getSchemaETag(), syncRow);
+                boolean outcome = synchronizer.putFileAttachments(resource.getInstanceFilesUri(), tableId, syncRow);
                 if (outcome) {
                   // move to rest state
                   values.clear();
@@ -1046,9 +1046,9 @@ public class SyncProcessor implements SynchronizerStatus {
               // And try to push the file attachments...
               count = 0;
               for (SyncRow syncRow : rowsToPushFileAttachments) {
-                boolean outcome = synchronizer.putFileAttachments(tableId, tp.getSyncTag().getSchemaETag(), syncRow);
+                boolean outcome = synchronizer.putFileAttachments(resource.getInstanceFilesUri(), tableId, syncRow);
                 if (outcome) {
-                  outcome = synchronizer.getFileAttachments(tableId, tp.getSyncTag().getSchemaETag(), syncRow, true);
+                  outcome = synchronizer.getFileAttachments(resource.getInstanceFilesUri(), tableId, syncRow, true);
                   if (outcome) {
                     ContentValues values = new ContentValues();
                     values.put(DataTableColumns.SYNC_STATE, SyncState.rest.name());
@@ -1176,7 +1176,7 @@ public class SyncProcessor implements SynchronizerStatus {
     tableResult.setMessage(e.getMessage());
   }
 
-  private boolean conflictRowsInDb(TableProperties tp, DbTable table, List<FileSyncRow> changes, TableResult tableResult)
+  private boolean conflictRowsInDb(TableResource resource, TableProperties tp, DbTable table, List<FileSyncRow> changes, TableResult tableResult)
       throws ResourceAccessException {
 
     boolean fileSuccess = true;
@@ -1263,7 +1263,7 @@ public class SyncProcessor implements SynchronizerStatus {
         // ensure we have the file attachments for the conflicting row
         // it is OK if we can't get them, but they may be useful for
         // reconciliation
-        boolean outcome = synchronizer.getFileAttachments(tp.getTableId(), tp.getSyncTag().getSchemaETag(), serverRow, false);
+        boolean outcome = synchronizer.getFileAttachments(resource.getInstanceFilesUri(), tp.getTableId(), serverRow, false);
         if (!outcome) {
           // we don't do anything on failure -- just log a warning.
           // we need to leave the sync state as conflicting.
@@ -1281,7 +1281,7 @@ public class SyncProcessor implements SynchronizerStatus {
     return fileSuccess;
   }
 
-  private boolean insertRowsInDb(TableProperties tp, DbTable table, List<FileSyncRow> changes, TableResult tableResult) throws ResourceAccessException {
+  private boolean insertRowsInDb(TableResource resource, TableProperties tp, DbTable table, List<FileSyncRow> changes, TableResult tableResult) throws ResourceAccessException {
     boolean fileSuccess = true;
     int count = 0;
     for (FileSyncRow change : changes) {
@@ -1305,7 +1305,7 @@ public class SyncProcessor implements SynchronizerStatus {
       tableResult.incLocalInserts();
 
       // ensure we have the file attachments for the inserted row
-      boolean outcome = synchronizer.getFileAttachments(tp.getTableId(), tp.getSyncTag().getSchemaETag(), serverRow, true);
+      boolean outcome = synchronizer.getFileAttachments(resource.getInstanceFilesUri(), tp.getTableId(), serverRow, true);
       if (outcome) {
         // move to rest state
         values.clear();
@@ -1324,7 +1324,7 @@ public class SyncProcessor implements SynchronizerStatus {
     return fileSuccess;
   }
 
-  private boolean[] updateRowsInDb(TableProperties tp, DbTable table, List<FileSyncRow> changes, TableResult tableResult) throws ResourceAccessException {
+  private boolean[] updateRowsInDb(TableResource resource, TableProperties tp, DbTable table, List<FileSyncRow> changes, TableResult tableResult) throws ResourceAccessException {
     boolean success = true;
     boolean fileSuccess = true;
 
@@ -1337,7 +1337,7 @@ public class SyncProcessor implements SynchronizerStatus {
       boolean outcome = true;
       if (change.isRestPendingFiles) {
         // we need to push our changes to the server first...
-        outcome = synchronizer.putFileAttachments(tp.getTableId(), tp.getSyncTag().getSchemaETag(), change.localRow);
+        outcome = synchronizer.putFileAttachments(resource.getInstanceFilesUri(), tp.getTableId(), change.localRow);
       }
 
       if (!outcome) {
@@ -1368,7 +1368,7 @@ public class SyncProcessor implements SynchronizerStatus {
         tableResult.incLocalUpdates();
 
         // and try to get the file attachments for the row
-        outcome = synchronizer.getFileAttachments(tp.getTableId(), tp.getSyncTag().getSchemaETag(), serverRow, true);
+        outcome = synchronizer.getFileAttachments(resource.getInstanceFilesUri(), tp.getTableId(), serverRow, true);
         if (outcome) {
           // move to rest state
           values.clear();
@@ -1390,13 +1390,13 @@ public class SyncProcessor implements SynchronizerStatus {
     return results;
   }
 
-  private boolean deleteRowsInDb(TableProperties tp, DbTable table, List<FileSyncRow> changes, TableResult tableResult)
+  private boolean deleteRowsInDb(TableResource resource, TableProperties tp, DbTable table, List<FileSyncRow> changes, TableResult tableResult)
       throws IOException {
     int count = 0;
     boolean deletesAllSuccessful = true;
     for (FileSyncRow change : changes) {
       if (change.isRestPendingFiles) {
-        boolean outcome = synchronizer.putFileAttachments(tp.getTableId(), tp.getSyncTag().getSchemaETag(), change.localRow);
+        boolean outcome = synchronizer.putFileAttachments(resource.getInstanceFilesUri(), tp.getTableId(), change.localRow);
         if (outcome) {
           table.deleteRowActual(change.serverRow.getRowId());
           tableResult.incLocalDeletes();

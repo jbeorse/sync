@@ -186,25 +186,25 @@ public interface Synchronizer {
    * Ensure that the file attachments for the indicated row values are pulled down
    * to the local system.
    *
+   * @param instanceFileUri
    * @param tableId
-   * @param schemaETag
    * @param serverRow
    * @param shouldDeleteLocal - true if all other files in the local instance folder should be removed.
    * @return true if successful
    * @throws ResourceAccessException
    */
-  public boolean getFileAttachments(String tableId, String schemaETag, SyncRow serverRow, boolean shouldDeleteLocal) throws ResourceAccessException;
+  public boolean getFileAttachments(String instanceFileUri, String tableId, SyncRow serverRow, boolean shouldDeleteLocal) throws ResourceAccessException;
 
   /**
    * Ensure that the file attachments for the indicated row values exist on the
    * server. File attachments are immutable on the server -- never updated and
    * never destroyed.
    *
+   * @param instanceFileUri
    * @param tableId
-   * @param schemaETag
    * @param localRow
    * @return true if successful
    * @throws ResourceAccessException
    */
-  public boolean putFileAttachments(String tableId, String schemaETag, SyncRow localRow) throws ResourceAccessException;
+  public boolean putFileAttachments(String instanceFileUri, String tableId, SyncRow localRow) throws ResourceAccessException;
 }

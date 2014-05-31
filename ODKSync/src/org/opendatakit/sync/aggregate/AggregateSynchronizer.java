@@ -22,6 +22,7 @@ import java.io.FileFilter;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -194,8 +195,23 @@ public class AggregateSynchronizer implements Synchronizer {
   }
 
   private static final String escapeSegment(String segment) {
+    String encoding = CharEncoding.UTF_8;
+    String encodedSegment;
+    try {
+      encodedSegment = URLEncoder.encode(segment, encoding)
+                  .replaceAll("\\+", "%20")
+                  .replaceAll("\\%21", "!")
+                  .replaceAll("\\%27", "'")
+                  .replaceAll("\\%28", "(")
+                  .replaceAll("\\%29", ")")
+                  .replaceAll("\\%7E", "~");
+
+    } catch (UnsupportedEncodingException e) {
+      e.printStackTrace();
+      throw new IllegalStateException("Should be able to encode with " + encoding);
+    }
     // the segment can have URI-inappropriate characters. Encode it first...
-    String encodedSegment = Uri.encode(segment, null);
+//    String encodedSegment = Uri.encode(segment, null);
 //
 //    try {
 //      encodedSegment = UriUtils.encodePathSegment(segment, CharEncoding.US_ASCII);
@@ -213,7 +229,15 @@ public class AggregateSynchronizer implements Synchronizer {
    * @return a properly escaped url, with forward slashes remaining.
    */
   private String uriEncodeSegments(String path) {
-    String escaped = Uri.encode(path, FORWARD_SLASH);
+    String[] parts = path.split("/");
+    StringBuilder b = new StringBuilder();
+    for ( int i = 0 ; i < parts.length ; ++i ) {
+      if ( i != 0 ) {
+        b.append("/");
+      }
+      b.append(escapeSegment(parts[i]));
+    }
+    String escaped = b.toString();
     return escaped;
   }
 
@@ -1094,11 +1118,11 @@ public class AggregateSynchronizer implements Synchronizer {
     return true;
   }
 
-  private boolean uploadInstanceFile(String wholePathToFile, String tableId, String escapedSchemaETag, String escapedInstanceId, String pathRelativeToInstanceIdFolder) {
+  private boolean uploadInstanceFile(String wholePathToFile, String instanceFileUri, String escapedInstanceId, String pathRelativeToInstanceIdFolder) {
     File file = new File(wholePathToFile);
     FileSystemResource resource = new FileSystemResource(file);
     String escapedPath = uriEncodeSegments(pathRelativeToInstanceIdFolder);
-    URI filesUri = normalizeUri(aggregateUri, getTablesUriFragment() + tableId + "/" + escapedSchemaETag + "/attachments/" + escapedInstanceId + "/file/" + escapedPath);
+    URI filesUri = normalizeUri(instanceFileUri, escapedInstanceId + "/file/" + escapedPath);
     Log.i(LOGTAG, "[uploadFile] filePostUri: " + filesUri.toString());
     RestTemplate rt = getRestTemplateForFiles(determineContentType(file.getName()));
     List<ClientHttpRequestInterceptor> interceptors = new ArrayList<ClientHttpRequestInterceptor>();
@@ -1335,15 +1359,14 @@ public class AggregateSynchronizer implements Synchronizer {
   }
 
   @Override
-  public boolean getFileAttachments(String tableId, String schemaETag, SyncRow serverRow, boolean shouldDeleteLocal ) throws ResourceAccessException {
+  public boolean getFileAttachments(String instanceFileUri, String tableId, SyncRow serverRow, boolean shouldDeleteLocal ) throws ResourceAccessException {
 
     boolean success = true;
     try {
       // 1) Get the manifest of all files under this row's instanceId (rowId)
       List<OdkTablesFileManifestEntry> manifest;
-      String escapedSchemaETag = escapeSegment(schemaETag);
       String escapedInstanceId = escapeSegment(serverRow.getRowId());
-      URI instanceFileManifestUri = normalizeUri(aggregateUri, getTablesUriFragment() + tableId + "/" + escapedSchemaETag + "/attachments/" + escapedInstanceId + "/manifest");
+      URI instanceFileManifestUri = normalizeUri(instanceFileUri, escapedInstanceId + "/manifest");
       Uri.Builder uriBuilder = Uri.parse(instanceFileManifestUri.toString()).buildUpon();
       ResponseEntity<OdkTablesFileManifest> responseEntity;
         responseEntity = rt.exchange(uriBuilder.build().toString(),
@@ -1401,15 +1424,14 @@ public class AggregateSynchronizer implements Synchronizer {
 
 
   @Override
-  public boolean putFileAttachments(String tableId, String schemaETag, SyncRow localRow) throws ResourceAccessException {
+  public boolean putFileAttachments(String instanceFileUri, String tableId, SyncRow localRow) throws ResourceAccessException {
 
     boolean success = true;
     try {
       // 1) Get the manifest of all files under this row's instanceId (rowId)
       List<OdkTablesFileManifestEntry> manifest;
-      String escapedSchemaETag = escapeSegment(schemaETag);
       String escapedInstanceId = escapeSegment(localRow.getRowId());
-      URI instanceFileManifestUri = normalizeUri(aggregateUri, getTablesUriFragment() + tableId + "/" + escapedSchemaETag + "/attachments/" + escapedInstanceId + "/manifest" );
+      URI instanceFileManifestUri = normalizeUri(instanceFileUri, escapedInstanceId + "/manifest" );
       Uri.Builder uriBuilder = Uri.parse(instanceFileManifestUri.toString()).buildUpon();
       ResponseEntity<OdkTablesFileManifest> responseEntity;
         responseEntity = rt.exchange(uriBuilder.build().toString(),
@@ -1441,7 +1463,7 @@ public class AggregateSynchronizer implements Synchronizer {
         }
         if ( entry == null ) {
           // upload the file
-          boolean outcome = uploadInstanceFile(localFile.getAbsolutePath(), tableId, escapedSchemaETag, escapedInstanceId, partialPath);
+          boolean outcome = uploadInstanceFile(localFile.getAbsolutePath(), instanceFileUri, escapedInstanceId, partialPath);
           if ( !outcome ) {
             success = false;
           }
