@@ -195,31 +195,23 @@ public class AggregateSynchronizer implements Synchronizer {
   }
 
   private static final String escapeSegment(String segment) {
-    String encoding = CharEncoding.UTF_8;
-    String encodedSegment;
-    try {
-      encodedSegment = URLEncoder.encode(segment, encoding)
-                  .replaceAll("\\+", "%20")
-                  .replaceAll("\\%21", "!")
-                  .replaceAll("\\%27", "'")
-                  .replaceAll("\\%28", "(")
-                  .replaceAll("\\%29", ")")
-                  .replaceAll("\\%7E", "~");
-
-    } catch (UnsupportedEncodingException e) {
-      e.printStackTrace();
-      throw new IllegalStateException("Should be able to encode with " + encoding);
-    }
-    // the segment can have URI-inappropriate characters. Encode it first...
-//    String encodedSegment = Uri.encode(segment, null);
-//
+    return segment;
+//    String encoding = CharEncoding.UTF_8;
+//    String encodedSegment;
 //    try {
-//      encodedSegment = UriUtils.encodePathSegment(segment, CharEncoding.US_ASCII);
+//      encodedSegment = URLEncoder.encode(segment, encoding)
+//                  .replaceAll("\\+", "%20")
+//                  .replaceAll("\\%21", "!")
+//                  .replaceAll("\\%27", "'")
+//                  .replaceAll("\\%28", "(")
+//                  .replaceAll("\\%29", ")")
+//                  .replaceAll("\\%7E", "~");
+//
 //    } catch (UnsupportedEncodingException e) {
 //      e.printStackTrace();
-//      throw new IllegalStateException("Should be able to encode with ASCII");
+//      throw new IllegalStateException("Should be able to encode with " + encoding);
 //    }
-    return encodedSegment;
+//    return encodedSegment;
   }
 
   /**
@@ -1118,11 +1110,10 @@ public class AggregateSynchronizer implements Synchronizer {
     return true;
   }
 
-  private boolean uploadInstanceFile(String wholePathToFile, String instanceFileUri, String escapedInstanceId, String pathRelativeToInstanceIdFolder) {
+  private boolean uploadInstanceFile(String wholePathToFile, String instanceFileUri, String instanceId, String pathRelativeToInstanceIdFolder) {
     File file = new File(wholePathToFile);
     FileSystemResource resource = new FileSystemResource(file);
-    String escapedPath = uriEncodeSegments(pathRelativeToInstanceIdFolder);
-    URI filesUri = normalizeUri(instanceFileUri, escapedInstanceId + "/file/" + escapedPath);
+    URI filesUri = normalizeUri(instanceFileUri, instanceId + "/file/" + pathRelativeToInstanceIdFolder);
     Log.i(LOGTAG, "[uploadFile] filePostUri: " + filesUri.toString());
     RestTemplate rt = getRestTemplateForFiles(determineContentType(file.getName()));
     List<ClientHttpRequestInterceptor> interceptors = new ArrayList<ClientHttpRequestInterceptor>();
@@ -1365,11 +1356,12 @@ public class AggregateSynchronizer implements Synchronizer {
     try {
       // 1) Get the manifest of all files under this row's instanceId (rowId)
       List<OdkTablesFileManifestEntry> manifest;
-      String escapedInstanceId = escapeSegment(serverRow.getRowId());
-      URI instanceFileManifestUri = normalizeUri(instanceFileUri, escapedInstanceId + "/manifest");
+      String instanceId = serverRow.getRowId();
+      URI instanceFileManifestUri = normalizeUri(instanceFileUri, instanceId + "/manifest");
       Uri.Builder uriBuilder = Uri.parse(instanceFileManifestUri.toString()).buildUpon();
+      String url = uriBuilder.build().toString();
       ResponseEntity<OdkTablesFileManifest> responseEntity;
-        responseEntity = rt.exchange(uriBuilder.build().toString(),
+        responseEntity = rt.exchange(url,
                 HttpMethod.GET, null, OdkTablesFileManifest.class);
       manifest = responseEntity.getBody().getEntries();
 
@@ -1430,18 +1422,19 @@ public class AggregateSynchronizer implements Synchronizer {
     try {
       // 1) Get the manifest of all files under this row's instanceId (rowId)
       List<OdkTablesFileManifestEntry> manifest;
-      String escapedInstanceId = escapeSegment(localRow.getRowId());
-      URI instanceFileManifestUri = normalizeUri(instanceFileUri, escapedInstanceId + "/manifest" );
+      String instanceId = localRow.getRowId();
+      URI instanceFileManifestUri = normalizeUri(instanceFileUri, instanceId + "/manifest");
       Uri.Builder uriBuilder = Uri.parse(instanceFileManifestUri.toString()).buildUpon();
+      String url = uriBuilder.build().toString();
       ResponseEntity<OdkTablesFileManifest> responseEntity;
-        responseEntity = rt.exchange(uriBuilder.build().toString(),
+        responseEntity = rt.exchange(url,
                 HttpMethod.GET, null, OdkTablesFileManifest.class);
       manifest = responseEntity.getBody().getEntries();
 
       // TODO: scan the row and pick apart the elements that specify a file.
 
       // 2) Get the local files
-      String instancesFolderFullPath = ODKFileUtils.getInstanceFolder(appName, tableId, localRow.getRowId());
+      String instancesFolderFullPath = ODKFileUtils.getInstanceFolder(appName, tableId, instanceId);
       File instanceFolder = new File(instancesFolderFullPath);
       String pathPrefix = ODKFileUtils.asRelativePath(appName, instanceFolder);
 
@@ -1463,7 +1456,7 @@ public class AggregateSynchronizer implements Synchronizer {
         }
         if ( entry == null ) {
           // upload the file
-          boolean outcome = uploadInstanceFile(localFile.getAbsolutePath(), instanceFileUri, escapedInstanceId, partialPath);
+          boolean outcome = uploadInstanceFile(localFile.getAbsolutePath(), instanceFileUri, instanceId, partialPath);
           if ( !outcome ) {
             success = false;
           }
