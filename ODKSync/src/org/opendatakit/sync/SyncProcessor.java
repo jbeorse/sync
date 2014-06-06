@@ -1491,6 +1491,11 @@ public class SyncProcessor implements SynchronizerStatus {
         String lek = col.getListChildElementKeys();
         if (lek != null && lek.length() != 0) {
           listChildElementKeys = mapper.readValue(lek, List.class);
+          // survey can store a null -- make nulls be
+          // empty lists to make the tests below simple.
+          if ( listChildElementKeys == null ) {
+            listChildElementKeys = new ArrayList<String>();
+          }
         } else {
           listChildElementKeys = new ArrayList<String>();
         }
