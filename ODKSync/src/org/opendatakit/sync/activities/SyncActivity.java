@@ -24,9 +24,7 @@ import org.opendatakit.sync.OdkSyncServiceProxy;
 import org.opendatakit.sync.R;
 import org.opendatakit.sync.SyncConsts;
 import org.opendatakit.sync.SyncPreferences;
-import org.opendatakit.sync.SynchronizationResult;
-import org.opendatakit.sync.SynchronizationResult.Status;
-import org.opendatakit.sync.TableResult;
+import org.opendatakit.sync.exceptions.NoAppNameSpecifiedException;
 import org.opendatakit.sync.files.SyncUtil;
 import org.opendatakit.sync.service.SyncProgressState;
 
@@ -52,8 +50,6 @@ import android.widget.Toast;
 /**
  * An activity for downloading from and uploading to an ODK Aggregate instance.
  * 
- * @author hkworden@gmail.com
- * @author the.dylan.price@gmail.com
  */
 public class SyncActivity extends Activity {
 
@@ -68,8 +64,8 @@ public class SyncActivity extends Activity {
 
   public static final void refreshActivityUINeeded() {
     refreshRequired.set(true);
-  } 
-  
+  }
+
   private EditText uriField;
   private Spinner accountListSpinner;
 
@@ -82,8 +78,7 @@ public class SyncActivity extends Activity {
   private TextView progressMessage;
 
   private UpdateStatusTask updateStatusTask;
-  
-  
+
   @Override
   public void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
@@ -92,11 +87,10 @@ public class SyncActivity extends Activity {
       appName = SyncUtil.getDefaultAppName();
     }
     accountManager = AccountManager.get(this);
-    
+
     syncProxy = new OdkSyncServiceProxy(this);
 
-    
-    setTitle("");
+    setTitle("ODK SYNC");
     setContentView(R.layout.aggregate_activity);
     findViewComponents();
     try {
@@ -137,6 +131,12 @@ public class SyncActivity extends Activity {
     }
   }
 
+  @Override
+  protected void onDestroy() {
+    syncProxy.shutdown();
+    super.onDestroy();
+  }
+
   private void findViewComponents() {
     uriField = (EditText) findViewById(R.id.aggregate_activity_uri_field);
     accountListSpinner = (Spinner) findViewById(R.id.aggregate_activity_account_list_spinner);
@@ -174,6 +174,7 @@ public class SyncActivity extends Activity {
   void updateButtonsEnabled(SyncPreferences prefs) {
     String accountName = prefs.getAccount();
     String serverUri = prefs.getServerUri();
+
     boolean haveSettings = (accountName != null) && (serverUri != null);
     boolean authorizeAccount = (accountName != null) && (prefs.getAuthToken() == null);
 
@@ -183,19 +184,6 @@ public class SyncActivity extends Activity {
     findViewById(R.id.aggregate_activity_authorize_account_button).setEnabled(authorizeAccount);
     findViewById(R.id.aggregate_activity_sync_now_push_button).setEnabled(restOfButtons);
     findViewById(R.id.aggregate_activity_sync_now_pull_button).setEnabled(restOfButtons);
-  }
-
-  private void saveSettings(SyncPreferences prefs) throws IOException {
-
-    // save fields in preferences
-    String uri = uriField.getText().toString();
-    if (uri.equals(URI_FIELD_EMPTY))
-      uri = null;
-    String accountName = (String) accountListSpinner.getSelectedItem();
-
-    prefs.setServerUri(uri);
-    prefs.setAccount(accountName);
-
   }
 
   AlertDialog.Builder buildOkMessage(String title, String message) {
@@ -208,167 +196,44 @@ public class SyncActivity extends Activity {
   }
 
   /**
-   * Get a string to display to the user based on the {@link TableResult} after
-   * a sync. Handles the logic for generating an appropriate message.
-   * <p>
-   * Presents something along the lines of: Your Table: Insert on the
-   * server--Success. Your Table: Pulled data from server. Failed to push
-   * properties. Etc.
-   * 
-   * @param context
-   * @param result
-   * @return
-   */
-  private static String getMessageForTableResult(Context context, TableResult result) {
-    StringBuilder msg = new StringBuilder();
-    msg.append(result.getTableDisplayName() + ": ");
-    msg.append(context.getString(R.string.sync_action_message_insert) + "--");
-    // Now add the result of the status.
-
-    Status status = result.getStatus();
-    String name;
-    switch (status) {
-    case EXCEPTION:
-      name = context.getString(R.string.sync_table_result_exception);
-      break;
-    case FAILURE:
-      name = context.getString(R.string.sync_table_result_failure);
-      break;
-    case SUCCESS:
-      name = context.getString(R.string.sync_table_result_success);
-      break;
-    default:
-      Log.e(LOGTAG, "unrecognized TableResult status: " + status + ". Setting " + "to failure.");
-      name = context.getString(R.string.sync_table_result_failure);
-    }
-
-    msg.append(name);
-    if (result.getStatus() == SynchronizationResult.Status.EXCEPTION) {
-      // We'll append the message as well.
-      msg.append(result.getMessage());
-    }
-    msg.append("--");
-    // Now we need to add some information about the individual actions that
-    // should have been performed.
-    if (result.hadLocalDataChanges()) {
-      if (result.pushedLocalData()) {
-        msg.append("Pushed local data. ");
-      } else {
-        msg.append("Failed to push local data. ");
-      }
-    } else {
-      msg.append("No local data changes. ");
-    }
-
-    if (result.hadLocalPropertiesChanges()) {
-      if (result.pushedLocalProperties()) {
-        msg.append("Pushed local properties. ");
-      } else {
-        msg.append("Failed to push local properties. ");
-      }
-    } else {
-      msg.append("No local properties changes. ");
-    }
-
-    if (result.serverHadDataChanges()) {
-      if (result.pulledServerData()) {
-        msg.append("Pulled data from server. ");
-      } else {
-        msg.append("Failed to pull data from server. ");
-      }
-    } else {
-      msg.append("Data not re-fetched from server. ");
-    }
-
-    if (result.serverHadPropertiesChanges()) {
-      if (result.pulledServerProperties()) {
-        msg.append("Pulled properties from server. ");
-      } else {
-        msg.append("Failed to pull properties from server. ");
-      }
-    } else {
-      msg.append("Properties not re-fetched from server.");
-    }
-
-    if (result.serverHadSchemaChanges()) {
-      if (result.pulledServerSchema()) {
-        msg.append("Pulled schema from server. ");
-      } else {
-        msg.append("Failed to pull schema from server. ");
-      }
-    } else {
-      msg.append("Schema not re-fetched from server.");
-    }
-
-    return msg.toString();
-  }
-
-  AlertDialog.Builder buildResultMessage(String title, SynchronizationResult result) {
-    AlertDialog.Builder builder = new AlertDialog.Builder(this);
-    builder.setCancelable(false);
-    builder.setPositiveButton(getString(R.string.ok), null);
-    builder.setTitle(title);
-    // Now we'll make the message. This should include the contents of the
-    // result parameter.
-    StringBuilder stringBuilder = new StringBuilder();
-    for (int i = 0; i < result.getTableResults().size(); i++) {
-      TableResult tableResult = result.getTableResults().get(i);
-      stringBuilder.append(getMessageForTableResult(this, tableResult));
-      // stringBuilder.append(tableResult.getTableDisplayName() + ": " +
-      // SyncUtil.getLocalizedNameForTableResultStatus(this,
-      // tableResult.getStatus()));
-      // if (tableResult.getStatus() == Status.EXCEPTION) {
-      // stringBuilder.append(" with message: " +
-      // tableResult.getMessage());
-      // }
-      if (i < result.getTableResults().size() - 1) {
-        // only append if we have a
-        stringBuilder.append("\n");
-      }
-    }
-    builder.setMessage(stringBuilder.toString());
-    return builder;
-  }
-
-  /**
    * Hooked up to save settings button in aggregate_activity.xml
    */
   public void onClickSaveSettings(View v) {
-    try {
-      final SyncPreferences prefs = new SyncPreferences(this, appName);
-      // show warning message
-      AlertDialog.Builder msg = buildOkMessage(getString(R.string.confirm_change_settings),
-          getString(R.string.change_settings_warning));
+    // show warning message
+    AlertDialog.Builder msg = buildOkMessage(getString(R.string.confirm_change_settings),
+        getString(R.string.change_settings_warning));
 
-      msg.setPositiveButton(getString(R.string.save), new OnClickListener() {
-        @Override
-        public void onClick(DialogInterface dialog, int which) {
+    msg.setPositiveButton(getString(R.string.save), new OnClickListener() {
+      @Override
+      public void onClick(DialogInterface dialog, int which) {
 
-          // TODO: IMPORATNT rewrite this interaction
-          try {
-            saveSettings(prefs);
+        try {
+          SyncPreferences prefs = new SyncPreferences(SyncActivity.this, appName);
+          // save fields in preferences
+          String uri = uriField.getText().toString();
+          if (uri.equals(URI_FIELD_EMPTY))
+            uri = null;
+          String accountName = (String) accountListSpinner.getSelectedItem();
 
-            // SS Oct 15: clear the auth token here.
-            // TODO if you change a user you can switch to their privileges
-            // without
-            // this.
-            Log.d(LOGTAG, "[onClickSaveSettings][onClick] invalidated authtoken");
-            invalidateAuthToken(prefs.getAuthToken(), SyncActivity.this, appName);
-            updateButtonsEnabled(prefs);
-          } catch (IOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-          }
-
+          prefs.setServerUri(uri);
+          prefs.setAccount(accountName);
+          // SS Oct 15: clear the auth token here.
+          // TODO if you change a user you can switch to their privileges
+          // without this.
+          Log.d(LOGTAG, "[onClickSaveSettings][onClick] invalidated authtoken");
+          invalidateAuthToken(SyncActivity.this, appName);          
+          updateButtonsEnabled(prefs);
+        } catch (NoAppNameSpecifiedException e) {
+          e.printStackTrace();
+        } catch (IOException e) {
+          e.printStackTrace();
         }
-      });
+      }
+    });
 
-      msg.setNegativeButton(getString(R.string.cancel), null);
-      msg.show();
-    } catch (IOException e) {
-      // TODO Auto-generated catch block
-      e.printStackTrace();
-    }
+    msg.setNegativeButton(getString(R.string.cancel), null);
+    msg.show();
+
   }
 
   /**
@@ -443,11 +308,12 @@ public class SyncActivity extends Activity {
 
   }
 
-  public static void invalidateAuthToken(String authToken, Context context, String appName) {
-    AccountManager.get(context).invalidateAuthToken(ACCOUNT_TYPE_G, authToken);
+  public static void invalidateAuthToken(Context context, String appName) {
     try {
       SyncPreferences prefs = new SyncPreferences(context, appName);
+      AccountManager.get(context).invalidateAuthToken(ACCOUNT_TYPE_G, prefs.getAuthToken());
       prefs.setAuthToken(null);
+      refreshActivityUINeeded();
     } catch (IOException e) {
       // TODO Auto-generated catch block
       e.printStackTrace();
@@ -456,14 +322,8 @@ public class SyncActivity extends Activity {
 
   @Override
   protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-    try {
-      SyncPreferences prefs = new SyncPreferences(this, appName);
-      super.onActivityResult(requestCode, resultCode, data);
-      updateButtonsEnabled(prefs);
-    } catch (IOException e) {
-      // TODO Auto-generated catch block
-      e.printStackTrace();
-    }
+    super.onActivityResult(requestCode, resultCode, data);
+    refreshActivityUINeeded();
   }
 
   private void updateProgress() {
@@ -501,19 +361,9 @@ public class SyncActivity extends Activity {
 
   }
 
-  private void updateButtonsWrappedWithPreferencesNIgnoreExceptions() {
-
-    try {
-      SyncPreferences prefs = new SyncPreferences(this, appName);
-      updateButtonsEnabled(prefs);
-    } catch (Exception e) {
-      e.printStackTrace();
-    }    
-  }
-  
   private class UpdateStatusTask extends AsyncTask<Void, Void, Void> {
 
-    private static final int DELAY_PROGRESS_REFRESH = 5000;
+    private static final int DELAY_PROGRESS_REFRESH = 2000;
 
     @Override
     protected Void doInBackground(Void... params) {
@@ -521,13 +371,22 @@ public class SyncActivity extends Activity {
       try {
         while (true) {
           Thread.sleep(DELAY_PROGRESS_REFRESH);
-          //Log.e(LOGTAG, "Wake up");
-          updateProgress();  
-          
+          // Log.e(LOGTAG, "Wake up");
+          updateProgress();
+
           // check to see if another class has requested the activity to
           // redraw the UI, for now update the buttons
-          if(refreshRequired.get()) {
-            updateButtonsWrappedWithPreferencesNIgnoreExceptions();
+          if (refreshRequired.get()) {
+            runOnUiThread(new Runnable() {
+              public void run() {
+                try {
+                  SyncPreferences prefs = new SyncPreferences(SyncActivity.this, appName);
+                  updateButtonsEnabled(prefs);
+                } catch (Exception e) {
+                  e.printStackTrace();
+                }
+              }
+            });
             refreshRequired.set(false);
           }
         }

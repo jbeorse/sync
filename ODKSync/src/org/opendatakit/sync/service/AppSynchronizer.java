@@ -1,6 +1,5 @@
 package org.opendatakit.sync.service;
 
-import java.io.IOException;
 import java.util.Arrays;
 
 import org.opendatakit.sync.R;
@@ -85,12 +84,10 @@ public class AppSynchronizer {
         globalNotifManager.startingSync(appName);
         syncProgress.updateNotification(SyncProgressState.INIT, cntxt.getString(R.string.starting_sync), 100, 0, false);
         sync(syncProgress);
-        // leave the last notification available for review
-        // syncProgress.clearNotification();
       } catch (NoAppNameSpecifiedException e) {
         e.printStackTrace();
         status = SyncStatus.NETWORK_ERROR;
-        syncProgress.updateNotification(SyncProgressState.COMPLETE, "There were failures..." , 100, 0, false);
+        syncProgress.updateNotification(SyncProgressState.ERROR, "There were failures..." , 100, 0, false);
       } finally {
         try {
           globalNotifManager.stoppingSync(appName);
@@ -113,7 +110,7 @@ public class AppSynchronizer {
 
       if(prefs == null) {
         status = SyncStatus.FILE_ERROR;
-        syncProgress.updateNotification(SyncProgressState.INIT, "Unable to open SyncPreferences" , 100, 0, false);
+        syncProgress.finalErrorNotification("Unable to open SyncPreferences");
         return;
       }
 
@@ -166,7 +163,13 @@ public class AppSynchronizer {
           // TODO: decide how to handle the status
           if (tableStatus != Status.SUCCESS) {
             authProblems = authProblems || (tableStatus == Status.AUTH_EXCEPTION);
-            status = SyncStatus.NETWORK_ERROR;
+            if(tableStatus == Status.TABLE_PENDING_ATTACHMENTS) {
+              continue;
+            } else if(tableStatus == Status.TABLE_CONTAINS_CONFLICTS || tableStatus == Status.TABLE_REQUIRES_APP_LEVEL_SYNC) {
+              status = SyncStatus.CONFLICT_RESOLUTION;
+            } else {
+              status = SyncStatus.NETWORK_ERROR;
+            }
           }
         }
 
@@ -175,25 +178,18 @@ public class AppSynchronizer {
         }
 
         // if rows aren't successful, fail.
-        if (status != SyncStatus.SYNCING) {
-          syncProgress.updateNotification(SyncProgressState.COMPLETE, "There were failures..." , 100, 0, false);
+        if (status != SyncStatus.SYNCING && status != SyncStatus.CONFLICT_RESOLUTION) {          
+          syncProgress.finalErrorNotification("There were failures...");
           return;
         }
 
         // success
         status = SyncStatus.SYNC_COMPLETE;
-        syncProgress.updateNotification(SyncProgressState.COMPLETE, "Successful Sync" , 100, 100, false);
+        syncProgress.clearNotification();
         Log.i(LOGTAG, "[SyncThread] timestamp: " + System.currentTimeMillis());
       } catch (InvalidAuthTokenException e) {
-        try {
-          prefs.setAuthToken(null);
-        } catch (IOException e1) {
-          status = SyncStatus.FILE_ERROR;
-          syncProgress.updateNotification(SyncProgressState.COMPLETE, "Unable to open SyncPreferences" , 100, 0, false);
-          e1.printStackTrace();
-        }
-
-        syncProgress.updateNotification(SyncProgressState.COMPLETE, "Account Re-Authorization Required", 100, 0, false);
+        SyncActivity.invalidateAuthToken(cntxt, appName);
+        syncProgress.finalErrorNotification("Account Re-Authorization Required");
         status = SyncStatus.AUTH_RESOLUTION;
       } catch (Exception e) {
         Log.i(
@@ -207,7 +203,7 @@ public class AppSynchronizer {
         if ( msg == null ) {
           msg = e.toString();
         }
-        syncProgress.updateNotification(SyncProgressState.COMPLETE, "Failed Sync: " + msg , 100, 0, false);
+        syncProgress.finalErrorNotification("Failed Sync: " + msg);
         status = SyncStatus.NETWORK_ERROR;
       }
     }

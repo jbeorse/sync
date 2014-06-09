@@ -37,7 +37,6 @@ public final class SyncNotification {
     builder.setProgress(maxProgress, progress, indeterminateProgress);
 
     Notification syncNotif = builder.getNotification();
-    // syncNotif.flags |= Notification.FLAG_NO_CLEAR;
 
     notificationManager.notify(appName, messageNum, syncNotif);
     Log.e(LOGTAG, messageNum + " Update SYNC Notification -" + appName + " TEXT:" + text + " PROG:"
@@ -53,6 +52,19 @@ public final class SyncNotification {
     return progressState;
   }
 
+  public synchronized void finalErrorNotification(String text) {
+    this.progressState = SyncProgressState.ERROR;
+    this.updateText = text;
+    Notification.Builder builder = new Notification.Builder(cntxt);
+    builder.setContentTitle("ODK SYNC ERROR " + appName).setContentText(text).setAutoCancel(true).setOngoing(false);
+    builder.setSmallIcon(android.R.drawable.ic_dialog_alert);
+ 
+    Notification syncNotif = builder.getNotification();
+
+    notificationManager.notify(appName, messageNum, syncNotif);
+    Log.e(LOGTAG, messageNum + " FINAL SYNC Notification -" + appName + " TEXT:" + text);
+  }
+  
   public synchronized void clearNotification() {
     notificationManager.cancel(appName, messageNum);
   }
