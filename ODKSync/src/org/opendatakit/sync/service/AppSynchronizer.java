@@ -151,10 +151,13 @@ public class AppSynchronizer {
         processor.synchronizeDataRowsAndAttachments();
 
         boolean authProblems = false;
+
+        String reason = "none";
         // examine results
         SynchronizationResult overallResults = processor.getOverallResults();
         if ( overallResults.getAppLevelStatus() != Status.SUCCESS ) {
           authProblems = (overallResults.getAppLevelStatus() == Status.AUTH_EXCEPTION);
+          reason = "overall results";
           status = SyncStatus.NETWORK_ERROR;
         }
 
@@ -162,13 +165,15 @@ public class AppSynchronizer {
           org.opendatakit.sync.SynchronizationResult.Status tableStatus = result.getStatus();
           // TODO: decide how to handle the status
           if (tableStatus != Status.SUCCESS) {
-            authProblems = authProblems || (tableStatus == Status.AUTH_EXCEPTION);
-            if(tableStatus == Status.TABLE_PENDING_ATTACHMENTS) {
+            if(tableStatus == Status.AUTH_EXCEPTION) {
+              authProblems = true;
+            } else if(tableStatus == Status.TABLE_PENDING_ATTACHMENTS) {
               continue;
             } else if(tableStatus == Status.TABLE_CONTAINS_CONFLICTS || tableStatus == Status.TABLE_REQUIRES_APP_LEVEL_SYNC) {
               status = SyncStatus.CONFLICT_RESOLUTION;
             } else {
               status = SyncStatus.NETWORK_ERROR;
+              reason = "table " + result.getTableDisplayName();
             }
           }
         }
@@ -179,7 +184,7 @@ public class AppSynchronizer {
 
         // if rows aren't successful, fail.
         if (status != SyncStatus.SYNCING && status != SyncStatus.CONFLICT_RESOLUTION) {          
-          syncProgress.finalErrorNotification("There were failures...");
+          syncProgress.finalErrorNotification("There were failures. Status: " + status + " Reason:" + reason);
           return;
         }
 
