@@ -16,6 +16,7 @@ public final class SyncNotification {
   private int messageNum;
   private String updateText;
   private SyncProgressState progressState;
+  private Notification.Builder builder;
   
   public SyncNotification(Context context, String appName) {
     this.cntxt = context;
@@ -25,17 +26,16 @@ public final class SyncNotification {
     this.messageNum = 0;
     this.updateText = null;
     this.progressState = SyncProgressState.INIT;
+    this.builder = new Notification.Builder(cntxt);
   }
 
   public synchronized void updateNotification(SyncProgressState pgrState, String text, int maxProgress,
       int progress, boolean indeterminateProgress) {
     this.progressState = pgrState;
     this.updateText = text;
-    Notification.Builder builder = new Notification.Builder(cntxt);
     builder.setContentTitle("ODK syncing " + appName).setContentText(text).setAutoCancel(false).setOngoing(true);
     builder.setSmallIcon(android.R.drawable.ic_popup_sync);
     builder.setProgress(maxProgress, progress, indeterminateProgress);
-
     Notification syncNotif = builder.getNotification();
 
     notificationManager.notify(appName, messageNum, syncNotif);
@@ -55,11 +55,11 @@ public final class SyncNotification {
   public synchronized void finalErrorNotification(String text) {
     this.progressState = SyncProgressState.ERROR;
     this.updateText = text;
-    Notification.Builder builder = new Notification.Builder(cntxt);
-    builder.setContentTitle("ODK SYNC ERROR " + appName).setContentText(text).setAutoCancel(true).setOngoing(false);
-    builder.setSmallIcon(android.R.drawable.ic_dialog_alert);
+    Notification.Builder finalBuilder = new Notification.Builder(cntxt);
+    finalBuilder.setContentTitle("ODK SYNC ERROR " + appName).setContentText(text).setAutoCancel(true).setOngoing(false);
+    finalBuilder.setSmallIcon(android.R.drawable.ic_dialog_alert);
  
-    Notification syncNotif = builder.getNotification();
+    Notification syncNotif = finalBuilder.getNotification();
 
     notificationManager.notify(appName, messageNum, syncNotif);
     Log.e(LOGTAG, messageNum + " FINAL SYNC Notification -" + appName + " TEXT:" + text);

@@ -189,8 +189,14 @@ public class AppSynchronizer {
         }
 
         // success
-        status = SyncStatus.SYNC_COMPLETE;
-        syncProgress.clearNotification();
+        if (status != SyncStatus.CONFLICT_RESOLUTION) {
+          syncProgress.clearNotification();
+          status = SyncStatus.SYNC_COMPLETE;
+        } else {
+          syncProgress.finalErrorNotification("Conflicts exist.  Please resolve.");
+        }
+        
+       
         Log.i(LOGTAG, "[SyncThread] timestamp: " + System.currentTimeMillis());
       } catch (InvalidAuthTokenException e) {
         SyncActivity.invalidateAuthToken(cntxt, appName);
