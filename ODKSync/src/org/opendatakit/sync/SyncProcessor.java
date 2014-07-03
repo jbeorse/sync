@@ -1284,6 +1284,7 @@ public class SyncProcessor implements SynchronizerStatus {
   private boolean insertRowsInDb(TableResource resource, TableProperties tp, DbTable table, List<FileSyncRow> changes, TableResult tableResult) throws ResourceAccessException {
     boolean fileSuccess = true;
     int count = 0;
+    // android.os.Debug.waitForDebugger();
     for (FileSyncRow change : changes) {
       SyncRow serverRow = change.serverRow;
       ContentValues values = new ContentValues();
