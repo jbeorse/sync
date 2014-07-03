@@ -61,7 +61,7 @@ public class SyncActivity extends Activity {
   private static final int AUTHORIZE_ACCOUNT_RESULT_ID = 1;
 
   private static final AtomicBoolean refreshRequired = new AtomicBoolean(false);
-
+  
   public static final void refreshActivityUINeeded() {
     refreshRequired.set(true);
   }
@@ -78,6 +78,8 @@ public class SyncActivity extends Activity {
   private TextView progressMessage;
 
   private UpdateStatusTask updateStatusTask;
+  
+  private boolean authorizeAccountSuccessful;
 
   @Override
   public void onCreate(Bundle savedInstanceState) {
@@ -104,6 +106,7 @@ public class SyncActivity extends Activity {
 
     updateStatusTask = new UpdateStatusTask();
     updateStatusTask.execute();
+    authorizeAccountSuccessful = false;
 
   }
 
@@ -125,10 +128,19 @@ public class SyncActivity extends Activity {
     try {
       SyncPreferences prefs = new SyncPreferences(this, appName);
       updateButtonsEnabled(prefs);
+      updateStatusTask = new UpdateStatusTask();
+      updateStatusTask.execute();
     } catch (IOException e) {
       // TODO Auto-generated catch block
       e.printStackTrace();
     }
+  }
+  
+  @Override
+  protected void onPause() {
+      updateStatusTask.cancel(true);
+      updateStatusTask = null;
+      super.onPause();
   }
 
   @Override
@@ -176,12 +188,11 @@ public class SyncActivity extends Activity {
     String serverUri = prefs.getServerUri();
 
     boolean haveSettings = (accountName != null) && (serverUri != null);
-    boolean authorizeAccount = (accountName != null) && (prefs.getAuthToken() == null);
 
-    boolean restOfButtons = haveSettings && !authorizeAccount;
+    boolean restOfButtons = haveSettings && authorizeAccountSuccessful;
 
     findViewById(R.id.aggregate_activity_save_settings_button).setEnabled(true);
-    findViewById(R.id.aggregate_activity_authorize_account_button).setEnabled(authorizeAccount);
+    findViewById(R.id.aggregate_activity_authorize_account_button).setEnabled(true);
     findViewById(R.id.aggregate_activity_sync_now_push_button).setEnabled(restOfButtons);
     findViewById(R.id.aggregate_activity_sync_now_pull_button).setEnabled(restOfButtons);
   }
@@ -241,6 +252,8 @@ public class SyncActivity extends Activity {
    */
   public void onClickAuthorizeAccount(View v) {
     try {
+      Log.d(LOGTAG, "[onClickAuthorizeAccount] invalidated authtoken");
+      invalidateAuthToken(SyncActivity.this, appName);
       SyncPreferences prefs = new SyncPreferences(this, appName);
       Intent i = new Intent(this, AccountInfoActivity.class);
       Account account = new Account(prefs.getAccount(), ACCOUNT_TYPE_G);
@@ -259,26 +272,38 @@ public class SyncActivity extends Activity {
   public void onClickSyncNowPush(View v) {
     Log.d(LOGTAG, "in onClickSyncNowPush");
     // ask whether to sync app files and table-level files
+    
+    // show warning message
+    AlertDialog.Builder msg = buildOkMessage(getString(R.string.confirm_reset_app_server),
+        getString(R.string.reset_app_server_warning));
 
-    try {
-      SyncPreferences prefs = new SyncPreferences(this, appName);
-      String accountName = prefs.getAccount();
-      Log.e(LOGTAG, "[onClickSyncNowPush] timestamp: " + System.currentTimeMillis());
-      if (accountName == null) {
-        Toast.makeText(this, getString(R.string.choose_account), Toast.LENGTH_SHORT).show();
-      } else {
+    msg.setPositiveButton(getString(R.string.reset), new OnClickListener() {
+      @Override
+      public void onClick(DialogInterface dialog, int which) {
         try {
-          syncProxy.pushToServer(appName);
-        } catch (RemoteException e) {
-          Log.e(LOGTAG, "Problem with push command");
+          SyncPreferences prefs = new SyncPreferences(SyncActivity.this, appName);
+          String accountName = prefs.getAccount();
+          Log.e(LOGTAG, "[onClickSyncNowPush] timestamp: " + System.currentTimeMillis());
+          if (accountName == null) {
+            Toast.makeText(SyncActivity.this, getString(R.string.choose_account), Toast.LENGTH_SHORT).show();
+          } else {
+            try {
+              syncProxy.pushToServer(appName);
+            } catch (RemoteException e) {
+              Log.e(LOGTAG, "Problem with push command");
+            }
+    
+          }
+          updateButtonsEnabled(prefs);
+        } catch (IOException e) {
+          // TODO Auto-generated catch block
+          e.printStackTrace();
         }
-
       }
-      updateButtonsEnabled(prefs);
-    } catch (IOException e) {
-      // TODO Auto-generated catch block
-      e.printStackTrace();
-    }
+    });
+    
+    msg.setNegativeButton(getString(R.string.cancel), null);
+    msg.show();
   }
 
   /**
@@ -324,6 +349,11 @@ public class SyncActivity extends Activity {
   protected void onActivityResult(int requestCode, int resultCode, Intent data) {
     super.onActivityResult(requestCode, resultCode, data);
     refreshActivityUINeeded();
+    
+    // Check that the result was ok for the authorize 
+    if (requestCode == AUTHORIZE_ACCOUNT_RESULT_ID && resultCode == Activity.RESULT_OK) {
+      this.authorizeAccountSuccessful = true;
+    }
   }
 
   private void updateProgress() {
@@ -338,6 +368,14 @@ public class SyncActivity extends Activity {
               progressState.setText("NULL");
             } else {
               progressState.setText(progress.name());
+              
+              if (progress == SyncProgressState.COMPLETE || progress == SyncProgressState.ERROR) {
+                if (authorizeAccountSuccessful == true) {
+                  authorizeAccountSuccessful = false;
+                  refreshActivityUINeeded();
+                  Log.i(LOGTAG, "reset authorizeAccountSuccessful");
+                }
+              }
             }
           } else {
             Log.e(LOGTAG, "NULL progressState variable");
@@ -355,6 +393,9 @@ public class SyncActivity extends Activity {
           }
         } catch (RemoteException e) {
           Log.e(LOGTAG, "Problem with update messages");
+        } catch (Exception e) {
+          e.printStackTrace();
+          Log.e(LOGTAG, "in runnable for updateProgress");
         }
       }
     });
@@ -371,7 +412,7 @@ public class SyncActivity extends Activity {
       try {
         while (true) {
           Thread.sleep(DELAY_PROGRESS_REFRESH);
-          // Log.e(LOGTAG, "Wake up");
+           Log.e(LOGTAG, "!!!!!!!!!!!!!Wake up!!!");
           updateProgress();
 
           // check to see if another class has requested the activity to

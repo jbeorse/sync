@@ -190,8 +190,8 @@ public class AppSynchronizer {
 
         // success
         if (status != SyncStatus.CONFLICT_RESOLUTION) {
-          syncProgress.clearNotification();
           status = SyncStatus.SYNC_COMPLETE;
+          syncProgress.clearNotification();
         } else {
           syncProgress.finalErrorNotification("Conflicts exist.  Please resolve.");
         }
@@ -200,8 +200,8 @@ public class AppSynchronizer {
         Log.i(LOGTAG, "[SyncThread] timestamp: " + System.currentTimeMillis());
       } catch (InvalidAuthTokenException e) {
         SyncActivity.invalidateAuthToken(cntxt, appName);
-        syncProgress.finalErrorNotification("Account Re-Authorization Required");
         status = SyncStatus.AUTH_RESOLUTION;
+        syncProgress.finalErrorNotification("Account Re-Authorization Required");
       } catch (Exception e) {
         Log.i(
             LOGTAG,
@@ -214,8 +214,8 @@ public class AppSynchronizer {
         if ( msg == null ) {
           msg = e.toString();
         }
-        syncProgress.finalErrorNotification("Failed Sync: " + msg);
         status = SyncStatus.NETWORK_ERROR;
+        syncProgress.finalErrorNotification("Failed Sync: " + msg);
       }
     }
 

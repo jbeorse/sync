@@ -31,6 +31,11 @@
 	<string name="change_settings_warning">If you change your settings, tables you have synched now may no longer be able to be synched.</string>
 	<string name="save">Save</string>
 	<string name="cancel">Cancel</string>
+	
+<!-- Reset App Server alert -->
+	<string name="confirm_reset_app_server">Confirm Reset App Server</string>
+	<string name="reset_app_server_warning">Resetting the App Server will clear all data currently on the server.</string>
+	<string name="reset">Reset</string>
 
 <!-- authorization actions -->
 	<string name="choose_account">Please choose an account</string>
