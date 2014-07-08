@@ -3,7 +3,7 @@ package org.opendatakit.sync.service;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.opendatakit.sync.activities.SyncActivity;
+import org.opendatakit.sync.R;
 import org.opendatakit.sync.exceptions.NoAppNameSpecifiedException;
 
 import android.app.Notification;
@@ -12,8 +12,7 @@ import android.app.Service;
 import android.content.Intent;
 
 public final class GlobalSyncNotificationManager {
-	private static final String LOGTAG = GlobalSyncNotificationManager.class
-			.getSimpleName();
+
 	private static final int UNIQUE_ID = 1337;
 
 	private final Service service;
@@ -100,17 +99,18 @@ public final class GlobalSyncNotificationManager {
 
 	private void createNotification() {
 		// The intent to launch when the user clicks the expanded notification
-		Intent tmpIntent = new Intent(service, SyncActivity.class);
-		tmpIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP
-				| Intent.FLAG_ACTIVITY_SINGLE_TOP);
-		PendingIntent pendIntent = PendingIntent.getActivity(service, 0,
+//		Intent tmpIntent = new Intent(service, SyncActivity.class);
+	   Intent tmpIntent = new Intent(Intent.ACTION_VIEW);
+	   tmpIntent.setClassName("org.opendatakit.sync", "org.opendatakit.sync.activities.SyncActivity");
+		tmpIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+		PendingIntent pendIntent = PendingIntent.getActivity(service.getApplicationContext(), 0,
 				tmpIntent, 0);
 
 		Notification.Builder builder = new Notification.Builder(service);
-		builder.setTicker("ODK Syncing").setContentTitle(LOGTAG)
+		builder.setTicker("ODK Syncing").setContentTitle("ODK Sync")
 				.setContentText("ODK is syncing an Application")
 				.setWhen(System.currentTimeMillis()).setAutoCancel(false)
-				.setOngoing(true).setContentIntent(pendIntent);
+				.setOngoing(true).setContentIntent(pendIntent).setSmallIcon(R.drawable.ic_launcher);
 
 		Notification runningNotification = builder.getNotification();
 		runningNotification.flags |= Notification.FLAG_NO_CLEAR;

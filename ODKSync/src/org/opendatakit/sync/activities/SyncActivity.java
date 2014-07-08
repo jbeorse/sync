@@ -104,8 +104,6 @@ public class SyncActivity extends Activity {
       e.printStackTrace();
     }
 
-    updateStatusTask = new UpdateStatusTask();
-    updateStatusTask.execute();
     authorizeAccountSuccessful = false;
 
   }
@@ -138,7 +136,7 @@ public class SyncActivity extends Activity {
   
   @Override
   protected void onPause() {
-      updateStatusTask.cancel(true);
+      updateStatusTask.cancel(false);
       updateStatusTask = null;
       super.onPause();
   }
@@ -405,14 +403,13 @@ public class SyncActivity extends Activity {
   private class UpdateStatusTask extends AsyncTask<Void, Void, Void> {
 
     private static final int DELAY_PROGRESS_REFRESH = 2000;
-
+    
     @Override
     protected Void doInBackground(Void... params) {
 
       try {
-        while (true) {
+        while (!isCancelled()) {
           Thread.sleep(DELAY_PROGRESS_REFRESH);
-           Log.e(LOGTAG, "!!!!!!!!!!!!!Wake up!!!");
           updateProgress();
 
           // check to see if another class has requested the activity to
@@ -432,8 +429,7 @@ public class SyncActivity extends Activity {
           }
         }
       } catch (InterruptedException e) {
-        // TODO Auto-generated catch block
-        e.printStackTrace();
+        Log.i(LOGTAG, "Thread interrupt exception");
       }
       return null;
 
