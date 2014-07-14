@@ -56,9 +56,6 @@ import org.opendatakit.aggregate.odktables.rest.entity.TableDefinition;
 import org.opendatakit.aggregate.odktables.rest.entity.TableDefinitionResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResourceList;
-import org.opendatakit.aggregate.odktables.rest.interceptor.AggregateRequestInterceptor;
-import org.opendatakit.aggregate.odktables.rest.serialization.OdkJsonHttpMessageConverter;
-import org.opendatakit.aggregate.odktables.rest.serialization.OdkXmlHttpMessageConverter;
 import org.opendatakit.common.android.sync.aggregate.SyncTag;
 import org.opendatakit.common.android.utilities.ODKFileUtils;
 import org.opendatakit.common.android.utilities.WebUtils;
@@ -79,6 +76,9 @@ import org.opendatakit.sync.exceptions.AccessDeniedException;
 import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
 import org.opendatakit.sync.exceptions.RequestFailureException;
 import org.opendatakit.sync.service.SyncProgressState;
+import org.opendatakit.sync.springframework.AggregateRequestInterceptor;
+import org.opendatakit.sync.springframework.OdkJsonHttpMessageConverter;
+import org.opendatakit.sync.springframework.OdkXmlHttpMessageConverter;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpEntity;
@@ -739,6 +739,10 @@ public class AggregateSynchronizer implements Synchronizer {
         }
       }});
 
+    if ( partials == null ) {
+      return Collections.emptyList();
+    }
+
     LinkedList<File> unexploredDirs = new LinkedList<File>();
     List<File> nondirFiles = new ArrayList<File>();
 
@@ -1038,7 +1042,15 @@ public class AggregateSynchronizer implements Synchronizer {
     ResponseEntity<OdkTablesFileManifest> responseEntity;
     responseEntity = rt.exchange(uriBuilder.build().toString(),
             HttpMethod.GET, null, OdkTablesFileManifest.class);
-    return responseEntity.getBody().getEntries();
+    OdkTablesFileManifest manifest = responseEntity.getBody();
+    List<OdkTablesFileManifestEntry> theList = null;
+    if ( manifest != null ) {
+    	theList = manifest.getEntries();
+    }
+    if ( theList == null ) {
+    	theList = Collections.emptyList();
+    }
+    return theList;
   }
 
   public List<OdkTablesFileManifestEntry> getTableLevelFileManifest(String tableId) throws ResourceAccessException {
@@ -1047,7 +1059,15 @@ public class AggregateSynchronizer implements Synchronizer {
     ResponseEntity<OdkTablesFileManifest> responseEntity;
       responseEntity = rt.exchange(uriBuilder.build().toString(),
               HttpMethod.GET, null, OdkTablesFileManifest.class);
-    return responseEntity.getBody().getEntries();
+    OdkTablesFileManifest manifest = responseEntity.getBody();
+    List<OdkTablesFileManifestEntry> theList = null;
+    if ( manifest != null ) {
+    	theList = manifest.getEntries();
+    }
+    if ( theList == null ) {
+    	theList = Collections.emptyList();
+    }
+    return theList;
   }
 
   /**
@@ -1354,15 +1374,21 @@ public class AggregateSynchronizer implements Synchronizer {
     boolean success = true;
     try {
       // 1) Get the manifest of all files under this row's instanceId (rowId)
-      List<OdkTablesFileManifestEntry> manifest;
       String instanceId = serverRow.getRowId();
       URI instanceFileManifestUri = normalizeUri(instanceFileUri, instanceId + "/manifest");
       Uri.Builder uriBuilder = Uri.parse(instanceFileManifestUri.toString()).buildUpon();
       String url = uriBuilder.build().toString();
       ResponseEntity<OdkTablesFileManifest> responseEntity;
-        responseEntity = rt.exchange(url,
+      responseEntity = rt.exchange(url,
                 HttpMethod.GET, null, OdkTablesFileManifest.class);
-      manifest = responseEntity.getBody().getEntries();
+      OdkTablesFileManifest manifest = responseEntity.getBody();
+      List<OdkTablesFileManifestEntry> theList = null;
+      if ( manifest != null ) {
+        theList = manifest.getEntries();
+      }
+      if ( theList == null ) {
+        theList = Collections.emptyList();
+      }
 
       // TODO: scan the row and pick apart the elements that specify a file.
 
@@ -1375,7 +1401,7 @@ public class AggregateSynchronizer implements Synchronizer {
 
 
       // we are getting files. So iterate over the remote files...
-      for ( OdkTablesFileManifestEntry entry : manifest ) {
+      for ( OdkTablesFileManifestEntry entry : theList ) {
         File localFile = new File(instanceFolder, entry.filename);
 
         if ( !localFile.exists() ) {
@@ -1420,15 +1446,21 @@ public class AggregateSynchronizer implements Synchronizer {
     boolean success = true;
     try {
       // 1) Get the manifest of all files under this row's instanceId (rowId)
-      List<OdkTablesFileManifestEntry> manifest;
       String instanceId = localRow.getRowId();
       URI instanceFileManifestUri = normalizeUri(instanceFileUri, instanceId + "/manifest");
       Uri.Builder uriBuilder = Uri.parse(instanceFileManifestUri.toString()).buildUpon();
       String url = uriBuilder.build().toString();
       ResponseEntity<OdkTablesFileManifest> responseEntity;
-        responseEntity = rt.exchange(url,
+      responseEntity = rt.exchange(url,
                 HttpMethod.GET, null, OdkTablesFileManifest.class);
-      manifest = responseEntity.getBody().getEntries();
+      OdkTablesFileManifest manifest = responseEntity.getBody();
+      List<OdkTablesFileManifestEntry> theList = null;
+      if ( manifest != null ) {
+        theList = manifest.getEntries();
+      }
+      if ( theList == null ) {
+        theList = Collections.emptyList();
+      }
 
       // TODO: scan the row and pick apart the elements that specify a file.
 
@@ -1447,7 +1479,7 @@ public class AggregateSynchronizer implements Synchronizer {
         // strip off the instance folder and slash.
         String partialPath = relativePath.substring(pathPrefix.length() + 1);
         OdkTablesFileManifestEntry entry = null;
-        for ( OdkTablesFileManifestEntry e : manifest ) {
+        for ( OdkTablesFileManifestEntry e : theList ) {
           if ( e.filename.equals(partialPath) ) {
             entry = e;
             break;

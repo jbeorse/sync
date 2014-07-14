@@ -150,6 +150,7 @@ public class SyncProcessor implements SynchronizerStatus {
   public void synchronizeConfigurationAndContent(boolean pushToServer) {
     Log.i(TAG, "entered synchronizeConfigurationAndContent()");
     ODKFileUtils.assertDirectoryStructure(appName);
+    //android.os.Debug.waitForDebugger();
 
     syncProgress.updateNotification(SyncProgressState.INIT,
         context.getString(R.string.retrieving_tables_list_from_server), OVERALL_PROGRESS_BAR_LENGTH, 0, false);
@@ -753,8 +754,8 @@ public class SyncProcessor implements SynchronizerStatus {
             // loop through the localRow table
             for (int i = 0; i < localDataTable.getNumberOfRows(); i++) {
               Row localRow = localDataTable.getRowAtIndex(i);
-              String stateStr = localRow.getDataOrMetadataByElementKey(DataTableColumns.SYNC_STATE);
-              SyncState state = SyncState.valueOf(stateStr);
+              String stateStr = localRow.getRawDataOrMetadataByElementKey(DataTableColumns.SYNC_STATE);
+              SyncState state = stateStr == null ? null : SyncState.valueOf(stateStr);
 
               String rowId = localRow.getRowId();
 
@@ -791,9 +792,9 @@ public class SyncProcessor implements SynchronizerStatus {
                 // we need to remove the conflicting records that refer to the
                 // prior state of the server
                 String localRowConflictTypeBeforeSyncStr = localRow
-                    .getDataOrMetadataByElementKey(DataTableColumns.CONFLICT_TYPE);
-                localRowConflictTypeBeforeSync = Integer
-                    .parseInt(localRowConflictTypeBeforeSyncStr);
+                    .getRawDataOrMetadataByElementKey(DataTableColumns.CONFLICT_TYPE);
+                localRowConflictTypeBeforeSync = localRowConflictTypeBeforeSyncStr == null ? null :
+                  Integer.parseInt(localRowConflictTypeBeforeSyncStr);
                 if (localRowConflictTypeBeforeSync == ConflictType.SERVER_DELETED_OLD_VALUES
                     || localRowConflictTypeBeforeSync == ConflictType.SERVER_UPDATED_UPDATED_VALUES) {
                   // This localRow holds the server values from a
@@ -1417,23 +1418,23 @@ public class SyncProcessor implements SynchronizerStatus {
 
   private SyncRow convertToSyncRow(TableProperties tp, Row localRow) {
     String rowId = localRow.getRowId();
-    String rowETag = localRow.getDataOrMetadataByElementKey(DataTableColumns.ROW_ETAG);
+    String rowETag = localRow.getRawDataOrMetadataByElementKey(DataTableColumns.ROW_ETAG);
     Map<String, String> values = new HashMap<String, String>();
 
     for (ColumnProperties cp : tp.getAllColumns().values()) {
       if (cp.isUnitOfRetention()) {
         String elementKey = cp.getElementKey();
-        values.put(elementKey, localRow.getDataOrMetadataByElementKey(elementKey));
+        values.put(elementKey, localRow.getRawDataOrMetadataByElementKey(elementKey));
       }
     }
     SyncRow syncRow = new SyncRow(rowId, rowETag, false,
-        localRow.getDataOrMetadataByElementKey(DataTableColumns.FORM_ID),
-        localRow.getDataOrMetadataByElementKey(DataTableColumns.LOCALE),
-        localRow.getDataOrMetadataByElementKey(DataTableColumns.SAVEPOINT_TYPE),
-        localRow.getDataOrMetadataByElementKey(DataTableColumns.SAVEPOINT_TIMESTAMP),
-        localRow.getDataOrMetadataByElementKey(DataTableColumns.SAVEPOINT_CREATOR), Scope.asScope(
-            localRow.getDataOrMetadataByElementKey(DataTableColumns.FILTER_TYPE),
-            localRow.getDataOrMetadataByElementKey(DataTableColumns.FILTER_VALUE)), values);
+        localRow.getRawDataOrMetadataByElementKey(DataTableColumns.FORM_ID),
+        localRow.getRawDataOrMetadataByElementKey(DataTableColumns.LOCALE),
+        localRow.getRawDataOrMetadataByElementKey(DataTableColumns.SAVEPOINT_TYPE),
+        localRow.getRawDataOrMetadataByElementKey(DataTableColumns.SAVEPOINT_TIMESTAMP),
+        localRow.getRawDataOrMetadataByElementKey(DataTableColumns.SAVEPOINT_CREATOR), Scope.asScope(
+            localRow.getRawDataOrMetadataByElementKey(DataTableColumns.FILTER_TYPE),
+            localRow.getRawDataOrMetadataByElementKey(DataTableColumns.FILTER_VALUE)), values);
     return syncRow;
   }
 
