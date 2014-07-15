@@ -51,9 +51,9 @@ public class ConflictResolutionListActivity extends ListActivity {
         android.R.layout.simple_list_item_1);
     for (int i = 0; i < this.mConflictTable.getLocalTable().getNumberOfRows(); i++) {
       Row localRow = this.mConflictTable.getLocalTable().getRowAtIndex(i);
-      String localRowId = localRow.getDataOrMetadataByElementKey(DataTableColumns.ID);
+      String localRowId = localRow.getRawDataOrMetadataByElementKey(DataTableColumns.ID);
       Row serverRow = this.mConflictTable.getServerTable().getRowAtIndex(i);
-      String serverRowId = serverRow.getDataOrMetadataByElementKey(DataTableColumns.ID);
+      String serverRowId = serverRow.getRawDataOrMetadataByElementKey(DataTableColumns.ID);
       if (!localRowId.equals(serverRowId)) {
         Log.e(TAG, "row ids at same index are not the same! this is an " +
             "error.");

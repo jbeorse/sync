@@ -144,7 +144,7 @@ public class ConflictResolutionRowActivity extends ListActivity
     // useful information together.
     this.mRowNumber = this.mLocal.getRowNumFromId(mRowId);
     Row localRow = this.mLocal.getRowAtIndex(this.mRowNumber);
-    this.mServerRowETag = localRow.getDataOrMetadataByElementKey(
+    this.mServerRowETag = localRow.getRawDataOrMetadataByElementKey(
         DataTableColumns.ROW_ETAG);
     Row serverRow = this.mServer.getRowAtIndex(this.mRowNumber);
     List<String> columnOrder = tp.getColumnOrder();
@@ -199,11 +199,14 @@ public class ConflictResolutionRowActivity extends ListActivity
     // Note that these calls should never return nulls, as whenever a row is in
     // conflict, there should be a conflict type. Therefore if we throw an
     // error that is fine, as we've violated an invariant.
-    int localConflictType = Integer.parseInt(mLocal.getRowAtIndex(mRowNumber)
-        .getDataOrMetadataByElementKey(DataTableColumns.CONFLICT_TYPE));
-    int serverConflictType =
-        Integer.parseInt(mServer.getRowAtIndex(mRowNumber)
-            .getDataOrMetadataByElementKey(DataTableColumns.CONFLICT_TYPE));
+    String localConflictTypeStr = mLocal.getRowAtIndex(mRowNumber)
+        .getRawDataOrMetadataByElementKey(DataTableColumns.CONFLICT_TYPE);
+    int localConflictType = (localConflictTypeStr == null) ? null :
+          Integer.parseInt(localConflictTypeStr);
+    String serverConflictTypeStr = mServer.getRowAtIndex(mRowNumber)
+        .getRawDataOrMetadataByElementKey(DataTableColumns.CONFLICT_TYPE);
+    int serverConflictType = (serverConflictTypeStr == null) ? null :
+        Integer.parseInt(serverConflictTypeStr);
     if (localConflictType ==
           ConflictType.LOCAL_UPDATED_UPDATED_VALUES &&
         serverConflictType ==
