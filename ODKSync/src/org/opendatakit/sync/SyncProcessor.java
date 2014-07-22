@@ -17,12 +17,10 @@ package org.opendatakit.sync;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TimeZone;
 
@@ -34,12 +32,12 @@ import org.codehaus.jackson.map.ObjectMapper;
 import org.opendatakit.aggregate.odktables.rest.ConflictType;
 import org.opendatakit.aggregate.odktables.rest.SyncState;
 import org.opendatakit.aggregate.odktables.rest.entity.Column;
+import org.opendatakit.aggregate.odktables.rest.entity.DataKeyValue;
 import org.opendatakit.aggregate.odktables.rest.entity.Scope;
 import org.opendatakit.aggregate.odktables.rest.entity.TableDefinitionResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResource;
 import org.opendatakit.common.android.data.ColumnProperties;
 import org.opendatakit.common.android.data.ColumnType;
-import org.opendatakit.common.android.data.DataHelper;
 import org.opendatakit.common.android.data.DbTable;
 import org.opendatakit.common.android.data.TableDefinitions;
 import org.opendatakit.common.android.data.TableProperties;
@@ -1225,9 +1223,9 @@ public class SyncProcessor implements SynchronizerStatus {
         table.actualUpdateRowByRowId(serverRow.getRowId(), values);
 
         // set up to insert the conflicting row from the server
-        for (Entry<String, String> entry : serverRow.getValues().entrySet()) {
-          String colName = entry.getKey();
-          values.put(colName, entry.getValue());
+        for (DataKeyValue entry : serverRow.getValues()) {
+          String colName = entry.column;
+          values.put(colName, entry.value);
         }
 
         // insert conflicting server row
@@ -1298,9 +1296,9 @@ public class SyncProcessor implements SynchronizerStatus {
       values.put(DataTableColumns.SAVEPOINT_TIMESTAMP, serverRow.getSavepointTimestamp());
       values.put(DataTableColumns.SAVEPOINT_CREATOR, serverRow.getSavepointCreator());
 
-      for (Entry<String, String> entry : serverRow.getValues().entrySet()) {
-        String colName = entry.getKey();
-        values.put(colName, entry.getValue());
+      for (DataKeyValue entry : serverRow.getValues()) {
+        String colName = entry.column;
+        values.put(colName, entry.value);
       }
 
       table.actualAddRow(values);
@@ -1361,9 +1359,9 @@ public class SyncProcessor implements SynchronizerStatus {
         values.put(DataTableColumns.SAVEPOINT_TIMESTAMP, serverRow.getSavepointTimestamp());
         values.put(DataTableColumns.SAVEPOINT_CREATOR, serverRow.getSavepointCreator());
 
-        for (Entry<String, String> entry : serverRow.getValues().entrySet()) {
-          String colName = entry.getKey();
-          values.put(colName, entry.getValue());
+        for (DataKeyValue entry : serverRow.getValues()) {
+          String colName = entry.column;
+          values.put(colName, entry.value);
         }
 
         table.actualUpdateRowByRowId(serverRow.getRowId(), values);
@@ -1419,12 +1417,18 @@ public class SyncProcessor implements SynchronizerStatus {
   private SyncRow convertToSyncRow(TableProperties tp, Row localRow) {
     String rowId = localRow.getRowId();
     String rowETag = localRow.getRawDataOrMetadataByElementKey(DataTableColumns.ROW_ETAG);
-    Map<String, String> values = new HashMap<String, String>();
+    ArrayList<DataKeyValue> values = new ArrayList<DataKeyValue>();
 
     for (ColumnProperties cp : tp.getAllColumns().values()) {
-      if (cp.isUnitOfRetention()) {
+      boolean retainInDb = false;
+      if (cp.getColumnType().name().equals("array") ||
+          cp.getListChildElementKeys() == null || cp.getListChildElementKeys().isEmpty()) {
+        retainInDb = true;
+      }
+
+      if (retainInDb) {
         String elementKey = cp.getElementKey();
-        values.put(elementKey, localRow.getRawDataOrMetadataByElementKey(elementKey));
+        values.add(new DataKeyValue(elementKey, localRow.getRawDataOrMetadataByElementKey(elementKey)));
       }
     }
     SyncRow syncRow = new SyncRow(rowId, rowETag, false,
@@ -1482,8 +1486,7 @@ public class SyncProcessor implements SynchronizerStatus {
           listChildElementKeys = mapper.readValue(lek, List.class);
         }
         tp.addColumn(col.getElementKey(), col.getElementKey(), col.getElementName(),
-            ColumnType.valueOf(col.getElementType()), listChildElementKeys,
-            DataHelper.intToBool(col.getIsUnitOfRetention()));
+            ColumnType.valueOf(col.getElementType()), listChildElementKeys);
       }
       tp.setSyncTag(new SyncTag(null, definitionResource.getSchemaETag()));
     } else {
@@ -1505,8 +1508,7 @@ public class SyncProcessor implements SynchronizerStatus {
         if (cp == null) {
           // we can support modifying of schema via adding of columns
           tp.addColumn(col.getElementKey(), col.getElementKey(), col.getElementName(),
-              ColumnType.valueOf(col.getElementType()), listChildElementKeys,
-              DataHelper.intToBool(col.getIsUnitOfRetention()));
+              ColumnType.valueOf(col.getElementType()), listChildElementKeys);
         } else {
           List<String> cpListChildElementKeys = cp.getListChildElementKeys();
           if (cpListChildElementKeys == null) {
@@ -1514,7 +1516,6 @@ public class SyncProcessor implements SynchronizerStatus {
           }
           if (!((cp.getElementName() == col.getElementName() || ((cp.getElementName() != null) && cp
               .getElementName().equals(col.getElementName())))
-              && cp.isUnitOfRetention() == DataHelper.intToBool(col.getIsUnitOfRetention())
               && cpListChildElementKeys.size() == listChildElementKeys.size() && cpListChildElementKeys
                 .containsAll(listChildElementKeys))) {
             throw new SchemaMismatchException("Server schema differs from local schema");
@@ -1558,7 +1559,6 @@ public class SyncProcessor implements SynchronizerStatus {
       String elementName = cp.getElementName();
       ColumnType colType = cp.getColumnType();
       List<String> listChildrenElements = cp.getListChildElementKeys();
-      int isUnitOfRetention = DataHelper.boolToInt(cp.isUnitOfRetention());
       String listChildElementKeysStr = null;
       try {
         listChildElementKeysStr = mapper.writeValueAsString(listChildrenElements);
@@ -1575,8 +1575,8 @@ public class SyncProcessor implements SynchronizerStatus {
       // Column c = new Column(tp.getTableId(), elementKey, elementName,
       // colType.name(), listChildElementKeysStr,
       // (isUnitOfRetention != 0), joinsStr);
-      Column c = new Column(tp.getTableId(), elementKey, elementName, colType.name(),
-          listChildElementKeysStr, (isUnitOfRetention != 0));
+      Column c = new Column(elementKey, elementName, colType.name(),
+          listChildElementKeysStr);
       columns.add(c);
     }
     return columns;

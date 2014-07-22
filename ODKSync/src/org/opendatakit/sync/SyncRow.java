@@ -15,16 +15,19 @@
  */
 package org.opendatakit.sync;
 
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 
+import org.opendatakit.aggregate.odktables.rest.entity.DataKeyValue;
 import org.opendatakit.aggregate.odktables.rest.entity.Scope;
 
 /**
  * A SyncRow is an in-between class to map rows in the database to rows in the
  * cloud.
- * 
+ *
  * @author the.dylan.price@gmail.com
- * 
+ *
  */
 public class SyncRow {
 	private String rowId;
@@ -65,13 +68,13 @@ public class SyncRow {
 	 */
 	private String savepointCreator;
 
-	private Map<String, String> values;
+	private ArrayList<DataKeyValue> orderedValues;
 
 	public SyncRow(final String rowId, final String rowETag,
 			final boolean deleted, final String formId, final String locale,
 			final String savepointType, final String savepointTimestamp,
 			final String savepointCreator, final Scope filterScope,
-			final Map<String, String> values) {
+			final ArrayList<DataKeyValue> values) {
 		this.rowId = rowId;
 		this.rowETag = rowETag;
 		this.deleted = deleted;
@@ -81,7 +84,18 @@ public class SyncRow {
 		this.savepointTimestamp = savepointTimestamp;
 		this.savepointCreator = savepointCreator;
 		this.filterScope = filterScope;
-		this.values = values;
+	    if ( values == null ) {
+	      this.orderedValues = new ArrayList<DataKeyValue>();
+	    } else {
+	      Collections.sort(values, new Comparator<DataKeyValue>(){
+
+	        @Override
+	        public int compare(DataKeyValue arg0, DataKeyValue arg1) {
+	          return arg0.column.compareTo(arg1.column);
+	        }});
+
+	      this.orderedValues = values;
+	    }
 	}
 
 	public String getRowId() {
@@ -156,12 +170,23 @@ public class SyncRow {
 		this.savepointCreator = savepointCreator;
 	}
 
-	public Map<String, String> getValues() {
-		return this.values;
+	public ArrayList<DataKeyValue> getValues() {
+		return this.orderedValues;
 	}
 
-	public void setValues(final Map<String, String> values) {
-		this.values = values;
+	public void setValues(final ArrayList<DataKeyValue> values) {
+     if ( values == null ) {
+       this.orderedValues = new ArrayList<DataKeyValue>();
+     } else {
+       Collections.sort(values, new Comparator<DataKeyValue>(){
+
+         @Override
+         public int compare(DataKeyValue arg0, DataKeyValue arg1) {
+           return arg0.column.compareTo(arg1.column);
+         }});
+
+       this.orderedValues = values;
+     }
 	}
 
 	@java.lang.Override

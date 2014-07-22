@@ -417,7 +417,7 @@ public class AggregateSynchronizer implements Synchronizer {
       throw e;
     }
 
-    for (TableResource tableResource : tableResources.getEntries()) {
+    for (TableResource tableResource : tableResources.getTables()) {
       resources.put(tableResource.getTableId(), tableResource);
       tables.add(tableResource);
     }
@@ -569,7 +569,7 @@ public class AggregateSynchronizer implements Synchronizer {
       }
 
       Map<String, SyncRow> syncRows = new HashMap<String, SyncRow>();
-      for (RowResource row : rows.getEntries()) {
+      for (RowResource row : rows.getRows()) {
         SyncRow syncRow = new SyncRow(row.getRowId(), row.getRowETag(), row.isDeleted(),
                                       row.getFormId(), row.getLocale(),
                                       row.getSavepointType(), row.getSavepointTimestamp(),
@@ -1045,7 +1045,7 @@ public class AggregateSynchronizer implements Synchronizer {
     OdkTablesFileManifest manifest = responseEntity.getBody();
     List<OdkTablesFileManifestEntry> theList = null;
     if ( manifest != null ) {
-    	theList = manifest.getEntries();
+    	theList = manifest.getFiles();
     }
     if ( theList == null ) {
     	theList = Collections.emptyList();
@@ -1062,7 +1062,7 @@ public class AggregateSynchronizer implements Synchronizer {
     OdkTablesFileManifest manifest = responseEntity.getBody();
     List<OdkTablesFileManifestEntry> theList = null;
     if ( manifest != null ) {
-    	theList = manifest.getEntries();
+    	theList = manifest.getFiles();
     }
     if ( theList == null ) {
     	theList = Collections.emptyList();
@@ -1384,7 +1384,7 @@ public class AggregateSynchronizer implements Synchronizer {
       OdkTablesFileManifest manifest = responseEntity.getBody();
       List<OdkTablesFileManifestEntry> theList = null;
       if ( manifest != null ) {
-        theList = manifest.getEntries();
+        theList = manifest.getFiles();
       }
       if ( theList == null ) {
         theList = Collections.emptyList();
@@ -1456,7 +1456,7 @@ public class AggregateSynchronizer implements Synchronizer {
       OdkTablesFileManifest manifest = responseEntity.getBody();
       List<OdkTablesFileManifestEntry> theList = null;
       if ( manifest != null ) {
-        theList = manifest.getEntries();
+        theList = manifest.getFiles();
       }
       if ( theList == null ) {
         theList = Collections.emptyList();
