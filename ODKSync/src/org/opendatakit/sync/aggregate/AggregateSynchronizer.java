@@ -78,7 +78,6 @@ import org.opendatakit.sync.exceptions.RequestFailureException;
 import org.opendatakit.sync.service.SyncProgressState;
 import org.opendatakit.sync.springframework.AggregateRequestInterceptor;
 import org.opendatakit.sync.springframework.OdkJsonHttpMessageConverter;
-import org.opendatakit.sync.springframework.OdkXmlHttpMessageConverter;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpEntity;
@@ -308,16 +307,6 @@ public class AggregateSynchronizer implements Synchronizer {
     mediaTypeParams = new HashMap<String,String>();
     mediaTypeParams.put("q", "1.0");
     MediaType json = new MediaType(MediaType.APPLICATION_JSON.getType(), MediaType.APPLICATION_JSON.getSubtype(), mediaTypeParams);
-    // XML is OK
-    mediaTypeParams = new HashMap<String,String>();
-    mediaTypeParams.put("charset", CharEncoding.UTF_8.toLowerCase(Locale.ENGLISH));
-    mediaTypeParams.put("q", "0.8");
-    MediaType txmlUtf8 = new MediaType(MediaType.TEXT_XML.getType(), MediaType.TEXT_XML.getSubtype(), mediaTypeParams);
-    // application/*+xml is odd but OK
-    mediaTypeParams = new HashMap<String,String>();
-    mediaTypeParams.put("charset", CharEncoding.UTF_8.toLowerCase(Locale.ENGLISH));
-    mediaTypeParams.put("q", "0.6");
-    MediaType axmlUtf8 = new MediaType(MediaType.APPLICATION_WILDCARD_XML.getType(), MediaType.APPLICATION_WILDCARD_XML.getSubtype(), mediaTypeParams);
     // don't really want plaintext...
     mediaTypeParams = new HashMap<String,String>();
     mediaTypeParams.put("charset", CharEncoding.UTF_8.toLowerCase(Locale.ENGLISH));
@@ -325,8 +314,6 @@ public class AggregateSynchronizer implements Synchronizer {
     MediaType tplainUtf8 = new MediaType(MediaType.TEXT_PLAIN.getType(), MediaType.TEXT_PLAIN.getSubtype(), mediaTypeParams);
 
     acceptableMediaTypes.add(json);
-    acceptableMediaTypes.add(txmlUtf8);
-    acceptableMediaTypes.add(axmlUtf8);
     acceptableMediaTypes.add(tplainUtf8);
 
     this.requestHeaders.setAccept(acceptableMediaTypes);
@@ -353,16 +340,12 @@ public class AggregateSynchronizer implements Synchronizer {
     converters = new ArrayList<HttpMessageConverter<?>>();
     // JSON conversion...
     converters.add(new OdkJsonHttpMessageConverter(false));
-    // XML conversion...
-    converters.add(new OdkXmlHttpMessageConverter());
     this.rt.setMessageConverters(converters);
 
     // undo work-around for erroneous gzip on auth token interaction
     converters = new ArrayList<HttpMessageConverter<?>>();
     // JSON conversion...
     converters.add(new OdkJsonHttpMessageConverter(true));
-    // XML conversion...
-    converters.add(new OdkXmlHttpMessageConverter());
     this.tokenRt.setMessageConverters(converters);
 
     checkAccessToken(accessToken);
