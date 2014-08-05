@@ -658,6 +658,29 @@ public class AggregateSynchronizer implements Synchronizer {
     return newList;
   }
 
+  /**
+   * Remove all assets/*.init files (e.g., tables.init) that only 
+   * alter the data tables of the application. These are not needed on the 
+   * server because their actions have already caused changes in the data 
+   * tables that will be shared across all devices. I.e., they only need to 
+   * be executed on the one starter device, and then everything gets replicated
+   * everywhere else. 
+   * 
+   * @param relativePaths
+   * @return
+   */
+  private static List<String> filterOutAssetInitFiles(List<String> relativePaths) {
+	    List<String> newList = new ArrayList<String>();
+	    for ( String relativePath : relativePaths ) {
+	      if ( relativePath.equals("assets/tables.init") ) {
+	    	  continue;
+	      } else {
+	          newList.add(relativePath);
+	      }
+	    }
+	    return newList;
+  }
+  
   private static List<String> filterInTableIdFiles(List<String> relativePaths, String tableId) {
     List<String> newList = new ArrayList<String>();
     for ( String relativePath : relativePaths ) {
@@ -774,7 +797,8 @@ public class AggregateSynchronizer implements Synchronizer {
     List<String> relativePathsOnDevice = getAllFilesUnderFolder(appFolder,
         dirsToExclude);
     relativePathsOnDevice = filterOutTableIdAssetFiles(relativePathsOnDevice);
-
+    relativePathsOnDevice = filterOutAssetInitFiles(relativePathsOnDevice);
+    
     boolean success = true;
     double stepSize = 100.0 / (1 + relativePathsOnDevice.size() + manifest.size());
     int stepCount = 1;
