@@ -30,6 +30,15 @@ public class SyncApp extends Application {
     return singleton;
   }
 
+  private OdkSyncServiceProxy proxy = null;
+  
+  public synchronized OdkSyncServiceProxy getOdkSyncServiceProxy() {
+    if ( proxy == null ) {
+      proxy = new OdkSyncServiceProxy(this);
+    }
+    return proxy;
+  }
+  
   public String getVersionCodeString() {
     try {
       PackageInfo pinfo;

@@ -22,12 +22,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.opendatakit.sync.OdkSyncServiceProxy;
 import org.opendatakit.sync.R;
+import org.opendatakit.sync.SyncApp;
 import org.opendatakit.sync.SyncConsts;
 import org.opendatakit.sync.SyncPreferences;
 import org.opendatakit.sync.exceptions.NoAppNameSpecifiedException;
 import org.opendatakit.sync.files.SyncUtil;
 import org.opendatakit.sync.service.SyncProgressState;
-import org.opendatakit.sync.service.SyncStatus;
 
 import android.accounts.Account;
 import android.accounts.AccountManager;
@@ -72,11 +72,10 @@ public class SyncActivity extends Activity {
   String appName;
   private AccountManager accountManager;
 
-  private OdkSyncServiceProxy syncProxy;
-
   private TextView progressState;
   private TextView progressMessage;
 
+  private boolean authorizeSinceCompletion = true;
   private boolean authorizeAccountSuccessful;
 
   @Override
@@ -87,8 +86,6 @@ public class SyncActivity extends Activity {
       appName = SyncUtil.getDefaultAppName();
     }
     accountManager = AccountManager.get(this);
-
-    syncProxy = new OdkSyncServiceProxy(this);
 
     setTitle("ODK SYNC");
     setContentView(R.layout.aggregate_activity);
@@ -126,7 +123,7 @@ public class SyncActivity extends Activity {
 
   @Override
   protected void onDestroy() {
-    syncProxy.shutdown();
+    SyncApp.getInstance().getOdkSyncServiceProxy().shutdown();
     super.onDestroy();
   }
 
@@ -256,14 +253,12 @@ public class SyncActivity extends Activity {
                 Toast.LENGTH_SHORT).show();
           } else {
             try {
-              syncProxy.pushToServer(appName);
+              disableButtons();
+              SyncApp.getInstance().getOdkSyncServiceProxy().pushToServer(appName);
             } catch (RemoteException e) {
               Log.e(LOGTAG, "Problem with push command");
             }
-
           }
-          findViewById(R.id.aggregate_activity_sync_now_push_button).setEnabled(false);
-          findViewById(R.id.aggregate_activity_sync_now_pull_button).setEnabled(false);
         } catch (IOException e) {
           // TODO Auto-generated catch block
           e.printStackTrace();
@@ -289,13 +284,12 @@ public class SyncActivity extends Activity {
         Toast.makeText(this, getString(R.string.choose_account), Toast.LENGTH_SHORT).show();
       } else {
         try {
-          syncProxy.synchronizeFromServer(appName);
+          disableButtons();
+          SyncApp.getInstance().getOdkSyncServiceProxy().synchronizeFromServer(appName);
         } catch (RemoteException e) {
           Log.e(LOGTAG, "Problem with pull command");
         }
       }
-      findViewById(R.id.aggregate_activity_sync_now_push_button).setEnabled(false);
-      findViewById(R.id.aggregate_activity_sync_now_pull_button).setEnabled(false);
     } catch (IOException e) {
       // TODO Auto-generated catch block
       e.printStackTrace();
@@ -321,6 +315,7 @@ public class SyncActivity extends Activity {
     // Check that the result was ok for the authorize
     if (requestCode == AUTHORIZE_ACCOUNT_RESULT_ID && resultCode == Activity.RESULT_OK) {
       this.authorizeAccountSuccessful = true;
+      this.authorizeSinceCompletion = true;
     }
     refreshActivityUINeeded();
   }
@@ -415,6 +410,7 @@ public class SyncActivity extends Activity {
   void updateProgress() {
     try {
 
+      OdkSyncServiceProxy syncProxy = SyncApp.getInstance().getOdkSyncServiceProxy();
       SyncProgressState progress = syncProxy.getSyncProgress(appName);
       
       if ( progress != priorProgress ) {
@@ -452,12 +448,20 @@ public class SyncActivity extends Activity {
 
           boolean haveSettings = (accountName != null) && (serverUri != null);
             
-          boolean restOfButtons = haveSettings && authorizeAccountSuccessful &&
-              ( progress == null || 
-                progress == SyncProgressState.COMPLETE || progress == SyncProgressState.ERROR );
+          boolean isIdle = ( progress == null || 
+              progress == SyncProgressState.COMPLETE || progress == SyncProgressState.ERROR );
+
+          if ( isIdle && !authorizeSinceCompletion ) {
+            if ( progress != null && progress != SyncProgressState.COMPLETE ) {
+              authorizeAccountSuccessful = false;
+            }
+          }
           
-          findViewById(R.id.aggregate_activity_save_settings_button).setEnabled(true);
-          findViewById(R.id.aggregate_activity_authorize_account_button).setEnabled(true);
+          boolean restOfButtons = haveSettings && authorizeAccountSuccessful && isIdle;
+          
+          findViewById(R.id.aggregate_activity_save_settings_button).setEnabled(isIdle);
+          findViewById(R.id.aggregate_activity_authorize_account_button)
+            .setEnabled(isIdle && !authorizeAccountSuccessful);
           findViewById(R.id.aggregate_activity_sync_now_push_button).setEnabled(restOfButtons);
           findViewById(R.id.aggregate_activity_sync_now_pull_button).setEnabled(restOfButtons);
         } catch (Exception e) {
@@ -473,4 +477,11 @@ public class SyncActivity extends Activity {
     }
   }
 
+  private void disableButtons() {
+    authorizeSinceCompletion = false;
+    findViewById(R.id.aggregate_activity_save_settings_button).setEnabled(false);
+    findViewById(R.id.aggregate_activity_authorize_account_button).setEnabled(false);
+    findViewById(R.id.aggregate_activity_sync_now_push_button).setEnabled(false);
+    findViewById(R.id.aggregate_activity_sync_now_pull_button).setEnabled(false);
+  }
 }

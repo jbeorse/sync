@@ -52,18 +52,9 @@
         android:id="@+id/aggregate_activity_sync_now_pull_button"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
         android:onClick="onClickSyncNowPull"
         android:text="@+string/sync_now_pull" />
 
-    <Button
-        android:id="@+id/aggregate_activity_sync_now_push_button"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
-        android:onClick="onClickSyncNowPush"
-        android:text="@+string/sync_now_push" />
-    
     <TextView
         android:id="@+id/aggregate_activity_progress_state_label"
         android:layout_width="wrap_content"
@@ -85,6 +76,31 @@
         android:id="@+id/aggregate_activity_progress_message"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content" />
+    
+    <!--  push the reset button to the bottom of the screen -->
+	<View
+        android:layout_width="wrap_content"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
 
+	<LinearLayout
+	    android:layout_height="wrap_content"
+	    android:layout_width="fill_parent"
+	    android:orientation="horizontal" >
+
+	<View
+        android:layout_height="0dp"
+        android:layout_width="0dp"
+        android:layout_weight="1" />
+
+	<Button
+        android:id="@+id/aggregate_activity_sync_now_push_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:onClick="onClickSyncNowPush"
+        android:text="@+string/sync_now_push" />
+		    	    
+	</LinearLayout>
+    
 </LinearLayout>
 </ScrollView>
