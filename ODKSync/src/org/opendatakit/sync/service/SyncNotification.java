@@ -25,7 +25,7 @@ public final class SyncNotification {
         .getSystemService(Context.NOTIFICATION_SERVICE);
     this.messageNum = 0;
     this.updateText = null;
-    this.progressState = SyncProgressState.INIT;
+    this.progressState = null;
     this.builder = new Notification.Builder(cntxt);
   }
 

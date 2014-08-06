@@ -204,6 +204,31 @@ public class SyncProcessor implements SynchronizerStatus {
     }
     iMajorSyncStep = 0;
 
+    // TODO: fix sync sequence
+    // TODO: fix sync sequence
+    // TODO: fix sync sequence
+    // TODO: fix sync sequence
+    // TODO: fix sync sequence
+    // TODO: fix sync sequence
+    // Intermediate deployment failures can leave the client in a bad state.
+    // The actual sync protocol should probably be:
+    // 
+    // (1) pull down all the table-id level file changes and new files
+    // (2) pull down all the app-level file changes and new files
+    // (3) delete the app-level files locally
+    // (4) delete the table-id level files locally
+    //
+    // We also probably want some critical files to be pulled last. e.g., 
+    // tables/tableid/index.html , assets/index.html ?
+    // so that we know that all supporting files are present before we 
+    // update these files.
+    //
+    // As long as form changes are done via completely new form ids, and 
+    // push as new form id files, this enables the sync to pull the new forms,
+    // then presumably the table-level files would control the launching of 
+    // those forms, and the app-level files would launch the table-level files
+    // 
+    
     // First we're going to synchronize the app level files.
     try {
       boolean success = synchronizer.syncAppLevelFiles(pushToServer, this);
