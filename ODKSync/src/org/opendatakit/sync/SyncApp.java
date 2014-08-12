@@ -15,6 +15,7 @@
 package org.opendatakit.sync;
 
 import org.opendatakit.common.android.utilities.ODKFileUtils;
+import org.opendatakit.sync.R;
 
 import android.app.Application;
 import android.content.pm.PackageInfo;
@@ -49,6 +50,20 @@ public class SyncApp extends Application {
       e.printStackTrace();
       return "";
     }
+  }
+
+  public String getVersionedAppName() {
+    String versionDetail = "";
+    try {
+      PackageInfo pinfo;
+      pinfo = getPackageManager().getPackageInfo(getPackageName(), 0);
+      int versionNumber = pinfo.versionCode;
+      String versionName = pinfo.versionName;
+      versionDetail = " " + versionName + " (rev " + versionNumber + ")";
+    } catch (NameNotFoundException e) {
+      e.printStackTrace();
+    }
+    return getString(R.string.app_name) + versionDetail;
   }
 
   /**

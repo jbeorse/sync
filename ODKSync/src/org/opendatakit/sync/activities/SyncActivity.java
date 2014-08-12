@@ -40,6 +40,8 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.os.RemoteException;
 import android.util.Log;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
@@ -58,7 +60,10 @@ public class SyncActivity extends Activity {
   private static final String ACCOUNT_TYPE_G = "com.google";
   private static final String URI_FIELD_EMPTY = "http://";
 
+  private static final int MENU_ABOUT = 2;
+  
   private static final int AUTHORIZE_ACCOUNT_RESULT_ID = 1;
+  private static final int ABOUT_ACTIVITY_CODE = 2;
 
   static final AtomicBoolean refreshRequired = new AtomicBoolean(false);
 
@@ -127,6 +132,25 @@ public class SyncActivity extends Activity {
     super.onDestroy();
   }
 
+  @Override
+  public boolean onCreateOptionsMenu(Menu menu) {
+    super.onCreateOptionsMenu(menu);
+    MenuItem item = menu.add(Menu.NONE, MENU_ABOUT, Menu.NONE, getString(R.string.about));
+    item.setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
+    
+    return true;
+  }
+
+  @Override
+  public boolean onOptionsItemSelected(MenuItem item) {
+    if (item.getItemId() == MENU_ABOUT) {
+      Intent i = new Intent(this, AboutWrapperActivity.class);
+      i.putExtra(SyncConsts.INTENT_KEY_APP_NAME, appName);
+      startActivityForResult(i, ABOUT_ACTIVITY_CODE);
+    }
+    return super.onOptionsItemSelected(item);
+  }
+  
   private void findViewComponents() {
     uriField = (EditText) findViewById(R.id.aggregate_activity_uri_field);
     accountListSpinner = (Spinner) findViewById(R.id.aggregate_activity_account_list_spinner);

@@ -42,6 +42,7 @@
         <activity android:name="org.opendatakit.conflict.activities.ConflictResolutionListActivity" />
 		<activity android:name="org.opendatakit.conflict.activities.ConflictResolutionRowActivity" />
         <activity android:name=".activities.AccountInfoActivity" />
-    </application>
+        <activity android:name=".activities.AboutWrapperActivity"/>
+     </application>
 
 </manifest>
