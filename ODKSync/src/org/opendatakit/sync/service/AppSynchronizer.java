@@ -82,19 +82,19 @@ public class AppSynchronizer {
         // android.os.Debug.waitForDebugger();
 
         globalNotifManager.startingSync(appName);
-        syncProgress.updateNotification(SyncProgressState.INIT, cntxt.getString(R.string.starting_sync), 100, 0, false);
+        syncProgress.updateNotification(SyncProgressState.STARTING, cntxt.getString(R.string.starting_sync), 100, 0, false);
         sync(syncProgress);
       } catch (NoAppNameSpecifiedException e) {
         e.printStackTrace();
         status = SyncStatus.NETWORK_ERROR;
         syncProgress.updateNotification(SyncProgressState.ERROR, "There were failures..." , 100, 0, false);
       } finally {
+        SyncActivity.refreshActivityUINeeded();
         try {
           globalNotifManager.stoppingSync(appName);
         } catch (NoAppNameSpecifiedException e) {
           // impossible to get here
         }
-        SyncActivity.refreshActivityUINeeded();
       }
 
     }
@@ -183,7 +183,7 @@ public class AppSynchronizer {
         }
 
         // if rows aren't successful, fail.
-        if (status != SyncStatus.SYNCING && status != SyncStatus.CONFLICT_RESOLUTION) {          
+        if (status != SyncStatus.SYNCING && status != SyncStatus.CONFLICT_RESOLUTION) { 
           syncProgress.finalErrorNotification("There were failures. Status: " + status + " Reason:" + reason);
           return;
         }

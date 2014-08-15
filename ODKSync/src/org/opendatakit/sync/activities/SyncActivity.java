@@ -61,7 +61,7 @@ public class SyncActivity extends Activity {
   private static final String URI_FIELD_EMPTY = "http://";
 
   private static final int MENU_ABOUT = 2;
-  
+
   private static final int AUTHORIZE_ACCOUNT_RESULT_ID = 1;
   private static final int ABOUT_ACTIVITY_CODE = 2;
 
@@ -69,6 +69,7 @@ public class SyncActivity extends Activity {
 
   public static final void refreshActivityUINeeded() {
     refreshRequired.set(true);
+    Log.e(LOGTAG, "FROM UI THREAD: triggering another polling cycle");
   }
 
   private EditText uriField;
@@ -95,6 +96,7 @@ public class SyncActivity extends Activity {
     setTitle("ODK SYNC");
     setContentView(R.layout.aggregate_activity);
     findViewComponents();
+    disableButtons();
     try {
       SyncPreferences prefs = new SyncPreferences(this, appName);
       initializeData(prefs);
@@ -116,7 +118,7 @@ public class SyncActivity extends Activity {
   @Override
   protected void onResume() {
     super.onResume();
-    refreshActivityUINeeded(); 
+    refreshActivityUINeeded();
     launchUpdateThread();
   }
 
@@ -128,7 +130,7 @@ public class SyncActivity extends Activity {
 
   @Override
   protected void onDestroy() {
-    SyncApp.getInstance().getOdkSyncServiceProxy().shutdown();
+    SyncApp.getInstance().resetOdkSyncServiceProxy();
     super.onDestroy();
   }
 
@@ -137,7 +139,7 @@ public class SyncActivity extends Activity {
     super.onCreateOptionsMenu(menu);
     MenuItem item = menu.add(Menu.NONE, MENU_ABOUT, Menu.NONE, getString(R.string.about));
     item.setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
-    
+
     return true;
   }
 
@@ -150,7 +152,7 @@ public class SyncActivity extends Activity {
     }
     return super.onOptionsItemSelected(item);
   }
-  
+
   private void findViewComponents() {
     uriField = (EditText) findViewById(R.id.aggregate_activity_uri_field);
     accountListSpinner = (Spinner) findViewById(R.id.aggregate_activity_account_list_spinner);
@@ -345,7 +347,7 @@ public class SyncActivity extends Activity {
   }
 
   private synchronized void launchUpdateThread() {
-    while (doUpdateGUI == null || !doUpdateGUI.start() ) {
+    while (doUpdateGUI == null || !doUpdateGUI.start()) {
       PollingUpdateRunnable pur = new PollingUpdateRunnable();
       Thread thread = new Thread(null, pur, "pollingUI");
       pur.setThread(thread);
@@ -365,22 +367,33 @@ public class SyncActivity extends Activity {
 
   private PollingUpdateRunnable doUpdateGUI = null;
 
+  private class ProgressSettings {
+    String progressStateText;
+    String progressMessageText;
+    boolean buttonChanged;
+    boolean settingsEnabled;
+    boolean authenticateEnabled;
+    boolean actionsEnabled;
+  }
+
   private class PollingUpdateRunnable implements Runnable {
     public AtomicBoolean stopSignal = new AtomicBoolean(false);
     private Thread runningThread = null;
     private boolean started = false;
+    private boolean createdFresh = true;
+    private SyncProgressState priorProgress = null;
 
     public void setThread(Thread runningThread) {
       this.runningThread = runningThread;
     }
 
     public synchronized boolean start() {
-      
+
       if (stopSignal.get()) {
         // something is waiting for this to die...
         return false;
       }
-      
+
       if (!runningThread.isAlive()) {
         if (!started) {
           // haven't started it yet
@@ -411,14 +424,132 @@ public class SyncActivity extends Activity {
 
     @Override
     public void run() {
+      // android.os.Debug.waitForDebugger();
       while (!stopSignal.get()) {
         try {
+          try {
+            final ProgressSettings progressSettings = new ProgressSettings();
+            progressSettings.buttonChanged = false;
 
-          runOnUiThread(new Runnable() {
-            public void run() {
-              SyncActivity.this.updateProgress();
+            OdkSyncServiceProxy syncProxy = SyncApp.getInstance().getOdkSyncServiceProxy();
+            if (!syncProxy.isBoundToService()) {
+              progressSettings.progressMessageText = "NULL";
+              progressSettings.progressStateText = "NULL";
+              progressSettings.buttonChanged = true;
+              progressSettings.actionsEnabled = false;
+              progressSettings.authenticateEnabled = true;
+              progressSettings.settingsEnabled = true;
+              
+              if (!createdFresh) {
+                SyncApp.getInstance().resetOdkSyncServiceProxy();
+                syncProxy = SyncApp.getInstance().getOdkSyncServiceProxy();
+                createdFresh = true;
+                refreshRequired.set(true);
+                Log.e(LOGTAG, "triggering another polling cycle (creating new proxy)");
+              } else {
+                refreshRequired.set(true);
+                Log.e(LOGTAG, "triggering another polling cycle (waiting for proxy to connect)");
+              }
+
+            } else {
+
+              if (createdFresh) {
+                createdFresh = false;
+                Log.e(LOGTAG, "proxy has connected!");
+              }
+
+              SyncProgressState progress = syncProxy.getSyncProgress(appName);
+
+              if (progress != priorProgress) {
+                refreshRequired.set(true);
+                Log.e(LOGTAG, "triggering another polling cycle");
+              }
+              priorProgress = progress;
+
+              if (progressState != null) {
+                if (progress == null) {
+                  progressSettings.progressStateText = "NULL";
+                } else {
+                  progressSettings.progressStateText = progress.name();
+                }
+              } else {
+                Log.e(LOGTAG, "NULL progressState variable");
+              }
+
+              String msg = syncProxy.getSyncUpdateMessage(appName);
+              if (progressMessage != null) {
+                if (progress == null) {
+                  progressSettings.progressMessageText = "NULL";
+                } else {
+                  progressSettings.progressMessageText = msg;
+                }
+              } else {
+                Log.e(LOGTAG, "NULL progressMessage variable");
+              }
+
+              if (refreshRequired.get()) {
+                refreshRequired.set(false);
+                try {
+                  SyncPreferences prefs = new SyncPreferences(SyncActivity.this, appName);
+                  String accountName = prefs.getAccount();
+                  String serverUri = prefs.getServerUri();
+
+                  boolean haveSettings = (accountName != null) && (serverUri != null);
+
+                  boolean isIdle = (progress == null || progress == SyncProgressState.INIT
+                      || progress == SyncProgressState.COMPLETE || progress == SyncProgressState.ERROR);
+
+                  if (isIdle && !authorizeSinceCompletion) {
+                    if (progress != null && progress != SyncProgressState.COMPLETE) {
+                      authorizeAccountSuccessful = false;
+                    }
+                  }
+
+                  boolean isBound = syncProxy.isBoundToService();
+
+                  Log.e(LOGTAG,
+                      "refreshing - haveSettings: " + Boolean.toString(haveSettings) + " isBound: "
+                          + Boolean.toString(isBound) + " isIdle: " + Boolean.toString(isIdle));
+
+                  boolean enableProxy = haveSettings && authorizeAccountSuccessful && isIdle;
+                  if (!isBound) {
+                    enableProxy = false;
+                    refreshRequired.set(true);
+                    Log.e(LOGTAG, "triggering another polling cycle");
+                  }
+
+                  progressSettings.buttonChanged = true;
+                  progressSettings.settingsEnabled = isIdle;
+                  progressSettings.authenticateEnabled = isIdle && !authorizeAccountSuccessful;
+                  progressSettings.actionsEnabled = enableProxy;
+
+                } catch (Exception e) {
+                  e.printStackTrace();
+                }
+              }
             }
-          });
+
+            /**
+             * Launch the UI thread to actually do the updates.
+             */
+            runOnUiThread(new Runnable() {
+              public void run() {
+                SyncActivity.this.updateProgress(progressSettings);
+              }
+            });
+
+          } catch (RemoteException e) {
+            Log.e(LOGTAG, "Problem with update messages");
+            refreshRequired.set(true);
+            Log.e(LOGTAG, "triggering another polling cycle");
+            SyncApp.getInstance().resetOdkSyncServiceProxy();
+          } catch (Exception e) {
+            e.printStackTrace();
+            Log.e(LOGTAG, "in runnable for updateProgress");
+            refreshRequired.set(true);
+            Log.e(LOGTAG, "triggering another polling cycle");
+            SyncApp.getInstance().resetOdkSyncServiceProxy();
+          }
 
           Thread.sleep(DELAY_PROGRESS_REFRESH);
         } catch (InterruptedException e) {
@@ -428,76 +559,24 @@ public class SyncActivity extends Activity {
     }
   };
 
-  
-  private SyncProgressState priorProgress = null;
-  
-  void updateProgress() {
-    try {
+  void updateProgress(ProgressSettings progressSettings) {
+    if (!progressState.getText().equals(progressSettings.progressStateText)) {
+      progressState.setText(progressSettings.progressStateText);
+    }
+    if (!progressMessage.getText().equals(progressSettings.progressMessageText)) {
+      progressMessage.setText(progressSettings.progressMessageText);
+    }
 
-      OdkSyncServiceProxy syncProxy = SyncApp.getInstance().getOdkSyncServiceProxy();
-      SyncProgressState progress = syncProxy.getSyncProgress(appName);
-      
-      if ( progress != priorProgress ) {
-        refreshActivityUINeeded();
-      }
-      priorProgress = progress;
-      
-      if (progressState != null) {
-        if (progress == null) {
-          progressState.setText("NULL");
-        } else {
-          progressState.setText(progress.name());
-        }
-      } else {
-        Log.e(LOGTAG, "NULL progressState variable");
-      }
+    if (progressSettings.buttonChanged) {
+      findViewById(R.id.aggregate_activity_save_settings_button).setEnabled(
+          progressSettings.settingsEnabled);
+      findViewById(R.id.aggregate_activity_authorize_account_button).setEnabled(
+          progressSettings.authenticateEnabled);
 
-      String msg = syncProxy.getSyncUpdateMessage(appName);
-      if (progressMessage != null) {
-        if (progress == null) {
-          progressMessage.setText("NULL");
-        } else {
-          progressMessage.setText(msg);
-        }
-      } else {
-        Log.e(LOGTAG, "NULL progressMessage variable");
-      }
-
-      if (SyncActivity.refreshRequired.get()) {
-        SyncActivity.refreshRequired.set(false);
-        try {
-          SyncPreferences prefs = new SyncPreferences(this, appName);
-          String accountName = prefs.getAccount();
-          String serverUri = prefs.getServerUri();
-
-          boolean haveSettings = (accountName != null) && (serverUri != null);
-            
-          boolean isIdle = ( progress == null || 
-              progress == SyncProgressState.COMPLETE || progress == SyncProgressState.ERROR );
-
-          if ( isIdle && !authorizeSinceCompletion ) {
-            if ( progress != null && progress != SyncProgressState.COMPLETE ) {
-              authorizeAccountSuccessful = false;
-            }
-          }
-          
-          boolean restOfButtons = haveSettings && authorizeAccountSuccessful && isIdle;
-          
-          findViewById(R.id.aggregate_activity_save_settings_button).setEnabled(isIdle);
-          findViewById(R.id.aggregate_activity_authorize_account_button)
-            .setEnabled(isIdle && !authorizeAccountSuccessful);
-          findViewById(R.id.aggregate_activity_sync_now_push_button).setEnabled(restOfButtons);
-          findViewById(R.id.aggregate_activity_sync_now_pull_button).setEnabled(restOfButtons);
-        } catch (Exception e) {
-          e.printStackTrace();
-        }
-      }
-
-    } catch (RemoteException e) {
-      Log.e(LOGTAG, "Problem with update messages");
-    } catch (Exception e) {
-      e.printStackTrace();
-      Log.e(LOGTAG, "in runnable for updateProgress");
+      findViewById(R.id.aggregate_activity_sync_now_push_button).setEnabled(
+          progressSettings.actionsEnabled);
+      findViewById(R.id.aggregate_activity_sync_now_pull_button).setEnabled(
+          progressSettings.actionsEnabled);
     }
   }
 

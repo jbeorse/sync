@@ -40,6 +40,13 @@ public class SyncApp extends Application {
     return proxy;
   }
   
+  public synchronized void resetOdkSyncServiceProxy() {
+    if ( proxy != null ) {
+      proxy.shutdown();
+      proxy = null;
+    }
+  }
+  
   public String getVersionCodeString() {
     try {
       PackageInfo pinfo;

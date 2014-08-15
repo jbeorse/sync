@@ -66,7 +66,16 @@ public final class SyncNotification {
   }
   
   public synchronized void clearNotification() {
-    notificationManager.cancel(appName, messageNum);
+    this.progressState = SyncProgressState.COMPLETE;
+    this.updateText = "Sync Completed Successfully";
+ 
+    Notification.Builder finalBuilder = new Notification.Builder(cntxt);
+    finalBuilder.setContentTitle("ODK SYNC SUCESS " + appName).setContentText(updateText).setAutoCancel(true).setOngoing(false);
+    finalBuilder.setSmallIcon(android.R.drawable.ic_dialog_alert);
+ 
+    Notification syncNotif = finalBuilder.getNotification();
+
+    notificationManager.notify(appName, messageNum, syncNotif);
   }
 
 }

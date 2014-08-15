@@ -151,7 +151,7 @@ public class SyncProcessor implements SynchronizerStatus {
     ODKFileUtils.assertDirectoryStructure(appName);
     //android.os.Debug.waitForDebugger();
 
-    syncProgress.updateNotification(SyncProgressState.INIT,
+    syncProgress.updateNotification(SyncProgressState.STARTING,
         context.getString(R.string.retrieving_tables_list_from_server), OVERALL_PROGRESS_BAR_LENGTH, 0, false);
 
     // get tables (tableId -> schemaETag) from server
