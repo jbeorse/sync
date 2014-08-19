@@ -13,11 +13,9 @@ import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
 import org.opendatakit.common.android.provider.DataTableColumns;
 import org.opendatakit.sync.R;
-import org.opendatakit.sync.SyncConsts;
-import org.opendatakit.sync.files.SyncUtil;
+import org.opendatakit.sync.views.components.ConcordantColumn;
+import org.opendatakit.sync.views.components.ConflictColumn;
 import org.opendatakit.sync.views.components.ConflictResolutionListAdapter;
-import org.opendatakit.sync.views.components.ConflictResolutionListAdapter.ConcordantColumn;
-import org.opendatakit.sync.views.components.ConflictResolutionListAdapter.ConflictColumn;
 import org.opendatakit.sync.views.components.ConflictResolutionListAdapter.Resolution;
 import org.opendatakit.sync.views.components.ConflictResolutionListAdapter.Section;
 
@@ -29,8 +27,6 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
-import android.widget.RadioButton;
-import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -81,17 +77,7 @@ public class ConflictResolutionRowActivity extends ListActivity
    * have to choose either to delete or to go ahead and actually restore and
    * then resolve it.
    */
-  private TextView mTextViewDeletionMessage;
-  /**
-   * The option saying they're going to restore and then resolve the conflicts.
-   */
-  private RadioGroup mRadioGroupDeletion;
-  private RadioButton mRadioButtonRestoreAndResolve;
-  /**
-   * The option saying they're going to delete it, possibly discarding any
-   * changes they'd made.
-   */
-  private RadioButton mRadioButtonDelete;
+  private TextView mTextViewConflictMessage;
 
   private boolean mIsShowingTakeLocalDialog;
   private boolean mIsShowingTakeServerDialog;
@@ -100,41 +86,32 @@ public class ConflictResolutionRowActivity extends ListActivity
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
-    String appName = getIntent().getStringExtra(SyncConsts.INTENT_KEY_APP_NAME);
+    String appName = getIntent().getStringExtra(Constants.APP_NAME);
     if ( appName == null ) {
-    	appName = SyncUtil.getDefaultAppName();
+      appName = Constants.DEFAULT_APP_NAME;
     }
     this.setContentView(R.layout.conflict_resolution_row_activity);
-    this.mTextViewDeletionMessage = (TextView)
-        findViewById(R.id.conflict_resolution_deletion_message);
-    this.mRadioGroupDeletion = (RadioGroup)
-        findViewById(R.id.conflict_resolution_deleted_states_radio_group);
-    this.mRadioButtonRestoreAndResolve = (RadioButton)
-        findViewById(R.id.conflict_resolution_radio_button_restore);
-    this.mRadioButtonDelete = (RadioButton)
-        findViewById(R.id.conflict_resolution_radio_button_delete);
+    this.mTextViewConflictMessage = (TextView)
+        findViewById(R.id.conflict_overview_message);
+
     this.mButtonTakeLocal =
-        (Button) findViewById(R.id.conflict_resolution_button_take_local);
-    this.mButtonTakeLocal.setOnClickListener(new TakeLocalClickListener());
+        (Button) findViewById(R.id.conflict_take_local);
     this.mButtonTakeServer =
-        (Button) findViewById(R.id.conflict_resolution_button_take_server);
-    this.mButtonTakeServer.setOnClickListener(new TakeServerClickListener());
+        (Button) findViewById(R.id.conflict_take_server);
+
     this.mButtonResolveRow =
         (Button) findViewById(R.id.conflict_resolution_button_resolve_row);
     this.mButtonResolveRow.setOnClickListener(new ResolveRowClickListener());
+
     String tableId =
-        getIntent().getStringExtra(SyncConsts.INTENT_KEY_TABLE_ID);
+        getIntent().getStringExtra(Constants.TABLE_ID);
     this.mRowId = getIntent().getStringExtra(INTENT_KEY_ROW_ID);
-    TableProperties tp =
-        TableProperties.refreshTablePropertiesForTable(this, appName, tableId);
-    if ( tp.getDbTableName() == null ) {
-      throw new IllegalStateException("Unexpectedly missing tableid!");
-    }
-    DbTable dbTable = DbTable.getDbTable(tp);
+    TableProperties tableProperties =
+        TableProperties.getTablePropertiesForTable(this, appName, tableId);
+    DbTable dbTable = DbTable.getDbTable(tableProperties);
     this.mConflictTable = dbTable.getConflictTable();
     this.mLocal = mConflictTable.getLocalTable();
     this.mServer = mConflictTable.getServerTable();
-    // We'll use these later on, so heat up the caches.
     //
     // And now we need to construct up the adapter.
     // There are several things to do be aware of. We need to get all the
@@ -143,11 +120,11 @@ public class ConflictResolutionRowActivity extends ListActivity
     // We'll present them in user-defined order, as they may have set up the
     // useful information together.
     this.mRowNumber = this.mLocal.getRowNumFromId(mRowId);
-    Row localRow = this.mLocal.getRowAtIndex(this.mRowNumber);
-    this.mServerRowETag = localRow.getRawDataOrMetadataByElementKey(
-        DataTableColumns.ROW_ETAG);
-    Row serverRow = this.mServer.getRowAtIndex(this.mRowNumber);
-    List<String> columnOrder = tp.getColumnOrder();
+    Row localRow = this.mLocal.getRowAtIndex(mRowNumber);
+    Row serverRow = this.mServer.getRowAtIndex(mRowNumber);
+    this.mServerRowETag = serverRow.getRawDataOrMetadataByElementKey(DataTableColumns.ROW_ETAG);
+    TableProperties tp = mConflictTable.getLocalTable().getTableProperties();
+    List<String> columnOrder = tp.getPersistedColumns();
     // This will be the number of rows down we are in the adapter. Each
     // heading and each cell value gets its own row. Columns in conflict get
     // two, as we'll need to display each one to the user.
@@ -159,26 +136,28 @@ public class ConflictResolutionRowActivity extends ListActivity
     for (int i = 0; i < columnOrder.size(); i++) {
       String elementKey = columnOrder.get(i);
       String columnDisplayName =
-          tp.getColumnByElementKey(elementKey).getDisplayName();
+          tp.getColumnByElementKey(elementKey).getLocalizedDisplayName();
       Section newSection = new Section(adapterOffset, columnDisplayName);
       ++adapterOffset;
       sections.add(newSection);
-      String localValue = localRow.getDisplayTextOfData(this, elementKey, true);
-      String serverValue = serverRow.getDisplayTextOfData(this, elementKey, true);
-      if ((localValue == null && serverValue == null) ||
-    	  (localValue != null && localValue.equals(serverValue))) {
+      String localRawValue = localRow.getRawDataOrMetadataByElementKey(elementKey);
+      String localDisplayValue = localRow.getDisplayTextOfData(this, elementKey, true);
+      String serverRawValue = serverRow.getRawDataOrMetadataByElementKey(elementKey);
+      String serverDisplayValue = serverRow.getDisplayTextOfData(this, elementKey, true);
+      if ((localRawValue == null && serverRawValue == null) ||
+    	  (localRawValue != null && localRawValue.equals(serverRawValue))) {
         // TODO: this doesn't compare actual equality of blobs if their display
         // text is the same.
         // We only want to display a single row, b/c there are no choices to
         // be made by the user.
         ConcordantColumn concordance = new ConcordantColumn(adapterOffset,
-            localValue);
+            localDisplayValue);
         noConflictColumns.add(concordance);
         ++adapterOffset;
       } else {
         // We need to display both the server and local versions.
         ConflictColumn conflictColumn = new ConflictColumn(adapterOffset,
-            elementKey, localValue, serverValue);
+            elementKey, localRawValue, localDisplayValue, serverRawValue, serverDisplayValue);
         ++adapterOffset;
         mConflictColumns.add(conflictColumn);
       }
@@ -199,22 +178,26 @@ public class ConflictResolutionRowActivity extends ListActivity
     // Note that these calls should never return nulls, as whenever a row is in
     // conflict, there should be a conflict type. Therefore if we throw an
     // error that is fine, as we've violated an invariant.
-    String localConflictTypeStr = mLocal.getRowAtIndex(mRowNumber)
-        .getRawDataOrMetadataByElementKey(DataTableColumns.CONFLICT_TYPE);
-    int localConflictType = (localConflictTypeStr == null) ? null :
-          Integer.parseInt(localConflictTypeStr);
-    String serverConflictTypeStr = mServer.getRowAtIndex(mRowNumber)
-        .getRawDataOrMetadataByElementKey(DataTableColumns.CONFLICT_TYPE);
-    int serverConflictType = (serverConflictTypeStr == null) ? null :
-        Integer.parseInt(serverConflictTypeStr);
+
+
+    int localConflictType = Integer.parseInt(mLocal.getRowAtIndex(mRowNumber)
+        .getRawDataOrMetadataByElementKey(DataTableColumns.CONFLICT_TYPE));
+    int serverConflictType =
+        Integer.parseInt(mServer.getRowAtIndex(mRowNumber)
+            .getRawDataOrMetadataByElementKey(DataTableColumns.CONFLICT_TYPE));
     if (localConflictType ==
           ConflictType.LOCAL_UPDATED_UPDATED_VALUES &&
         serverConflictType ==
           ConflictType.SERVER_UPDATED_UPDATED_VALUES) {
       // Then it's a normal conflict. Hide the elements of the view relevant
       // to deletion restoration.
-      mTextViewDeletionMessage.setVisibility(View.GONE);
-      mRadioGroupDeletion.setVisibility(View.GONE);
+      mTextViewConflictMessage.setText(getString(R.string.conflict_resolve_or_choose));
+
+      this.mButtonTakeLocal.setOnClickListener(new TakeLocalClickListener());
+      this.mButtonTakeLocal.setText(getString(R.string.conflict_take_local_updates));
+      this.mButtonTakeServer.setOnClickListener(new TakeServerClickListener());
+      this.mButtonTakeServer.setText(getString(R.string.conflict_take_server_updates));
+      this.mButtonResolveRow.setVisibility(View.VISIBLE);
       this.onDecisionMade();
     } else if (localConflictType ==
           ConflictType.LOCAL_DELETED_OLD_VALUES &&
@@ -222,22 +205,19 @@ public class ConflictResolutionRowActivity extends ListActivity
           ConflictType.SERVER_UPDATED_UPDATED_VALUES) {
       // Then the local row was deleted, but someone had inserted a newer
       // updated version on the server.
-      this.mTextViewDeletionMessage.setVisibility(View.VISIBLE);
-      this.mTextViewDeletionMessage.setText(
+      this.mTextViewConflictMessage.setText(
           getString(R.string.conflict_local_was_deleted_explanation));
-      this.mRadioGroupDeletion.setVisibility(View.VISIBLE);
-      this.mRadioButtonRestoreAndResolve.setText(
-          getString(R.string.radio_button_message_restore_local_deleted));
-      this.mRadioButtonRestoreAndResolve.setOnClickListener(
-          new RestoreDeletedClickListener());
-      this.mRadioButtonDelete.setOnClickListener(
+      this.mButtonTakeServer.setOnClickListener(
+          new TakeServerClickListener());
+      this.mButtonTakeServer.setText(
+          getString(R.string.conflict_restore_with_server_changes));
+      this.mButtonTakeLocal.setOnClickListener(
           new SetRowToDeleteOnServerListener());
-      this.mRadioButtonDelete.setText(
-          getString(R.string.radio_button_message_delete_local_deleted));
-      // Disable these, b/c can't yet take action on row.
-      mButtonTakeServer.setEnabled(false);
-      mButtonTakeLocal.setEnabled(false);
+      this.mButtonTakeLocal.setText(
+          getString(R.string.conflict_enforce_local_delete));
+
       mButtonResolveRow.setEnabled(false);
+      mButtonResolveRow.setVisibility(View.GONE);
       mAdapter.setConflictColumnsEnabled(false);
       mAdapter.notifyDataSetChanged();
     } else if (localConflictType ==
@@ -246,22 +226,19 @@ public class ConflictResolutionRowActivity extends ListActivity
           ConflictType.SERVER_DELETED_OLD_VALUES) {
       // Then the row was updated locally but someone had deleted it on the
       // server.
-      this.mTextViewDeletionMessage.setVisibility(View.VISIBLE);
-      this.mTextViewDeletionMessage.setText(
+      this.mTextViewConflictMessage.setText(
           getString(R.string.conflict_server_was_deleted_explanation));
-      this.mRadioGroupDeletion.setVisibility(View.VISIBLE);
-      this.mRadioButtonRestoreAndResolve.setText(
-          getString(R.string.radio_button_message_restore_server_deleted));
-      this.mRadioButtonRestoreAndResolve.setOnClickListener(
-          new RestoreDeletedClickListener());
-      this.mRadioButtonDelete.setText(
-          getString(R.string.radio_button_message_delete_server_deleted));
-      this.mRadioButtonDelete.setOnClickListener(
+      this.mButtonTakeLocal.setOnClickListener(
+          new TakeLocalClickListener());
+      this.mButtonTakeLocal.setText(
+          getString(R.string.conflict_restore_with_local_changes));
+      this.mButtonTakeServer.setText(
+          getString(R.string.conflict_apply_delete_from_server));
+      this.mButtonTakeServer.setOnClickListener(
           new DiscardChangesAndDeleteLocalListener());
-      // Disable these, because can't yet take action on row.
-      mButtonTakeServer.setEnabled(false);
-      mButtonTakeLocal.setEnabled(false);
+
       mButtonResolveRow.setEnabled(false);
+      mButtonResolveRow.setVisibility(View.GONE);
       mAdapter.setConflictColumnsEnabled(false);
       mAdapter.notifyDataSetChanged();
     } else {
@@ -403,23 +380,6 @@ public class ConflictResolutionRowActivity extends ListActivity
 
   }
 
-  /**
-   * Class handling the restore radio button. Should just make the normal
-   * actions available.
-   *
-   */
-  private class RestoreDeletedClickListener implements View.OnClickListener {
-
-    @Override
-    public void onClick(View v) {
-      // All we'll do is set everything to be enabled.
-      mButtonTakeLocal.setEnabled(true);
-      mButtonTakeServer.setEnabled(true);
-      onDecisionMade();
-    }
-
-  }
-
   private class DiscardChangesAndDeleteLocalListener
       implements View.OnClickListener {
 
@@ -439,6 +399,7 @@ public class ConflictResolutionRowActivity extends ListActivity
               // TODO: delete the local version.
               // this will be a simple matter of deleting all the rows with the
               // same rowid on the local device.
+              mIsShowingTakeServerDialog = false;
               DbTable dbTable =
                   DbTable.getDbTable(mLocal.getTableProperties());
               dbTable.deleteRowActual(mRowId);
@@ -459,11 +420,11 @@ public class ConflictResolutionRowActivity extends ListActivity
 
         @Override
         public void onCancel(DialogInterface dialog) {
-          // here we need to do nothing and UNCHECK the radiobutton.
-          mRadioButtonDelete.setChecked(false);
+          mIsShowingTakeServerDialog = false;
           dialog.dismiss();
         }
       });
+      mIsShowingTakeServerDialog = true;
       builder.create().show();
     }
   }
@@ -487,11 +448,12 @@ public class ConflictResolutionRowActivity extends ListActivity
               // We're going to discard the local changes by acting as if
               // takeServer was pressed. Then we're going to flag row as
               // deleted.
+              mIsShowingTakeLocalDialog = false;
               DbTable dbTable =
                   DbTable.getDbTable(mLocal.getTableProperties());
               Map<String, String> valuesToUse = new HashMap<String, String>();
               for (ConflictColumn cc : mConflictColumns) {
-                valuesToUse.put(cc.getElementKey(), cc.getServerValue());
+                valuesToUse.put(cc.getElementKey(), cc.getServerRawValue());
               }
               dbTable.resolveConflict(mRowId, mServerRowETag, valuesToUse);
               dbTable.markDeleted(mRowId);
@@ -513,25 +475,14 @@ public class ConflictResolutionRowActivity extends ListActivity
 
         @Override
         public void onCancel(DialogInterface dialog) {
-          // here we need to do nothing and UNCHECK the radiobutton.
-          mRadioButtonDelete.setChecked(false);
+          mIsShowingTakeLocalDialog = false;
           dialog.dismiss();
         }
       });
+      mIsShowingTakeLocalDialog = true;
       builder.create().show();
     }
 }
-
-  private class RestoreDeletedListener implements View.OnClickListener {
-
-    @Override
-    public void onClick(View v) {
-      mButtonTakeLocal.setEnabled(true);
-      mButtonTakeServer.setEnabled(true);
-      onDecisionMade();
-    }
-
-  }
 
   private class TakeLocalClickListener implements View.OnClickListener {
 
@@ -551,7 +502,7 @@ public class ConflictResolutionRowActivity extends ListActivity
                   DbTable.getDbTable(mLocal.getTableProperties());
               Map<String, String> valuesToUse = new HashMap<String, String>();
               for (ConflictColumn cc : mConflictColumns) {
-                valuesToUse.put(cc.getElementKey(), cc.getLocalValue());
+                valuesToUse.put(cc.getElementKey(), cc.getLocalRawValue());
               }
               dbTable.resolveConflict(mRowId, mServerRowETag, valuesToUse);
               ConflictResolutionRowActivity.this.finish();
@@ -598,7 +549,7 @@ public class ConflictResolutionRowActivity extends ListActivity
                   DbTable.getDbTable(mLocal.getTableProperties());
               Map<String, String> valuesToUse = new HashMap<String, String>();
               for (ConflictColumn cc : mConflictColumns) {
-                valuesToUse.put(cc.getElementKey(), cc.getServerValue());
+                valuesToUse.put(cc.getElementKey(), cc.getServerRawValue());
               }
               dbTable.resolveConflict(mRowId, mServerRowETag, valuesToUse);
               ConflictResolutionRowActivity.this.finish();

@@ -39,8 +39,21 @@
             </intent-filter>
         </activity>
 
-        <activity android:name="org.opendatakit.conflict.activities.ConflictResolutionListActivity" />
-		<activity android:name="org.opendatakit.conflict.activities.ConflictResolutionRowActivity" />
+        <activity android:name="org.opendatakit.conflict.activities.CheckpointResolutionListActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.EDIT" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+		<activity android:name="org.opendatakit.conflict.activities.CheckpointResolutionRowActivity"/>
+        <activity android:name="org.opendatakit.conflict.activities.ConflictResolutionListActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.EDIT" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+		<activity android:name="org.opendatakit.conflict.activities.ConflictResolutionRowActivity"/>
+        
         <activity android:name=".activities.AccountInfoActivity" />
         <activity android:name=".activities.AboutWrapperActivity"/>
      </application>

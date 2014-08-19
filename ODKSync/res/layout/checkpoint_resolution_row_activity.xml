@@ -7,7 +7,7 @@
     android:paddingRight="8dp">
 
     <TextView
-        android:id="@+id/conflict_overview_message"
+        android:id="@+id/checkpoint_overview_message"
         android:layout_width="match_parent"
         android:lines="3"
         android:layout_height="wrap_content" />
@@ -19,24 +19,19 @@
         android:orientation="horizontal" >
 
         <Button
-            android:id="@+id/conflict_take_local"
+            android:id="@+id/take_oldest"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_weight="50" />
 
         <Button
-            android:id="@+id/conflict_take_server"
+            android:id="@+id/take_newest"
+            android:text="@string/checkpoint_take_newest"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_weight="50"  />
 
-    </LinearLayout>
-
-    <Button
-        android:id="@+id/conflict_resolution_button_resolve_row"
-        android:text="@string/conflict_take_blended_updates"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"  />
+     </LinearLayout>
 
     <ListView
         android:id="@android:id/list"

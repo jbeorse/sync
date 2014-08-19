@@ -1,6 +1,8 @@
 package org.opendatakit.conflict.activities;
 
-import org.opendatakit.aggregate.odktables.rest.ConflictType;
+import java.util.Set;
+import java.util.TreeSet;
+
 import org.opendatakit.common.android.data.DbTable;
 import org.opendatakit.common.android.data.TableProperties;
 import org.opendatakit.common.android.data.UserTable;
@@ -20,11 +22,11 @@ import android.widget.ListView;
  * @author sudar.sam@gmail.com
  *
  */
-public class ConflictResolutionListActivity extends ListActivity {
+public class CheckpointResolutionListActivity extends ListActivity {
 
-  private static final String TAG = ConflictResolutionListActivity.class.getSimpleName();
+  private static final String TAG = CheckpointResolutionListActivity.class.getSimpleName();
 
-  private static final int RESOLVE_ROW_RESULT = 1;
+  private static final int RESOLVE_ROW = 1;
 
   private String mAppName;
   private String mTableId;
@@ -59,24 +61,27 @@ public class ConflictResolutionListActivity extends ListActivity {
         mTableId);
     DbTable dbTable = DbTable.getDbTable(tableProperties);
     UserTable table = dbTable.rawSqlQuery(
-        DataTableColumns.CONFLICT_TYPE + " IN ( ?, ?)",
-        new String[] { Integer.toString(ConflictType.LOCAL_DELETED_OLD_VALUES),
-            Integer.toString(ConflictType.LOCAL_UPDATED_UPDATED_VALUES) }, null, null,
-        DataTableColumns.ID, "ASC");
-    if (table.getNumberOfRows() == 0) {
+        DataTableColumns.SAVEPOINT_TYPE + " IS NULL", null, null,
+        null, null, null);
+    this.mAdapter = new ArrayAdapter<ResolveRowEntry>(getActionBar().getThemedContext(),
+        android.R.layout.simple_list_item_1);
+    Set<String> rowIds = new TreeSet<String>();
+    for (int i = 0; i < table.getNumberOfRows(); i++) {
+      Row row = table.getRowAtIndex(i);
+      String rowId = row.getRawDataOrMetadataByElementKey(DataTableColumns.ID);
+      rowIds.add(rowId);
+    }
+    if (rowIds.isEmpty()) {
       this.setResult(RESULT_OK);
       finish();
       return;
     }
 
-    this.mAdapter = new ArrayAdapter<ResolveRowEntry>(getActionBar().getThemedContext(),
-        android.R.layout.simple_list_item_1);
-
     ResolveRowEntry firstE = null;
-    for (int i = 0; i < table.getNumberOfRows(); i++) {
-      Row localRow = table.getRowAtIndex(i);
-      String localRowId = localRow.getRawDataOrMetadataByElementKey(DataTableColumns.ID);
-      ResolveRowEntry e = new ResolveRowEntry(localRowId, "Resolve Conflict w.r.t. Server Row " + i);
+    int i = 0;
+    for (String rowId : rowIds) {
+      ++i;
+      ResolveRowEntry e = new ResolveRowEntry(rowId, "Resolve ODK Survey Checkpoint Record " + i);
       this.mAdapter.add(e);
       if (firstE == null) {
         firstE = e;
@@ -84,7 +89,7 @@ public class ConflictResolutionListActivity extends ListActivity {
     }
     this.setListAdapter(mAdapter);
 
-    if (table.getNumberOfRows() == 1) {
+    if (rowIds.size() == 1) {
       launchRowResolution(firstE);
     }
   }
@@ -96,17 +101,17 @@ public class ConflictResolutionListActivity extends ListActivity {
 
   @Override
   protected void onListItemClick(ListView l, View v, int position, long id) {
-    Log.e(TAG, "[onListItemClick] clicked position: " + position);
-    ResolveRowEntry e = this.mAdapter.getItem(position);
+    ResolveRowEntry e = mAdapter.getItem(position);
+    Log.e(TAG, "[onListItemClick] clicked position: " + position + " rowId: " + e.rowId);
     launchRowResolution(e);
   }
 
   private void launchRowResolution(ResolveRowEntry e) {
-    Intent i = new Intent(this, ConflictResolutionRowActivity.class);
+    Intent i = new Intent(this, CheckpointResolutionRowActivity.class);
     i.putExtra(Constants.APP_NAME, mAppName);
     i.putExtra(Constants.TABLE_ID, mTableId);
-    i.putExtra(ConflictResolutionRowActivity.INTENT_KEY_ROW_ID, e.rowId);
-    this.startActivityForResult(i, RESOLVE_ROW_RESULT);
+    i.putExtra(CheckpointResolutionRowActivity.INTENT_KEY_ROW_ID, e.rowId);
+    this.startActivityForResult(i, RESOLVE_ROW);
   }
 
 }
