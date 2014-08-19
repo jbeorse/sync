@@ -169,7 +169,9 @@ public class AppSynchronizer {
               authProblems = true;
             } else if(tableStatus == Status.TABLE_PENDING_ATTACHMENTS) {
               continue;
-            } else if(tableStatus == Status.TABLE_CONTAINS_CONFLICTS || tableStatus == Status.TABLE_REQUIRES_APP_LEVEL_SYNC) {
+            } else if(tableStatus == Status.TABLE_CONTAINS_CHECKPOINTS || 
+                      tableStatus == Status.TABLE_CONTAINS_CONFLICTS || 
+                      tableStatus == Status.TABLE_REQUIRES_APP_LEVEL_SYNC) {
               status = SyncStatus.CONFLICT_RESOLUTION;
             } else {
               status = SyncStatus.NETWORK_ERROR;

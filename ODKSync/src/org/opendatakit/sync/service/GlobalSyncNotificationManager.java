@@ -110,7 +110,7 @@ public final class GlobalSyncNotificationManager {
 		builder.setTicker("ODK Syncing").setContentTitle("ODK Sync")
 				.setContentText("ODK is syncing an Application")
 				.setWhen(System.currentTimeMillis()).setAutoCancel(false)
-				.setOngoing(true).setContentIntent(pendIntent).setSmallIcon(R.drawable.ic_launcher);
+				.setOngoing(true).setContentIntent(pendIntent).setSmallIcon(R.drawable.odk_sync);
 
 		Notification runningNotification = builder.getNotification();
 		runningNotification.flags |= Notification.FLAG_NO_CLEAR;
