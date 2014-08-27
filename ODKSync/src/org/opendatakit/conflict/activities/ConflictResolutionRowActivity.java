@@ -197,7 +197,7 @@ public class ConflictResolutionRowActivity extends ListActivity
       this.mButtonTakeLocal.setText(getString(R.string.conflict_take_local_updates));
       this.mButtonTakeServer.setOnClickListener(new TakeServerClickListener());
       this.mButtonTakeServer.setText(getString(R.string.conflict_take_server_updates));
-      this.mButtonResolveRow.setVisibility(View.VISIBLE);
+      this.mButtonResolveRow.setVisibility(View.GONE /*View.VISIBLE*/);
       this.onDecisionMade();
     } else if (localConflictType ==
           ConflictType.LOCAL_DELETED_OLD_VALUES &&

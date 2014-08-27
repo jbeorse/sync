@@ -316,8 +316,8 @@ public class ConflictResolutionListAdapter extends BaseAdapter {
       serverRow.setTag(R.id.list_view_conflict_row, position);
       localRow.setOnClickListener(new ResolutionOnClickListener());
       serverRow.setOnClickListener(new ResolutionOnClickListener());
-      localRow.setEnabled(mConflictColumnsAreEnabled);
-      serverRow.setEnabled(mConflictColumnsAreEnabled);
+      localRow.setEnabled(false /*mConflictColumnsAreEnabled*/);
+      serverRow.setEnabled(false /*mConflictColumnsAreEnabled*/);
       // We'll want the radio buttons to trigger their whole associated list
       // item to keep the UI the same. Otherwise you could press the radio
       // button and NOT have the whole row highlighted, which I find annoying.
