@@ -791,13 +791,13 @@ public class SyncProcessor implements SynchronizerStatus {
               if (serverRow == null) {
                 // the local row wasn't impacted by a server change
                 // see if this local row should be pushed to the server.
-                if (state == SyncState.inserting) {
+                if (state == SyncState.new_row) {
                   rowsToInsertOnServer.add(convertToSyncRow(tp, localRow));
-                } else if (state == SyncState.updating) {
+                } else if (state == SyncState.changed) {
                   rowsToUpdateOnServer.add(convertToSyncRow(tp, localRow));
-                } else if (state == SyncState.deleting) {
+                } else if (state == SyncState.deleted) {
                   rowsToDeleteOnServer.add(convertToSyncRow(tp, localRow));
-                } else if (state == SyncState.rest_pending_files) {
+                } else if (state == SyncState.synced_pending_files) {
                   rowsToPushFileAttachments.add(convertToSyncRow(tp, localRow));
                 }
                 // otherwise, it is in the rest state or conflicting state
@@ -813,7 +813,7 @@ public class SyncProcessor implements SynchronizerStatus {
               // change,
               // then skip and look at the next record.
               int localRowConflictTypeBeforeSync = -1;
-              if (state == SyncState.conflicting) {
+              if (state == SyncState.in_conflict) {
                 // we need to remove the conflicting records that refer to the
                 // prior state of the server
                 String localRowConflictTypeBeforeSyncStr = localRow
@@ -842,7 +842,7 @@ public class SyncProcessor implements SynchronizerStatus {
 
               // OK the record is either a simple local record or a local
               // conflict record
-              if (state == SyncState.rest || state == SyncState.rest_pending_files) {
+              if (state == SyncState.synced || state == SyncState.synced_pending_files) {
                 // the server's change should be applied locally.
                 //
                 // the file attachments might be stale locally,
@@ -850,13 +850,13 @@ public class SyncProcessor implements SynchronizerStatus {
 
                 if (serverRow.isDeleted()) {
                   rowsToDeleteLocally.add(new FileSyncRow(serverRow,
-                      convertToSyncRow(tp, localRow), (state == SyncState.rest_pending_files)));
+                      convertToSyncRow(tp, localRow), (state == SyncState.synced_pending_files)));
                 } else {
                   rowsToUpdateLocally.add(new FileSyncRow(serverRow,
-                      convertToSyncRow(tp, localRow), (state == SyncState.rest_pending_files)));
+                      convertToSyncRow(tp, localRow), (state == SyncState.synced_pending_files)));
                 }
               } else if (serverRow.isDeleted()
-                  && (state == SyncState.deleting || (state == SyncState.conflicting && localRowConflictTypeBeforeSync == ConflictType.LOCAL_DELETED_OLD_VALUES))) {
+                  && (state == SyncState.deleted || (state == SyncState.in_conflict && localRowConflictTypeBeforeSync == ConflictType.LOCAL_DELETED_OLD_VALUES))) {
                 // this occurs if
                 // (1) a deleting request was never ACKed but it was performed
                 // on the server.
@@ -886,24 +886,24 @@ public class SyncProcessor implements SynchronizerStatus {
 
                 // figure out what the localRow conflict type should be...
                 Integer localRowConflictType;
-                if (state == SyncState.updating) {
+                if (state == SyncState.changed) {
                   // SyncState.updating and new change on server
                   localRowConflictType = ConflictType.LOCAL_UPDATED_UPDATED_VALUES;
                   Log.i(TAG, "local row was in sync state UPDATING, changing to "
                       + "CONFLICT and setting conflict type to: " + localRowConflictType);
-                } else if (state == SyncState.inserting) {
+                } else if (state == SyncState.new_row) {
                   // SyncState.inserting and record exists on server
                   // The 'inserting' case occurs if an insert is never ACKed but
                   // completes successfully on the server.
                   localRowConflictType = ConflictType.LOCAL_UPDATED_UPDATED_VALUES;
                   Log.i(TAG, "local row was in sync state INSERTING, changing to "
                       + "CONFLICT and setting conflict type to: " + localRowConflictType);
-                } else if (state == SyncState.deleting) {
+                } else if (state == SyncState.deleted) {
                   // SyncState.deleting and server is not deleting
                   localRowConflictType = ConflictType.LOCAL_DELETED_OLD_VALUES;
                   Log.i(TAG, "local row was in sync state DELETING, changing to "
                       + "CONFLICT and updating conflict type to: " + localRowConflictType);
-                } else if (state == SyncState.conflicting) {
+                } else if (state == SyncState.in_conflict) {
                   // SyncState.conflicting and new change on server
                   // leave the local conflict type unchanged (retrieve it and
                   // use it).
@@ -1026,7 +1026,7 @@ public class SyncProcessor implements SynchronizerStatus {
 
                 ContentValues values = new ContentValues();
                 values.put(DataTableColumns.ROW_ETAG, rm.getRowETag());
-                values.put(DataTableColumns.SYNC_STATE, SyncState.rest_pending_files.name());
+                values.put(DataTableColumns.SYNC_STATE, SyncState.synced_pending_files.name());
                 table.actualUpdateRowByRowId(rm.getRowId(), values);
                 tableResult.incServerUpserts();
 
@@ -1034,7 +1034,7 @@ public class SyncProcessor implements SynchronizerStatus {
                 if (outcome) {
                   // move to rest state
                   values.clear();
-                  values.put(DataTableColumns.SYNC_STATE, SyncState.rest.name());
+                  values.put(DataTableColumns.SYNC_STATE, SyncState.synced.name());
                   table.actualUpdateRowByRowId(syncRow.getRowId(), values);
                 } else {
                   instanceFileSuccess = false;
@@ -1077,7 +1077,7 @@ public class SyncProcessor implements SynchronizerStatus {
                   outcome = synchronizer.getFileAttachments(resource.getInstanceFilesUri(), tableId, syncRow, true);
                   if (outcome) {
                     ContentValues values = new ContentValues();
-                    values.put(DataTableColumns.SYNC_STATE, SyncState.rest.name());
+                    values.put(DataTableColumns.SYNC_STATE, SyncState.synced.name());
                     table.actualUpdateRowByRowId(syncRow.getRowId(), values);
                   }
                 }
@@ -1216,7 +1216,7 @@ public class SyncProcessor implements SynchronizerStatus {
       // delete the old server-values conflicting row if it exists
       String whereClause = String.format("%s = ? AND %s = ? AND %s IN " + "( ?, ? )",
           DataTableColumns.ID, DataTableColumns.SYNC_STATE, DataTableColumns.CONFLICT_TYPE);
-      String[] whereArgs = { serverRow.getRowId(), SyncState.conflicting.name(),
+      String[] whereArgs = { serverRow.getRowId(), SyncState.in_conflict.name(),
           String.valueOf(ConflictType.SERVER_DELETED_OLD_VALUES),
           String.valueOf(ConflictType.SERVER_UPDATED_UPDATED_VALUES) };
       table.deleteRowActual(whereClause, whereArgs);
@@ -1245,7 +1245,7 @@ public class SyncProcessor implements SynchronizerStatus {
       } else {
         // update the localRow to be conflicting
         values.put(DataTableColumns.ID, serverRow.getRowId());
-        values.put(DataTableColumns.SYNC_STATE, SyncState.conflicting.name());
+        values.put(DataTableColumns.SYNC_STATE, SyncState.in_conflict.name());
         values.put(DataTableColumns.CONFLICT_TYPE, localRowConflictType);
         table.actualUpdateRowByRowId(serverRow.getRowId(), values);
 
@@ -1257,7 +1257,7 @@ public class SyncProcessor implements SynchronizerStatus {
 
         // insert conflicting server row
         values.put(DataTableColumns.ROW_ETAG, serverRow.getRowETag());
-        values.put(DataTableColumns.SYNC_STATE, SyncState.conflicting.name());
+        values.put(DataTableColumns.SYNC_STATE, SyncState.in_conflict.name());
         values.put(DataTableColumns.CONFLICT_TYPE, serverRowConflictType);
         values.put(DataTableColumns.FORM_ID, serverRow.getFormId());
         values.put(DataTableColumns.LOCALE, serverRow.getLocale());
@@ -1317,7 +1317,7 @@ public class SyncProcessor implements SynchronizerStatus {
 
       values.put(DataTableColumns.ID, serverRow.getRowId());
       values.put(DataTableColumns.ROW_ETAG, serverRow.getRowETag());
-      values.put(DataTableColumns.SYNC_STATE, SyncState.rest_pending_files.name());
+      values.put(DataTableColumns.SYNC_STATE, SyncState.synced_pending_files.name());
       values.put(DataTableColumns.FORM_ID, serverRow.getFormId());
       values.put(DataTableColumns.LOCALE, serverRow.getLocale());
       values.put(DataTableColumns.SAVEPOINT_TIMESTAMP, serverRow.getSavepointTimestamp());
@@ -1336,7 +1336,7 @@ public class SyncProcessor implements SynchronizerStatus {
       if (outcome) {
         // move to rest state
         values.clear();
-        values.put(DataTableColumns.SYNC_STATE, SyncState.rest.name());
+        values.put(DataTableColumns.SYNC_STATE, SyncState.synced.name());
         table.actualUpdateRowByRowId(serverRow.getRowId(), values);
       } else {
         fileSuccess = false;
@@ -1380,7 +1380,7 @@ public class SyncProcessor implements SynchronizerStatus {
         ContentValues values = new ContentValues();
 
         values.put(DataTableColumns.ROW_ETAG, serverRow.getRowETag());
-        values.put(DataTableColumns.SYNC_STATE, SyncState.rest_pending_files.name());
+        values.put(DataTableColumns.SYNC_STATE, SyncState.synced_pending_files.name());
         values.put(DataTableColumns.FORM_ID, serverRow.getFormId());
         values.put(DataTableColumns.LOCALE, serverRow.getLocale());
         values.put(DataTableColumns.SAVEPOINT_TIMESTAMP, serverRow.getSavepointTimestamp());
@@ -1399,7 +1399,7 @@ public class SyncProcessor implements SynchronizerStatus {
         if (outcome) {
           // move to rest state
           values.clear();
-          values.put(DataTableColumns.SYNC_STATE, SyncState.rest.name());
+          values.put(DataTableColumns.SYNC_STATE, SyncState.synced.name());
           table.actualUpdateRowByRowId(serverRow.getRowId(), values);
         } else {
           fileSuccess = false;
