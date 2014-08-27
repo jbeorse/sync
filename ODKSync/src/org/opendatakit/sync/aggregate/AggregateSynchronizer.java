@@ -1267,34 +1267,6 @@ public class AggregateSynchronizer implements Synchronizer {
         req.setHeader("Authorization", "Bearer " + accessToken);
       }
 
-//      HttpURLConnection  uconn = (HttpURLConnection) url.openConnection();
-//      uconn.setRequestProperty(ApiConstants.ACCEPT_CONTENT_ENCODING_HEADER, ApiConstants.GZIP_CONTENT_ENCODING);
-//      uconn.setRequestProperty(ApiConstants.OPEN_DATA_KIT_VERSION_HEADER, ApiConstants.OPEN_DATA_KIT_VERSION);
-//      uconn.setRequestProperty(ApiConstants.DATE_HEADER, formatter.format(new Date()));
-//      uconn.setConnectTimeout(HTTP_REQUEST_TIMEOUT_MS);
-//      uconn.setReadTimeout(HTTP_REQUEST_TIMEOUT_MS);
-//      try {
-//        int statusCode = uconn.getResponseCode();
-//
-//        if (statusCode != HttpStatus.SC_OK) {
-//          InputStream is = null;
-//          BufferedInputStream bi = null;
-//          try {
-//            is = uconn.getInputStream();
-//            bi = new BufferedInputStream(is);
-//            while ( bi.read() >= 0 );
-//          } finally {
-//            if ( bi != null ) {
-//              bi.close();
-//            }
-//          }
-//          if (statusCode == HttpStatus.SC_UNAUTHORIZED) {
-//            // clear the cookies -- should not be necessary?
-//            // ss: might just be a collect thing?
-//          }
-//          throw new Exception("status wasn't SC_OK when dl'ing file: " + downloadUrl);
-//        }
-//
 
       HttpResponse response = null;
       try {
@@ -1331,7 +1303,6 @@ public class AggregateSynchronizer implements Synchronizer {
           } else {
             isRaw = response.getEntity().getContent();
           }
-//          InputStream isRaw = uconn.getInputStream();
 
           is = new BufferedInputStream(isRaw);
           os = new BufferedOutputStream(new FileOutputStream(tmp));
