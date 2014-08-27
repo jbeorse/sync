@@ -17,6 +17,7 @@ package org.opendatakit.sync;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -149,7 +150,7 @@ public class SyncProcessor implements SynchronizerStatus {
   public void synchronizeConfigurationAndContent(boolean pushToServer) {
     Log.i(TAG, "entered synchronizeConfigurationAndContent()");
     ODKFileUtils.assertDirectoryStructure(appName);
-    //android.os.Debug.waitForDebugger();
+    // android.os.Debug.waitForDebugger();
 
     syncProgress.updateNotification(SyncProgressState.STARTING,
         context.getString(R.string.retrieving_tables_list_from_server), OVERALL_PROGRESS_BAR_LENGTH, 0, false);
@@ -1446,13 +1447,7 @@ public class SyncProcessor implements SynchronizerStatus {
     ArrayList<DataKeyValue> values = new ArrayList<DataKeyValue>();
 
     for (ColumnProperties cp : tp.getAllColumns().values()) {
-      boolean retainInDb = false;
-      if (cp.getColumnType().name().equals("array") ||
-          cp.getListChildElementKeys() == null || cp.getListChildElementKeys().isEmpty()) {
-        retainInDb = true;
-      }
-
-      if (retainInDb) {
+      if (cp.isUnitOfRetention()) {
         String elementKey = cp.getElementKey();
         values.add(new DataKeyValue(elementKey, localRow.getRawDataOrMetadataByElementKey(elementKey)));
       }
@@ -1500,6 +1495,8 @@ public class SyncProcessor implements SynchronizerStatus {
     if (tp == null) {
       tp = TableProperties.addTable(context, appName, definitionResource.getTableId(),
           definitionResource.getTableId(), definitionResource.getTableId());
+      
+      Map<String, ColumnProperties> defn = new HashMap<String, ColumnProperties>();
       for (Column col : definitionResource.getColumns()) {
         // TODO: We aren't handling types correctly here. Need to have a mapping
         // on the server as well so that you can pull down the right thing.
@@ -1511,9 +1508,11 @@ public class SyncProcessor implements SynchronizerStatus {
         if (lek != null && lek.length() != 0) {
           listChildElementKeys = mapper.readValue(lek, List.class);
         }
-        tp.addColumn(col.getElementKey(), col.getElementKey(), col.getElementName(),
+        ColumnProperties cp = tp.createNoPersistColumn(col.getElementKey(), col.getElementKey(), col.getElementName(),
             ColumnType.valueOf(col.getElementType()), listChildElementKeys);
+        defn.put(cp.getElementKey(), cp);
       }
+      tp.createColumnsForTable(defn);
       tp.setSyncTag(new SyncTag(null, definitionResource.getSchemaETag()));
     } else {
       // see if the server copy matches our local schema
@@ -1532,9 +1531,7 @@ public class SyncProcessor implements SynchronizerStatus {
         }
         ColumnProperties cp = tp.getColumnByElementKey(col.getElementKey());
         if (cp == null) {
-          // we can support modifying of schema via adding of columns
-          tp.addColumn(col.getElementKey(), col.getElementKey(), col.getElementName(),
-              ColumnType.valueOf(col.getElementType()), listChildElementKeys);
+          throw new SchemaMismatchException("Server schema differs from local schema");
         } else {
           List<String> cpListChildElementKeys = cp.getListChildElementKeys();
           if (cpListChildElementKeys == null) {

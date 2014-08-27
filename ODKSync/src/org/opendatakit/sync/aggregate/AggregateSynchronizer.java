@@ -1169,9 +1169,13 @@ public class AggregateSynchronizer implements Synchronizer {
    */
   private boolean compareAndDownloadFile(OdkTablesFileManifestEntry entry) {
     String basePath = ODKFileUtils.getAppFolder(appName);
+
+    // if the file is a placeholder on the server, then don't do anything...
+    if ( entry.contentLength == 0 ) {
+      return false;
+    }
     // now we need to look through the manifest and see where the files are
-    // supposed to be stored.
-    // make sure you don't return a bad string.
+    // supposed to be stored. Make sure you don't return a bad string.
     if (entry.filename == null || entry.filename.equals("")) {
       Log.i(LOGTAG, "returned a null or empty filename");
       return false;
@@ -1228,9 +1232,10 @@ public class AggregateSynchronizer implements Synchronizer {
    */
   public boolean downloadFile(File destFile, String downloadUrl) throws Exception {
     URI uri = null;
+    URL url = null;
     try {
       Log.i(LOGTAG, "[downloadFile] downloading at url: " + downloadUrl);
-      URL url = new URL(downloadUrl);
+      url = new URL(downloadUrl);
       uri = url.toURI();
     } catch (MalformedURLException e) {
       e.printStackTrace();
@@ -1258,13 +1263,38 @@ public class AggregateSynchronizer implements Synchronizer {
       SimpleDateFormat formatter = new SimpleDateFormat("E, dd MMM yyyy HH:mm:ss zz", Locale.US);
       formatter.setCalendar(g);
       req.setHeader(ApiConstants.DATE_HEADER, formatter.format(new Date()));
-
-      if (accessToken != null && uri != null) {
-        if (uri.getHost().equals(baseUri.getHost())
-            && uri.getPort() == baseUri.getPort()) {
-          req.setHeader("Authorization", "Bearer " + accessToken);
-        }
+      if ( accessToken != null ) {
+        req.setHeader("Authorization", "Bearer " + accessToken);
       }
+
+//      HttpURLConnection  uconn = (HttpURLConnection) url.openConnection();
+//      uconn.setRequestProperty(ApiConstants.ACCEPT_CONTENT_ENCODING_HEADER, ApiConstants.GZIP_CONTENT_ENCODING);
+//      uconn.setRequestProperty(ApiConstants.OPEN_DATA_KIT_VERSION_HEADER, ApiConstants.OPEN_DATA_KIT_VERSION);
+//      uconn.setRequestProperty(ApiConstants.DATE_HEADER, formatter.format(new Date()));
+//      uconn.setConnectTimeout(HTTP_REQUEST_TIMEOUT_MS);
+//      uconn.setReadTimeout(HTTP_REQUEST_TIMEOUT_MS);
+//      try {
+//        int statusCode = uconn.getResponseCode();
+//
+//        if (statusCode != HttpStatus.SC_OK) {
+//          InputStream is = null;
+//          BufferedInputStream bi = null;
+//          try {
+//            is = uconn.getInputStream();
+//            bi = new BufferedInputStream(is);
+//            while ( bi.read() >= 0 );
+//          } finally {
+//            if ( bi != null ) {
+//              bi.close();
+//            }
+//          }
+//          if (statusCode == HttpStatus.SC_UNAUTHORIZED) {
+//            // clear the cookies -- should not be necessary?
+//            // ss: might just be a collect thing?
+//          }
+//          throw new Exception("status wasn't SC_OK when dl'ing file: " + downloadUrl);
+//        }
+//
 
       HttpResponse response = null;
       try {
@@ -1301,6 +1331,7 @@ public class AggregateSynchronizer implements Synchronizer {
           } else {
             isRaw = response.getEntity().getContent();
           }
+//          InputStream isRaw = uconn.getInputStream();
 
           is = new BufferedInputStream(isRaw);
           os = new BufferedOutputStream(new FileOutputStream(tmp));
@@ -1410,7 +1441,13 @@ public class AggregateSynchronizer implements Synchronizer {
       // we are getting files. So iterate over the remote files...
       for ( OdkTablesFileManifestEntry entry : theList ) {
         File localFile = new File(instanceFolder, entry.filename);
-
+        
+        // if the file on the server is a placeholder, don't do anything
+        if ( entry.contentLength == 0 ) {
+          // TODO: should we upload the file if we have it?
+          continue;
+        }
+        
         if ( !localFile.exists() ) {
           if ( !downloadFile(localFile, entry.downloadUrl) ) {
             success = false;
