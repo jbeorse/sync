@@ -267,7 +267,10 @@ public class SyncProcessor implements SynchronizerStatus {
         if ( tp.getDbTableName() == null ) {
           tp = null;
         }
-        synchronizeTableConfigurationAndContent(tp, matchingResource, true);
+        if ( !localTableId.equals("framework") ) {
+          // do not sync the framework table
+          synchronizeTableConfigurationAndContent(tp, matchingResource, true);
+        }
         this.updateNotification(SyncProgressState.TABLE_FILES, R.string.table_level_file_sync_complete, new Object[] {localTableId}, 100.0, false);
         ++iMajorSyncStep;
       }
@@ -282,6 +285,8 @@ public class SyncProcessor implements SynchronizerStatus {
 
       List<String> localTableIdsToDelete = new ArrayList<String>();
       localTableIdsToDelete.addAll(localTableIds);
+      // do not remove the framework table
+      localTableIdsToDelete.remove("framework");
 
       --iMajorSyncStep;
       for (TableResource table : tables) {
@@ -653,6 +658,13 @@ public class SyncProcessor implements SynchronizerStatus {
     if ( tableResult.getStatus() != Status.WORKING ) {
       // there was some sort of error...
       Log.e(TAG, "Skipping data sync - error in table schema or file verification step " + tableId);
+      return;
+    }
+
+    if ( tp.getTableId().equals("framework") ) {
+      // do not sync the framework table
+      tableResult.setStatus(Status.SUCCESS);
+      this.updateNotification(SyncProgressState.ROWS, R.string.table_data_sync_complete, new Object[] {tp.getTableId()}, 100.0, false);
       return;
     }
 
