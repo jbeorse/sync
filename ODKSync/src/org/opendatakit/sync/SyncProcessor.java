@@ -32,10 +32,10 @@ import org.opendatakit.aggregate.odktables.rest.entity.DataKeyValue;
 import org.opendatakit.aggregate.odktables.rest.entity.Scope;
 import org.opendatakit.aggregate.odktables.rest.entity.TableDefinitionResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResource;
+import org.opendatakit.common.android.data.ColumnDefinition;
 import org.opendatakit.common.android.data.ColumnProperties;
-import org.opendatakit.common.android.data.ColumnType;
 import org.opendatakit.common.android.data.DbTable;
-import org.opendatakit.common.android.data.TableDefinitions;
+import org.opendatakit.common.android.data.ElementType;
 import org.opendatakit.common.android.data.TableProperties;
 import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
@@ -44,9 +44,10 @@ import org.opendatakit.common.android.database.DataModelDatabaseHelperFactory;
 import org.opendatakit.common.android.provider.DataTableColumns;
 import org.opendatakit.common.android.sync.aggregate.SyncTag;
 import org.opendatakit.common.android.sync.exceptions.SchemaMismatchException;
+import org.opendatakit.common.android.utilities.DataUtil;
+import org.opendatakit.common.android.utilities.ODKDatabaseUtils;
 import org.opendatakit.common.android.utilities.ODKFileUtils;
 import org.opendatakit.common.android.utils.CsvUtil;
-import org.opendatakit.common.android.utils.DataUtil;
 import org.opendatakit.sync.SynchronizationResult.Status;
 import org.opendatakit.sync.Synchronizer.OnTablePropertiesChanged;
 import org.opendatakit.sync.Synchronizer.SynchronizerStatus;
@@ -61,7 +62,6 @@ import android.database.sqlite.SQLiteException;
 import android.util.Log;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
-import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -179,7 +179,7 @@ public class SyncProcessor implements SynchronizerStatus {
     try {
       DataModelDatabaseHelper dbHelper = DataModelDatabaseHelperFactory.getDbHelper(context, appName);
       SQLiteDatabase db = dbHelper.getReadableDatabase();
-      localTableIds = TableDefinitions.getAllTableIds(db);
+      localTableIds = ODKDatabaseUtils.getAllTableIds(db);
       db.close();
     } catch (SQLiteException e ) {
       mUserResult.setAppLevelStatus(Status.EXCEPTION);
@@ -264,9 +264,6 @@ public class SyncProcessor implements SynchronizerStatus {
         Log.i(TAG, "[synchronizeConfigurationAndContent] synchronizing table " + localTableId);
 
         TableProperties tp = TableProperties.refreshTablePropertiesForTable(context, appName, localTableId);
-        if ( tp.getDbTableName() == null ) {
-          tp = null;
-        }
         if ( !localTableId.equals("framework") ) {
           // do not sync the framework table
           synchronizeTableConfigurationAndContent(tp, matchingResource, true);
@@ -298,9 +295,6 @@ public class SyncProcessor implements SynchronizerStatus {
           if (localTableId.equals(serverTableId)) {
             localTableIdsToDelete.remove(localTableId);
             tp = TableProperties.refreshTablePropertiesForTable(context, appName, localTableId);
-            if ( tp.getDbTableName() == null ) {
-              tp = null;
-            }
             break;
           }
         }
@@ -352,11 +346,9 @@ public class SyncProcessor implements SynchronizerStatus {
             0.0, false);
         TableProperties tp = TableProperties.refreshTablePropertiesForTable(context, appName, localTableId);
         // eventually might not be true if there are multiple syncs running simultaneously...
-        if ( tp.getDbTableName() != null ) {
-          TableResult tableResult = mUserResult.getTableResult(localTableId);
-          tp.deleteTable();
-          tableResult.setStatus(Status.SUCCESS);
-        }
+        TableResult tableResult = mUserResult.getTableResult(localTableId);
+        tp.deleteTable();
+        tableResult.setStatus(Status.SUCCESS);
         ++iMajorSyncStep;
       }
     }
@@ -421,7 +413,7 @@ public class SyncProcessor implements SynchronizerStatus {
         // we are creating data on the server
         // change row sync and conflict status to handle new server schema.
         // Clean up this table and set the dataETag to null.
-        DbTable dbt = DbTable.getDbTable(tp);
+        DbTable dbt = new DbTable(tp);
         dbt.changeDataRowsToNewRowState();
 
         // we need to clear out the dataETag so
@@ -544,15 +536,12 @@ public class SyncProcessor implements SynchronizerStatus {
 
       // refresh the tp
       tp = TableProperties.refreshTablePropertiesForTable(context, appName, tp.getTableId());
-      if ( tp.getDbTableName() == null ) {
-        tp = null;
-      }
 
       success = true;
     } finally {
       endTableTransaction(tp, success);
       if (success && tableResult.getStatus() != Status.WORKING) {
-          Log.e(TAG, "tableResult status for table: " + tp.getDbTableName() +
+          Log.e(TAG, "tableResult status for table: " + tp.getTableId() +
               " was " + tableResult.getStatus().name() +
               ", and yet success returned true. This shouldn't be possible.");
       }
@@ -643,7 +632,7 @@ public class SyncProcessor implements SynchronizerStatus {
    *          down.
    */
   private void synchronizeTableDataRowsAndAttachments(TableProperties tp) {
-    DbTable table = DbTable.getDbTable(tp);
+    DbTable table = new DbTable(tp);
     // used to get the above from the ACTIVE store. if things go wonky, maybe
     // check to see if it was ACTIVE rather than SERVER for a reason. can't
     // think of one. one thing is that if it fails you'll see a table but won't
@@ -1136,9 +1125,6 @@ public class SyncProcessor implements SynchronizerStatus {
 
       // It is possible the table properties changed. Refresh just in case.
       tp = TableProperties.refreshTablePropertiesForTable(context, appName, tp.getTableId());
-      if ( tp.getDbTableName() == null ) {
-        tp = null;
-      }
       if (success && tp != null) // null in case we deleted the tp.
         tp.setLastSyncTime(du.formatNowForDb());
     } finally {
@@ -1148,7 +1134,7 @@ public class SyncProcessor implements SynchronizerStatus {
         // Then we should have updated the db and shouldn't have set the
         // TableResult to be exception.
         if (tableResult.getStatus() != Status.WORKING) {
-          Log.e(TAG, "tableResult status for table: " + tp.getDbTableName() +
+          Log.e(TAG, "tableResult status for table: " + tp.getTableId() +
               " was " + tableResult.getStatus().name() +
               ", and yet success returned true. This shouldn't be possible.");
         } else {
@@ -1501,7 +1487,9 @@ public class SyncProcessor implements SynchronizerStatus {
     if (tp == null) {
       tp = TableProperties.addTable(context, appName, definitionResource.getTableId(),
           definitionResource.getTableId(), definitionResource.getTableId());
-      
+
+      List<ColumnDefinition> orderedDefns = ColumnDefinition.buildColumnDefinitions(definitionResource.getColumns());
+
       Map<String, ColumnProperties> defn = new HashMap<String, ColumnProperties>();
       for (Column col : definitionResource.getColumns()) {
         // TODO: We aren't handling types correctly here. Need to have a mapping
@@ -1509,13 +1497,8 @@ public class SyncProcessor implements SynchronizerStatus {
         // TODO: add an addcolumn method to allow setting all of the
         // dbdefinition
         // fields.
-        List<String> listChildElementKeys = null;
-        String lek = col.getListChildElementKeys();
-        if (lek != null && lek.length() != 0) {
-          listChildElementKeys = mapper.readValue(lek, List.class);
-        }
-        ColumnProperties cp = tp.createNoPersistColumn(col.getElementKey(), col.getElementKey(), col.getElementName(),
-            ColumnType.valueOf(col.getElementType()), listChildElementKeys);
+        ColumnDefinition colDefn = ColumnDefinition.find(orderedDefns, col.getElementKey());
+        ColumnProperties cp = tp.createNoPersistColumn(colDefn);
         defn.put(cp.getElementKey(), cp);
       }
       tp.createColumnsForTable(defn);
@@ -1535,20 +1518,21 @@ public class SyncProcessor implements SynchronizerStatus {
         } else {
           listChildElementKeys = new ArrayList<String>();
         }
+        ElementType type = ElementType.parseElementType(col.getElementType(), 
+            (listChildElementKeys != null && !listChildElementKeys.isEmpty()));
         ColumnProperties cp = tp.getColumnByElementKey(col.getElementKey());
         if (cp == null) {
           throw new SchemaMismatchException("Server schema differs from local schema");
         } else {
-          List<String> cpListChildElementKeys = cp.getListChildElementKeys();
+          List<ColumnDefinition> cpListChildElementKeys = cp.getChildren();
           if (cpListChildElementKeys == null) {
-            cpListChildElementKeys = new ArrayList<String>();
+            cpListChildElementKeys = new ArrayList<ColumnDefinition>();
           }
-          if (!((cp.getElementName() == col.getElementName() || ((cp.getElementName() != null) && cp
-              .getElementName().equals(col.getElementName())))
-              && cpListChildElementKeys.size() == listChildElementKeys.size() && cpListChildElementKeys
-                .containsAll(listChildElementKeys))) {
+          if (!((cp.getElementName() == col.getElementName() ||
+               ((cp.getElementName() != null) && cp.getElementName().equals(col.getElementName())))
+              && containsAllChildren( cpListChildElementKeys, listChildElementKeys))) {
             throw new SchemaMismatchException("Server schema differs from local schema");
-          } else if (!cp.getColumnType().equals(ColumnType.valueOf(col.getElementType()))) {
+          } else if (!cp.getColumnType().equals(type)) {
             // we have a column datatype change.
             // we should be able to handle this for simple types (unknown ->
             // text
@@ -1564,7 +1548,7 @@ public class SyncProcessor implements SynchronizerStatus {
         // server has changed its schema
         // change row sync and conflict status to handle new server schema.
         // Clean up this table and set the dataETag to null.
-        DbTable table = DbTable.getDbTable(tp);
+        DbTable table = new DbTable(tp);
         table.changeDataRowsToNewRowState();
         // and update to the new schemaETag, but clear our dataETag
         // so that all data rows sync.
@@ -1572,6 +1556,21 @@ public class SyncProcessor implements SynchronizerStatus {
       }
     }
     return tp;
+  }
+
+  private boolean containsAllChildren(List<ColumnDefinition> cpListChildElementKeys,
+      List<String> listChildElementKeys) {
+    
+    if ( cpListChildElementKeys.size() != listChildElementKeys.size() ) {
+      return false;
+    }
+    
+    for ( ColumnDefinition defn : cpListChildElementKeys ) {
+      if ( ! listChildElementKeys.contains(defn.getElementKey()) ) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
@@ -1586,26 +1585,12 @@ public class SyncProcessor implements SynchronizerStatus {
     for (ColumnProperties cp : tp.getAllColumns().values()) {
       String elementKey = cp.getElementKey();
       String elementName = cp.getElementName();
-      ColumnType colType = cp.getColumnType();
-      List<String> listChildrenElements = cp.getListChildElementKeys();
-      String listChildElementKeysStr = null;
-      try {
-        listChildElementKeysStr = mapper.writeValueAsString(listChildrenElements);
-      } catch (JsonGenerationException e) {
-        Log.e(TAG, "problem parsing json list entry during sync");
-        e.printStackTrace();
-      } catch (JsonMappingException e) {
-        Log.e(TAG, "problem mapping json list entry during sync");
-        e.printStackTrace();
-      } catch (IOException e) {
-        Log.e(TAG, "i/o exception with json list entry during sync");
-        e.printStackTrace();
-      }
+      ElementType colType = cp.getColumnType();
       // Column c = new Column(tp.getTableId(), elementKey, elementName,
       // colType.name(), listChildElementKeysStr,
       // (isUnitOfRetention != 0), joinsStr);
-      Column c = new Column(elementKey, elementName, colType.name(),
-          listChildElementKeysStr);
+      Column c = new Column(elementKey, elementName, colType.toString(),
+          cp.getListChildElementKeys());
       columns.add(c);
     }
     return columns;

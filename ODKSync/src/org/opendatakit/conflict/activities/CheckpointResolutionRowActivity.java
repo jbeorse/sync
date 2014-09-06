@@ -6,7 +6,9 @@ import java.util.List;
 import java.util.Map;
 
 import org.opendatakit.aggregate.odktables.rest.SavepointTypeManipulator;
+import org.opendatakit.common.android.data.ColumnProperties;
 import org.opendatakit.common.android.data.DbTable;
+import org.opendatakit.common.android.data.ElementType;
 import org.opendatakit.common.android.data.TableProperties;
 import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
@@ -94,7 +96,7 @@ public class CheckpointResolutionRowActivity extends ListActivity
     this.mRowId = getIntent().getStringExtra(INTENT_KEY_ROW_ID);
     TableProperties tp =
         TableProperties.getTablePropertiesForTable(this, mAppName, mTableId);
-    DbTable dbTable = DbTable.getDbTable(tp);
+    DbTable dbTable = new DbTable(tp);
 
     UserTable conflictTable = dbTable.rawSqlQuery(DataTableColumns.ID + "=?",
         new String[] {mRowId}, null, null, DataTableColumns.SAVEPOINT_TIMESTAMP, "ASC");
@@ -143,15 +145,16 @@ public class CheckpointResolutionRowActivity extends ListActivity
         new ArrayList<ConcordantColumn>();
     for (int i = 0; i < columnOrder.size(); i++) {
       String elementKey = columnOrder.get(i);
-      String columnDisplayName =
-          tp.getColumnByElementKey(elementKey).getLocalizedDisplayName();
+      ColumnProperties cp = tp.getColumnByElementKey(elementKey);
+      ElementType elementType = cp.getColumnType();
+      String columnDisplayName = cp.getLocalizedDisplayName();
       Section newSection = new Section(adapterOffset, columnDisplayName);
       ++adapterOffset;
       sections.add(newSection);
       String localRawValue = rowEnding.getRawDataOrMetadataByElementKey(elementKey);
-      String localDisplayValue = rowEnding.getDisplayTextOfData(this, elementKey, true);
+      String localDisplayValue = rowEnding.getDisplayTextOfData(this, elementType, elementKey, true);
       String serverRawValue = rowStarting.getRawDataOrMetadataByElementKey(elementKey);
-      String serverDisplayValue = rowStarting.getDisplayTextOfData(this, elementKey, true);
+      String serverDisplayValue = rowStarting.getDisplayTextOfData(this, elementType, elementKey, true);
       if (deleteEntirely || (localRawValue == null && serverRawValue == null) ||
     	  (localRawValue != null && localRawValue.equals(serverRawValue))) {
         // TODO: this doesn't compare actual equality of blobs if their display
@@ -327,14 +330,14 @@ public class CheckpointResolutionRowActivity extends ListActivity
               SQLiteDatabase db = tp.getWritableDatabase();
               try {
                 db.beginTransaction();
-                db.execSQL("UPDATE \"" + tp.getDbTableName() + "\" SET " +
+                db.execSQL("UPDATE \"" + tp.getTableId() + "\" SET " +
                     DataTableColumns.SAVEPOINT_TYPE + "= ? WHERE " +
                     DataTableColumns.ID + "=?",
                     new String[] { SavepointTypeManipulator.incomplete(), mRowId });
-                db.execSQL("DELETE FROM \"" + tp.getDbTableName() + "\" WHERE " +
+                db.execSQL("DELETE FROM \"" + tp.getTableId() + "\" WHERE " +
                     DataTableColumns.ID + "=? AND " + DataTableColumns.SAVEPOINT_TIMESTAMP +
                     " NOT IN (SELECT MAX(" + DataTableColumns.SAVEPOINT_TIMESTAMP + ") FROM \"" +
-                    tp.getDbTableName() + "\" WHERE " + DataTableColumns.ID + "=?)",
+                    tp.getTableId() + "\" WHERE " + DataTableColumns.ID + "=?)",
                     new String[] { mRowId, mRowId });
                 db.setTransactionSuccessful();
               } finally {
@@ -386,7 +389,7 @@ public class CheckpointResolutionRowActivity extends ListActivity
               TableProperties tp =
                   TableProperties.getTablePropertiesForTable(
                       CheckpointResolutionRowActivity.this, mAppName, mTableId);
-              DbTable dbTable = DbTable.getDbTable(tp);
+              DbTable dbTable = new DbTable(tp);
               dbTable.deleteRowActual(mRowId);
               CheckpointResolutionRowActivity.this.finish();
               Log.d(TAG, "deleted local and server versions");
@@ -436,7 +439,7 @@ public class CheckpointResolutionRowActivity extends ListActivity
               SQLiteDatabase db = tp.getWritableDatabase();
               try {
                 db.beginTransaction();
-                db.execSQL("DELETE FROM \"" + tp.getDbTableName() + "\" WHERE " +
+                db.execSQL("DELETE FROM \"" + tp.getTableId() + "\" WHERE " +
                     DataTableColumns.ID + "=? AND " + DataTableColumns.SAVEPOINT_TYPE + " IS NULL",
                     new String[] { mRowId });
                 db.setTransactionSuccessful();

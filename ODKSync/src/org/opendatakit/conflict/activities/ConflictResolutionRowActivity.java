@@ -6,8 +6,10 @@ import java.util.List;
 import java.util.Map;
 
 import org.opendatakit.aggregate.odktables.rest.ConflictType;
+import org.opendatakit.common.android.data.ColumnProperties;
 import org.opendatakit.common.android.data.ConflictTable;
 import org.opendatakit.common.android.data.DbTable;
+import org.opendatakit.common.android.data.ElementType;
 import org.opendatakit.common.android.data.TableProperties;
 import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
@@ -56,6 +58,7 @@ public class ConflictResolutionRowActivity extends ListActivity
   private static final String BUNDLE_KEY_RESOLUTION_VALUES =
       "resolutionValues";
 
+  private String mAppName;
   private ConflictTable mConflictTable;
   private ConflictResolutionListAdapter mAdapter;
   /** The row number of the row in conflict within the {@link ConflictTable}.*/
@@ -86,9 +89,9 @@ public class ConflictResolutionRowActivity extends ListActivity
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
-    String appName = getIntent().getStringExtra(Constants.APP_NAME);
-    if ( appName == null ) {
-      appName = Constants.DEFAULT_APP_NAME;
+    mAppName = getIntent().getStringExtra(Constants.APP_NAME);
+    if ( mAppName == null ) {
+      mAppName = Constants.DEFAULT_APP_NAME;
     }
     this.setContentView(R.layout.conflict_resolution_row_activity);
     this.mTextViewConflictMessage = (TextView)
@@ -107,8 +110,8 @@ public class ConflictResolutionRowActivity extends ListActivity
         getIntent().getStringExtra(Constants.TABLE_ID);
     this.mRowId = getIntent().getStringExtra(INTENT_KEY_ROW_ID);
     TableProperties tableProperties =
-        TableProperties.getTablePropertiesForTable(this, appName, tableId);
-    DbTable dbTable = DbTable.getDbTable(tableProperties);
+        TableProperties.getTablePropertiesForTable(this, mAppName, tableId);
+    DbTable dbTable = new DbTable(tableProperties);
     this.mConflictTable = dbTable.getConflictTable();
     this.mLocal = mConflictTable.getLocalTable();
     this.mServer = mConflictTable.getServerTable();
@@ -123,8 +126,7 @@ public class ConflictResolutionRowActivity extends ListActivity
     Row localRow = this.mLocal.getRowAtIndex(mRowNumber);
     Row serverRow = this.mServer.getRowAtIndex(mRowNumber);
     this.mServerRowETag = serverRow.getRawDataOrMetadataByElementKey(DataTableColumns.ROW_ETAG);
-    TableProperties tp = mConflictTable.getLocalTable().getTableProperties();
-    List<String> columnOrder = tp.getPersistedColumns();
+    List<String> columnOrder = tableProperties.getPersistedColumns();
     // This will be the number of rows down we are in the adapter. Each
     // heading and each cell value gets its own row. Columns in conflict get
     // two, as we'll need to display each one to the user.
@@ -135,15 +137,16 @@ public class ConflictResolutionRowActivity extends ListActivity
         new ArrayList<ConcordantColumn>();
     for (int i = 0; i < columnOrder.size(); i++) {
       String elementKey = columnOrder.get(i);
-      String columnDisplayName =
-          tp.getColumnByElementKey(elementKey).getLocalizedDisplayName();
+      ColumnProperties cp = tableProperties.getColumnByElementKey(elementKey);
+      ElementType elementType = cp.getColumnType();
+      String columnDisplayName = cp.getLocalizedDisplayName();
       Section newSection = new Section(adapterOffset, columnDisplayName);
       ++adapterOffset;
       sections.add(newSection);
       String localRawValue = localRow.getRawDataOrMetadataByElementKey(elementKey);
-      String localDisplayValue = localRow.getDisplayTextOfData(this, elementKey, true);
+      String localDisplayValue = localRow.getDisplayTextOfData(this, elementType, elementKey, true);
       String serverRawValue = serverRow.getRawDataOrMetadataByElementKey(elementKey);
-      String serverDisplayValue = serverRow.getDisplayTextOfData(this, elementKey, true);
+      String serverDisplayValue = serverRow.getDisplayTextOfData(this, elementType, elementKey, true);
       if ((localRawValue == null && serverRawValue == null) ||
     	  (localRawValue != null && localRawValue.equals(serverRawValue))) {
         // TODO: this doesn't compare actual equality of blobs if their display
@@ -400,8 +403,11 @@ public class ConflictResolutionRowActivity extends ListActivity
               // this will be a simple matter of deleting all the rows with the
               // same rowid on the local device.
               mIsShowingTakeServerDialog = false;
+              TableProperties tp = 
+                  TableProperties.getTablePropertiesForTable(
+                      ConflictResolutionRowActivity.this, mAppName, mLocal.getTableId());
               DbTable dbTable =
-                  DbTable.getDbTable(mLocal.getTableProperties());
+                  new DbTable(tp);
               dbTable.deleteRowActual(mRowId);
               ConflictResolutionRowActivity.this.finish();
               Log.d(TAG, "deleted local and server versions");
@@ -449,8 +455,11 @@ public class ConflictResolutionRowActivity extends ListActivity
               // takeServer was pressed. Then we're going to flag row as
               // deleted.
               mIsShowingTakeLocalDialog = false;
+              TableProperties tp = 
+                  TableProperties.getTablePropertiesForTable(
+                      ConflictResolutionRowActivity.this, mAppName, mLocal.getTableId());
               DbTable dbTable =
-                  DbTable.getDbTable(mLocal.getTableProperties());
+                  new DbTable(tp);
               Map<String, String> valuesToUse = new HashMap<String, String>();
               for (ConflictColumn cc : mConflictColumns) {
                 valuesToUse.put(cc.getElementKey(), cc.getServerRawValue());
@@ -498,8 +507,11 @@ public class ConflictResolutionRowActivity extends ListActivity
             @Override
             public void onClick(DialogInterface dialog, int which) {
               mIsShowingTakeLocalDialog = false;
+              TableProperties tp = 
+                  TableProperties.getTablePropertiesForTable(
+                      ConflictResolutionRowActivity.this, mAppName, mLocal.getTableId());
               DbTable dbTable =
-                  DbTable.getDbTable(mLocal.getTableProperties());
+                  new DbTable(tp);
               Map<String, String> valuesToUse = new HashMap<String, String>();
               for (ConflictColumn cc : mConflictColumns) {
                 valuesToUse.put(cc.getElementKey(), cc.getLocalRawValue());
@@ -545,8 +557,11 @@ public class ConflictResolutionRowActivity extends ListActivity
             @Override
             public void onClick(DialogInterface dialog, int which) {
               mIsShowingTakeServerDialog = false;
+              TableProperties tp = 
+                  TableProperties.getTablePropertiesForTable(
+                      ConflictResolutionRowActivity.this, mAppName, mLocal.getTableId());
               DbTable dbTable =
-                  DbTable.getDbTable(mLocal.getTableProperties());
+                  new DbTable(tp);
               Map<String, String> valuesToUse = new HashMap<String, String>();
               for (ConflictColumn cc : mConflictColumns) {
                 valuesToUse.put(cc.getElementKey(), cc.getServerRawValue());
@@ -593,8 +608,11 @@ public class ConflictResolutionRowActivity extends ListActivity
             @Override
             public void onClick(DialogInterface dialog, int which) {
               mIsShowingResolveDialog = false;
+              TableProperties tp = 
+                  TableProperties.getTablePropertiesForTable(
+                      ConflictResolutionRowActivity.this, mAppName, mLocal.getTableId());
               DbTable dbTable =
-                  DbTable.getDbTable(mLocal.getTableProperties());
+                  new DbTable(tp);
               if (!isResolvable()) {
                 // We should never have gotten here! Triz-ouble.
                 Log.e(TAG, "[onClick--positive button] the row is not " +

@@ -22,7 +22,6 @@ import java.util.List;
 import org.opendatakit.aggregate.odktables.rest.entity.Column;
 import org.opendatakit.aggregate.odktables.rest.entity.TableDefinitionResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResource;
-import org.opendatakit.common.android.data.ColumnType;
 import org.opendatakit.common.android.sync.aggregate.SyncTag;
 import org.opendatakit.sync.service.SyncProgressState;
 import org.springframework.web.client.ResourceAccessException;

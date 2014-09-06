@@ -57,7 +57,7 @@ public class ConflictResolutionListActivity extends ListActivity {
 
     TableProperties tableProperties = TableProperties.getTablePropertiesForTable(this, mAppName,
         mTableId);
-    DbTable dbTable = DbTable.getDbTable(tableProperties);
+    DbTable dbTable = new DbTable(tableProperties);
     UserTable table = dbTable.rawSqlQuery(
         DataTableColumns.CONFLICT_TYPE + " IN ( ?, ?)",
         new String[] { Integer.toString(ConflictType.LOCAL_DELETED_OLD_VALUES),

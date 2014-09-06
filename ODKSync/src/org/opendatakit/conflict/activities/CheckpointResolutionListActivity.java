@@ -59,7 +59,7 @@ public class CheckpointResolutionListActivity extends ListActivity {
 
     TableProperties tableProperties = TableProperties.getTablePropertiesForTable(this, mAppName,
         mTableId);
-    DbTable dbTable = DbTable.getDbTable(tableProperties);
+    DbTable dbTable = new DbTable(tableProperties);
     UserTable table = dbTable.rawSqlQuery(
         DataTableColumns.SAVEPOINT_TYPE + " IS NULL", null, null,
         null, null, null);
