@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.opendatakit.aggregate.odktables.rest.entity.Column;
+import org.opendatakit.aggregate.odktables.rest.entity.RowOutcomeList;
 import org.opendatakit.aggregate.odktables.rest.entity.TableDefinitionResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResource;
 import org.opendatakit.common.android.data.ColumnType;
@@ -124,6 +125,9 @@ public interface Synchronizer {
    *
    */
   public IncomingRowModifications getUpdates(String tableId, SyncTag currentSyncTag) throws IOException;
+
+  public RowOutcomeList insertOrUpdateRows(String tableId, SyncTag currentSyncTag, List<SyncRow> rowsToInsertOrUpdate)
+      throws ResourceAccessException;
 
   /**
    * Insert or update the given row in the table on the server.

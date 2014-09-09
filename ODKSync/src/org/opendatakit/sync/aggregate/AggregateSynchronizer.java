@@ -50,12 +50,16 @@ import org.opendatakit.aggregate.odktables.rest.entity.Column;
 import org.opendatakit.aggregate.odktables.rest.entity.OdkTablesFileManifest;
 import org.opendatakit.aggregate.odktables.rest.entity.OdkTablesFileManifestEntry;
 import org.opendatakit.aggregate.odktables.rest.entity.Row;
+import org.opendatakit.aggregate.odktables.rest.entity.RowList;
+import org.opendatakit.aggregate.odktables.rest.entity.RowOutcome;
+import org.opendatakit.aggregate.odktables.rest.entity.RowOutcomeList;
 import org.opendatakit.aggregate.odktables.rest.entity.RowResource;
 import org.opendatakit.aggregate.odktables.rest.entity.RowResourceList;
 import org.opendatakit.aggregate.odktables.rest.entity.TableDefinition;
 import org.opendatakit.aggregate.odktables.rest.entity.TableDefinitionResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResourceList;
+import org.opendatakit.aggregate.odktables.rest.entity.RowOutcome.OutcomeType;
 import org.opendatakit.common.android.sync.aggregate.SyncTag;
 import org.opendatakit.common.android.utilities.ODKFileUtils;
 import org.opendatakit.common.android.utilities.WebUtils;
@@ -567,6 +571,48 @@ public class AggregateSynchronizer implements Synchronizer {
     modification.setTableSyncTag(newTag);
     return modification;
   }
+
+  /**
+   * Insert or update the given row in the table on the server.
+   *
+   * @param tableId
+   *          the unique identifier of the table
+   * @param currentSyncTag
+   *          the last value that was stored as the syncTag
+   * @param rowToInsertOrUpdate
+   *          the row to insert or update
+   * @return a RowModification containing the (rowId, rowETag, table dataETag) after the modification
+   */
+  public RowOutcomeList insertOrUpdateRows(String tableId, SyncTag currentSyncTag, List<SyncRow> rowsToInsertOrUpdate)
+      throws ResourceAccessException {
+        TableResource resource = getTable(tableId);
+        SyncTag lastKnownServerSyncTag = new SyncTag(currentSyncTag.getDataETag(), currentSyncTag.getSchemaETag());
+
+        ArrayList<Row> rows = new ArrayList<Row>();
+        for ( SyncRow rowToInsertOrUpdate : rowsToInsertOrUpdate ) {
+          Row row = Row.forUpdate(rowToInsertOrUpdate.getRowId(), rowToInsertOrUpdate.getRowETag(),
+              rowToInsertOrUpdate.getFormId(), rowToInsertOrUpdate.getLocale(),
+              rowToInsertOrUpdate.getSavepointType(),
+              rowToInsertOrUpdate.getSavepointTimestamp(), rowToInsertOrUpdate.getSavepointCreator(),
+              rowToInsertOrUpdate.getFilterScope(),
+              rowToInsertOrUpdate.getValues());
+          rows.add(row);
+        }
+        RowList rlist = new RowList(rows);
+        
+        URI url = URI.create(resource.getDataUri());
+        HttpEntity<RowList> requestEntity = new HttpEntity<RowList>(rlist, requestHeaders);
+        ResponseEntity<RowOutcomeList> insertedEntity;
+        try {
+          insertedEntity = rt.exchange(url, HttpMethod.PUT, requestEntity, RowOutcomeList.class);
+        } catch (ResourceAccessException e) {
+          Log.e(LOGTAG, "Exception while updating rows on server: " +  tableId + " exception: " + e.toString());
+          throw e;
+        }
+
+        RowOutcomeList outcomes = insertedEntity.getBody();
+        return outcomes;
+      }
 
   /**
    * Insert or update the given row in the table on the server.
