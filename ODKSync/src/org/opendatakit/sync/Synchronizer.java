@@ -22,7 +22,6 @@ import java.util.List;
 import org.opendatakit.aggregate.odktables.rest.entity.Column;
 import org.opendatakit.aggregate.odktables.rest.entity.TableDefinitionResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResource;
-import org.opendatakit.common.android.sync.aggregate.SyncTag;
 import org.opendatakit.sync.service.SyncProgressState;
 import org.springframework.web.client.ResourceAccessException;
 
@@ -98,7 +97,7 @@ public interface Synchronizer {
    *          a map from column names to column types, see {@link ColumnType}
    * @return the TableResource for the table (the server may return different SyncTag values)
    */
-  public TableResource createTable(String tableId, SyncTag currentSyncTag, ArrayList<Column> columns)
+  public TableResource createTable(String tableId, String schemaETag, ArrayList<Column> columns)
       throws IOException;
 
   /**
@@ -114,28 +113,31 @@ public interface Synchronizer {
    *
    * @param tableId
    *          the unique identifier of the table
-   * @param currentSyncTag
-   *          the last value that was stored as the syncTag, or null if this is
-   *          the first synchronization
+   * @param schemaETag
+   *          tracks the schema instance that this id has
+   * @param dataETag
+   *          tracks the last dataETag for the last successfully downloaded row in the table.
    * @return an IncomingModification representing the latest state of the table
    *         on server since the last sync or null if the table does not exist
    *         on the server.
    *
    */
-  public IncomingRowModifications getUpdates(String tableId, SyncTag currentSyncTag) throws IOException;
+  public IncomingRowModifications getUpdates(String tableId, String schemaETag, String dataETag) throws IOException;
 
   /**
    * Insert or update the given row in the table on the server.
    *
    * @param tableId
    *          the unique identifier of the table
-   * @param currentSyncTag
-   *          the last value that was stored as the syncTag
+   * @param schemaETag
+   *          tracks the schema instance that this id has
+   * @param dataETag
+   *          tracks the last dataETag for the last successfully downloaded row in the table.
    * @param rowToInsertOrUpdate
    *          the row to insert or update
    * @return a RowModification containing the (rowId, rowETag, table dataETag) after the modification
    */
-  public RowModification insertOrUpdateRow(String tableId, SyncTag currentSyncTag, SyncRow rowToInsertOrUpdate)
+  public RowModification insertOrUpdateRow(String tableId, String schemaETag, String dataETag, SyncRow rowToInsertOrUpdate)
       throws IOException;
 
 
@@ -144,13 +146,15 @@ public interface Synchronizer {
    *
    * @param tableId
    *          the unique identifier of the table
-   * @param currentSyncTag
-   *          the last value that was stored as the syncTag
+   * @param schemaETag
+   *          tracks the schema instance that this id has
+   * @param dataETag
+   *          tracks the last dataETag for the last successfully downloaded row in the table.
    * @param rowToDelete
    *          the row to delete
    * @return a RowModification containing the (rowId, null, table dataETag) after the modification
    */
-  public RowModification deleteRow(String tableId, SyncTag currentSyncTag, SyncRow rowToDelete)
+  public RowModification deleteRow(String tableId, String schemaETag, String dataETag, SyncRow rowToDelete)
       throws IOException;
 
   /**

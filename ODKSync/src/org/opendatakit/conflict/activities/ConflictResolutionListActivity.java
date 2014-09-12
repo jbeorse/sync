@@ -1,14 +1,21 @@
 package org.opendatakit.conflict.activities;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.opendatakit.aggregate.odktables.rest.ConflictType;
-import org.opendatakit.common.android.data.DbTable;
-import org.opendatakit.common.android.data.TableProperties;
+import org.opendatakit.aggregate.odktables.rest.entity.Column;
+import org.opendatakit.common.android.data.ColumnDefinition;
 import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
+import org.opendatakit.common.android.database.DataModelDatabaseHelper;
+import org.opendatakit.common.android.database.DataModelDatabaseHelperFactory;
 import org.opendatakit.common.android.provider.DataTableColumns;
+import org.opendatakit.common.android.utilities.ODKDatabaseUtils;
 
 import android.app.ListActivity;
 import android.content.Intent;
+import android.database.sqlite.SQLiteDatabase;
 import android.util.Log;
 import android.view.View;
 import android.widget.ArrayAdapter;
@@ -55,37 +62,54 @@ public class ConflictResolutionListActivity extends ListActivity {
     }
     mTableId = getIntent().getStringExtra(Constants.TABLE_ID);
 
-    TableProperties tableProperties = TableProperties.getTablePropertiesForTable(this, mAppName,
-        mTableId);
-    DbTable dbTable = new DbTable(tableProperties);
-    UserTable table = dbTable.rawSqlQuery(
-        DataTableColumns.CONFLICT_TYPE + " IN ( ?, ?)",
-        new String[] { Integer.toString(ConflictType.LOCAL_DELETED_OLD_VALUES),
-            Integer.toString(ConflictType.LOCAL_UPDATED_UPDATED_VALUES) }, null, null,
-        DataTableColumns.ID, "ASC");
-    if (table.getNumberOfRows() == 0) {
-      this.setResult(RESULT_OK);
-      finish();
-      return;
-    }
-
-    this.mAdapter = new ArrayAdapter<ResolveRowEntry>(getActionBar().getThemedContext(),
-        android.R.layout.simple_list_item_1);
-
-    ResolveRowEntry firstE = null;
-    for (int i = 0; i < table.getNumberOfRows(); i++) {
-      Row localRow = table.getRowAtIndex(i);
-      String localRowId = localRow.getRawDataOrMetadataByElementKey(DataTableColumns.ID);
-      ResolveRowEntry e = new ResolveRowEntry(localRowId, "Resolve Conflict w.r.t. Server Row " + i);
-      this.mAdapter.add(e);
-      if (firstE == null) {
-        firstE = e;
+    DataModelDatabaseHelper dbh = DataModelDatabaseHelperFactory.getDbHelper(this, mAppName);
+    SQLiteDatabase db = null;
+    UserTable table = null;
+    try {
+      db = dbh.getReadableDatabase();
+      List<Column> columns = ODKDatabaseUtils.getUserDefinedColumns(db, mTableId);
+      ArrayList<ColumnDefinition> orderedDefns = ColumnDefinition.buildColumnDefinitions(columns);
+      List<String> persistedColumns = new ArrayList<String>();
+      for ( ColumnDefinition col : orderedDefns ) {
+        if ( col.isUnitOfRetention() ) {
+          persistedColumns.add(col.getElementKey());
+        }
       }
+      table = ODKDatabaseUtils.rawSqlQuery(db, mAppName, mTableId, 
+          persistedColumns, 
+          DataTableColumns.CONFLICT_TYPE + " IN ( ?, ?)",
+          new String[] { Integer.toString(ConflictType.LOCAL_DELETED_OLD_VALUES),
+              Integer.toString(ConflictType.LOCAL_UPDATED_UPDATED_VALUES) },
+          null, null, DataTableColumns.ID, "ASC");
+    } finally {
+      db.close();
     }
-    this.setListAdapter(mAdapter);
 
-    if (table.getNumberOfRows() == 1) {
-      launchRowResolution(firstE);
+    if ( table != null ) {
+      if (table.getNumberOfRows() == 0) {
+        this.setResult(RESULT_OK);
+        finish();
+        return;
+      }
+  
+      this.mAdapter = new ArrayAdapter<ResolveRowEntry>(getActionBar().getThemedContext(),
+          android.R.layout.simple_list_item_1);
+  
+      ResolveRowEntry firstE = null;
+      for (int i = 0; i < table.getNumberOfRows(); i++) {
+        Row localRow = table.getRowAtIndex(i);
+        String localRowId = localRow.getRawDataOrMetadataByElementKey(DataTableColumns.ID);
+        ResolveRowEntry e = new ResolveRowEntry(localRowId, "Resolve Conflict w.r.t. Server Row " + i);
+        this.mAdapter.add(e);
+        if (firstE == null) {
+          firstE = e;
+        }
+      }
+      this.setListAdapter(mAdapter);
+  
+      if (table.getNumberOfRows() == 1) {
+        launchRowResolution(firstE);
+      }
     }
   }
 
