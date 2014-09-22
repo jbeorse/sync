@@ -178,7 +178,7 @@ public class ConflictResolutionRowActivity extends ListActivity
     for (int i = 0; i < persistedColumns.size(); i++) {
       String elementKey = persistedColumns.get(i);
       ColumnDefinition cd = ColumnDefinition.find(mOrderedDefns, elementKey);
-      ElementType elementType = ElementType.parseElementType(cd.getElementType(), !cd.getChildren().isEmpty());
+      ElementType elementType = cd.getType();
       String columnDisplayName = persistedDisplayNames.get(elementKey);
       if ( columnDisplayName != null ) {
         columnDisplayName = ODKDataUtils.getLocalizedDisplayName(columnDisplayName);
