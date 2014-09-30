@@ -29,6 +29,8 @@ import org.opendatakit.aggregate.odktables.rest.KeyValueStoreConstants;
 import org.opendatakit.aggregate.odktables.rest.SyncState;
 import org.opendatakit.aggregate.odktables.rest.entity.Column;
 import org.opendatakit.aggregate.odktables.rest.entity.DataKeyValue;
+import org.opendatakit.aggregate.odktables.rest.entity.RowOutcome;
+import org.opendatakit.aggregate.odktables.rest.entity.RowOutcomeList;
 import org.opendatakit.aggregate.odktables.rest.entity.Scope;
 import org.opendatakit.aggregate.odktables.rest.entity.TableDefinitionResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResource;
@@ -75,6 +77,7 @@ public class SyncProcessor implements SynchronizerStatus {
 
   private static final String TAG = SyncProcessor.class.getSimpleName();
 
+  private static final int UPSERT_BATCH_SIZE = 500;
   private static final int ROWS_BETWEEN_PROGRESS_UPDATES = 10;
   private static final int OVERALL_PROGRESS_BAR_LENGTH = 6350400;
   private static final ObjectMapper mapper;
@@ -1107,13 +1110,38 @@ public class SyncProcessor implements SynchronizerStatus {
               List<SyncRow> allUpsertRows = new ArrayList<SyncRow>();
               allUpsertRows.addAll(rowsToInsertOnServer);
               allUpsertRows.addAll(rowsToUpdateOnServer);
-              for (SyncRow syncRow : allUpsertRows) {
-                RowModification rm = synchronizer.insertOrUpdateRow(tableId, te.getSchemaETag(), te.getLastDataETag(), syncRow);
+              
+              if ( !allUpsertRows.isEmpty() ) {
+                List<RowOutcome> outcomeList = new ArrayList<RowOutcome>();
+                int offset = 0;
+                while ( offset < allUpsertRows.size() ) {
+                  // upsert UPSERT_BATCH_SIZE rows at a time to the server
+                  int max = offset + UPSERT_BATCH_SIZE;
+                  if ( max > allUpsertRows.size() ) {
+                    max = allUpsertRows.size();
+                  }
+                  List<SyncRow> segmentUpsert = allUpsertRows.subList(offset, max); 
+                  RowOutcomeList outcomes = synchronizer.insertOrUpdateRows(tableId, revisedTag, segmentUpsert);
+                  outcomeList.addAll(outcomes.getRows());
+                  offset = max;
+                }
+                if ( outcomeList.size() != allUpsertRows.size() ) {
+                  throw new IllegalStateException("Unexpected partial return?");
+                }
+                for ( int i = 0 ; i < allUpsertRows.size(); ++i ) {
+                  RowOutcome r = outcomeList.get(i);
+                  SyncRow syncRow = allUpsertRows.get(i);
+                  if ( !r.getRowId().equals(syncRow.getRowId()) ) {
+                    throw new IllegalStateException("Unexpected reordering of return");
+                  }
+                  if ( r.getOutcome() == OutcomeType.SUCCESS ) {
+                    revisedTag.setDataETag(r.getDataETagAtModification());
+                    resource.setDataETag(r.getDataETagAtModification());
 
                 ContentValues values = new ContentValues();
-                values.put(DataTableColumns.ROW_ETAG, rm.getRowETag());
+                    values.put(DataTableColumns.ROW_ETAG, r.getRowETag());
                 values.put(DataTableColumns.SYNC_STATE, SyncState.synced_pending_files.name());
-                ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, tableId, orderedColumns, values, rm.getRowId());
+                ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, tableId, orderedColumns, values, r.getRowId());
                 tableResult.incServerUpserts();
 
                 boolean outcome = synchronizer.putFileAttachments(resource.getInstanceFilesUri(), tableId, syncRow);
@@ -1126,7 +1154,6 @@ public class SyncProcessor implements SynchronizerStatus {
                   instanceFileSuccess = false;
                 }
 
-                if (success) {
                   ODKDatabaseUtils.get().updateDBTableETags(db, tableId, rm.getTableSchemaETag(), rm.getTableDataETag());
                   te.setSchemaETag(rm.getTableSchemaETag());
                   te.setLastDataETag(rm.getTableDataETag());
@@ -1138,6 +1165,38 @@ public class SyncProcessor implements SynchronizerStatus {
                       new Object[] { tableId, count, allUpsertRows.size() }, 10.0 + rowsProcessed * perRowIncrement, false);
                 }
               }
+              }
+
+//              for (SyncRow syncRow : allUpsertRows) {
+//                RowModification rm = synchronizer.insertOrUpdateRow(tableId, revisedTag, syncRow);
+//
+//                ContentValues values = new ContentValues();
+//                values.put(DataTableColumns.ROW_ETAG, rm.getRowETag());
+//                values.put(DataTableColumns.SYNC_STATE, SyncState.synced_pending_files.name());
+//                table.actualUpdateRowByRowId(rm.getRowId(), values);
+//                tableResult.incServerUpserts();
+//
+//                boolean outcome = synchronizer.putFileAttachments(resource.getInstanceFilesUri(), tableId, syncRow);
+//                if (outcome) {
+//                  // move to synced state
+//                  values.clear();
+//                  values.put(DataTableColumns.SYNC_STATE, SyncState.synced.name());
+//                  table.actualUpdateRowByRowId(syncRow.getRowId(), values);
+//                } else {
+//                  instanceFileSuccess = false;
+//                }
+//
+//                revisedTag = rm.getTableSyncTag();
+//                if (success) {
+//                  tp.setSyncTag(revisedTag);
+//                }
+//                ++count;
+//                ++rowsProcessed;
+//                if ( rowsProcessed % ROWS_BETWEEN_PROGRESS_UPDATES == 0 ) {
+//                  this.updateNotification(SyncProgressState.ROWS, R.string.upserting_server_row,
+//                      new Object[] { tp.getTableId(), count, allUpsertRows.size() }, 10.0 + rowsProcessed * perRowIncrement, false);
+//                }
+//              }
 
               count = 0;
               for (SyncRow syncRow : rowsToDeleteOnServer) {
