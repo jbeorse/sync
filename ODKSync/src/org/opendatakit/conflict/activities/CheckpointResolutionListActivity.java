@@ -9,7 +9,6 @@ import org.opendatakit.aggregate.odktables.rest.entity.Column;
 import org.opendatakit.common.android.data.ColumnDefinition;
 import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
-import org.opendatakit.common.android.database.DataModelDatabaseHelper;
 import org.opendatakit.common.android.database.DataModelDatabaseHelperFactory;
 import org.opendatakit.common.android.provider.DataTableColumns;
 import org.opendatakit.common.android.utilities.ODKDatabaseUtils;
@@ -63,12 +62,11 @@ public class CheckpointResolutionListActivity extends ListActivity {
     }
     mTableId = getIntent().getStringExtra(Constants.TABLE_ID);
 
-    DataModelDatabaseHelper dbh = DataModelDatabaseHelperFactory.getDbHelper(this, mAppName);
     SQLiteDatabase db = null;
     UserTable table = null;
     try {
-      db = dbh.getReadableDatabase();
-      List<Column> columns = ODKDatabaseUtils.getUserDefinedColumns(db, mTableId);
+      db = DataModelDatabaseHelperFactory.getDatabase(this, mAppName);
+      List<Column> columns = ODKDatabaseUtils.get().getUserDefinedColumns(db, mTableId);
       ArrayList<ColumnDefinition> orderedDefns = ColumnDefinition.buildColumnDefinitions(columns);
       List<String> persistedColumns = new ArrayList<String>();
       for ( ColumnDefinition col : orderedDefns ) {
@@ -76,7 +74,7 @@ public class CheckpointResolutionListActivity extends ListActivity {
           persistedColumns.add(col.getElementKey());
         }
       }
-      table = ODKDatabaseUtils.rawSqlQuery(db, mAppName, mTableId, 
+      table = ODKDatabaseUtils.get().rawSqlQuery(db, mAppName, mTableId, 
           persistedColumns, DataTableColumns.SAVEPOINT_TYPE + " IS NULL", null,
           null, null, DataTableColumns.ID, "ASC");
     } finally {

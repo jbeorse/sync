@@ -14,7 +14,6 @@ import org.opendatakit.common.android.data.ElementType;
 import org.opendatakit.common.android.data.KeyValueStoreEntry;
 import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
-import org.opendatakit.common.android.database.DataModelDatabaseHelper;
 import org.opendatakit.common.android.database.DataModelDatabaseHelperFactory;
 import org.opendatakit.common.android.provider.DataTableColumns;
 import org.opendatakit.common.android.utilities.NameUtil;
@@ -127,12 +126,11 @@ public class ConflictResolutionRowActivity extends ListActivity
     
     List<String> persistedColumns = new ArrayList<String>();
     Map<String,String> persistedDisplayNames = new HashMap<String,String>();
-    DataModelDatabaseHelper dbh = DataModelDatabaseHelperFactory.getDbHelper(this, mAppName);
     {
       SQLiteDatabase db = null;
       try {
-        db = dbh.getReadableDatabase();
-        List<Column> columns = ODKDatabaseUtils.getUserDefinedColumns(db, mTableId);
+        db = DataModelDatabaseHelperFactory.getDatabase(this, mAppName);
+        List<Column> columns = ODKDatabaseUtils.get().getUserDefinedColumns(db, mTableId);
         mOrderedDefns = ColumnDefinition.buildColumnDefinitions(columns);
         for ( ColumnDefinition col : mOrderedDefns ) {
           if ( col.isUnitOfRetention() ) {
@@ -140,7 +138,7 @@ public class ConflictResolutionRowActivity extends ListActivity
           }
         }
         List<KeyValueStoreEntry> columnDisplayNames =
-            ODKDatabaseUtils.getDBTableMetadata(db, mTableId, 
+            ODKDatabaseUtils.get().getDBTableMetadata(db, mTableId, 
                 KeyValueStoreConstants.PARTITION_COLUMN, null, KeyValueStoreConstants.COLUMN_DISPLAY_NAME);
         for ( KeyValueStoreEntry e : columnDisplayNames ) {
           if ( persistedColumns.contains(e.aspect) ) {
@@ -319,12 +317,12 @@ public class ConflictResolutionRowActivity extends ListActivity
         Integer.toString(ConflictType.SERVER_DELETED_OLD_VALUES);
     String conflictTypeServerUpdatedStr = Integer.toString(
         ConflictType.SERVER_UPDATED_UPDATED_VALUES);
-    UserTable localTable = ODKDatabaseUtils.rawSqlQuery(db, 
+    UserTable localTable = ODKDatabaseUtils.get().rawSqlQuery(db, 
         mAppName, tableId, persistedColumns,
         SQL_FOR_SYNC_STATE_AND_CONFLICT_STATE, 
         new String[] {syncStateConflictStr, conflictTypeLocalDeletedStr,
             conflictTypeLocalUpdatedStr}, null, null, DataTableColumns.ID, "ASC");
-    UserTable serverTable = ODKDatabaseUtils.rawSqlQuery(db, 
+    UserTable serverTable = ODKDatabaseUtils.get().rawSqlQuery(db, 
         mAppName, tableId, persistedColumns,
         SQL_FOR_SYNC_STATE_AND_CONFLICT_STATE, 
         new String[] {syncStateConflictStr, conflictTypeServerDeletedStr,
@@ -484,11 +482,9 @@ public class ConflictResolutionRowActivity extends ListActivity
               mIsShowingTakeServerDialog = false;
               SQLiteDatabase db = null;
               try {
-                DataModelDatabaseHelper dbh = 
-                    DataModelDatabaseHelperFactory.getDbHelper(ConflictResolutionRowActivity.this, mAppName);
-                db = dbh.getWritableDatabase();
+                db = DataModelDatabaseHelperFactory.getDatabase(ConflictResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
-                ODKDatabaseUtils.deleteDataInDBTableWithId(db, mAppName, mTableId, mRowId);
+                ODKDatabaseUtils.get().deleteDataInDBTableWithId(db, mAppName, mTableId, mRowId);
                 db.setTransactionSuccessful();
               } finally {
                 if ( db != null ) {
@@ -555,12 +551,10 @@ public class ConflictResolutionRowActivity extends ListActivity
 
               SQLiteDatabase db = null;
               try {
-                DataModelDatabaseHelper dbh = 
-                    DataModelDatabaseHelperFactory.getDbHelper(ConflictResolutionRowActivity.this, mAppName);
-                db = dbh.getWritableDatabase();
+                db = DataModelDatabaseHelperFactory.getDatabase(ConflictResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
-                ODKDatabaseUtils.deleteServerConflictRows(db, mTableId, mRowId);
-                ODKDatabaseUtils.updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
+                ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
+                ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
                 db.setTransactionSuccessful();
               } finally {
                 if ( db != null ) {
@@ -619,12 +613,10 @@ public class ConflictResolutionRowActivity extends ListActivity
 
               SQLiteDatabase db = null;
               try {
-                DataModelDatabaseHelper dbh = 
-                    DataModelDatabaseHelperFactory.getDbHelper(ConflictResolutionRowActivity.this, mAppName);
-                db = dbh.getWritableDatabase();
+                db = DataModelDatabaseHelperFactory.getDatabase(ConflictResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
-                ODKDatabaseUtils.deleteServerConflictRows(db, mTableId, mRowId);
-                ODKDatabaseUtils.updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
+                ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
+                ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
                 db.setTransactionSuccessful();
               } finally {
                 if ( db != null ) {
@@ -683,12 +675,10 @@ public class ConflictResolutionRowActivity extends ListActivity
 
               SQLiteDatabase db = null;
               try {
-                DataModelDatabaseHelper dbh = 
-                    DataModelDatabaseHelperFactory.getDbHelper(ConflictResolutionRowActivity.this, mAppName);
-                db = dbh.getWritableDatabase();
+                db = DataModelDatabaseHelperFactory.getDatabase(ConflictResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
-                ODKDatabaseUtils.deleteServerConflictRows(db, mTableId, mRowId);
-                ODKDatabaseUtils.updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
+                ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
+                ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
                 db.setTransactionSuccessful();
               } finally {
                 if ( db != null ) {
@@ -759,12 +749,10 @@ public class ConflictResolutionRowActivity extends ListActivity
 
               SQLiteDatabase db = null;
               try {
-                DataModelDatabaseHelper dbh = 
-                    DataModelDatabaseHelperFactory.getDbHelper(ConflictResolutionRowActivity.this, mAppName);
-                db = dbh.getWritableDatabase();
+                db = DataModelDatabaseHelperFactory.getDatabase(ConflictResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
-                ODKDatabaseUtils.deleteServerConflictRows(db, mTableId, mRowId);
-                ODKDatabaseUtils.updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
+                ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
+                ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
                 db.setTransactionSuccessful();
               } finally {
                 if ( db != null ) {

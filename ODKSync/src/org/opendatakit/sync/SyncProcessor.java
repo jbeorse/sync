@@ -37,7 +37,6 @@ import org.opendatakit.common.android.data.KeyValueStoreEntry;
 import org.opendatakit.common.android.data.TableDefinitionEntry;
 import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
-import org.opendatakit.common.android.database.DataModelDatabaseHelper;
 import org.opendatakit.common.android.database.DataModelDatabaseHelperFactory;
 import org.opendatakit.common.android.provider.DataTableColumns;
 import org.opendatakit.common.android.utilities.CsvUtil;
@@ -178,9 +177,8 @@ public class SyncProcessor implements SynchronizerStatus {
     List<String> localTableIds = new ArrayList<String>();
     SQLiteDatabase db = null;
     try {
-      DataModelDatabaseHelper dbHelper = DataModelDatabaseHelperFactory.getDbHelper(context, appName);
-      db = dbHelper.getReadableDatabase();
-      localTableIds = ODKDatabaseUtils.getAllTableIds(db);
+      db = DataModelDatabaseHelperFactory.getDatabase(context, appName);
+      localTableIds = ODKDatabaseUtils.get().getAllTableIds(db);
       db.close();
     } catch (SQLiteException e ) {
       mUserResult.setAppLevelStatus(Status.EXCEPTION);
@@ -270,7 +268,7 @@ public class SyncProcessor implements SynchronizerStatus {
         Log.i(TAG, "[synchronizeConfigurationAndContent] synchronizing table " + localTableId);
 
         if ( !localTableId.equals("framework") ) {
-          List<Column> columns = ODKDatabaseUtils.getUserDefinedColumns(db, localTableId);
+          List<Column> columns = ODKDatabaseUtils.get().getUserDefinedColumns(db, localTableId);
           ArrayList<ColumnDefinition> orderedDefns = ColumnDefinition.buildColumnDefinitions(columns);
           
           // do not sync the framework table
@@ -356,9 +354,8 @@ public class SyncProcessor implements SynchronizerStatus {
         // eventually might not be true if there are multiple syncs running simultaneously...
         TableResult tableResult = mUserResult.getTableResult(localTableId);
         try {
-          DataModelDatabaseHelper dbHelper = DataModelDatabaseHelperFactory.getDbHelper(context, appName);
-          db = dbHelper.getReadableDatabase();
-          ODKDatabaseUtils.deleteTableAndData(db, appName, localTableId);
+          db = DataModelDatabaseHelperFactory.getDatabase(context, appName);
+          ODKDatabaseUtils.get().deleteTableAndData(db, appName, localTableId);
           tableResult.setStatus(Status.SUCCESS);
         } catch (SQLiteException e ) {
           tableResult.setStatus(Status.EXCEPTION);
@@ -379,7 +376,7 @@ public class SyncProcessor implements SynchronizerStatus {
 
   private String getLocalizedTableDisplayName(SQLiteDatabase db, String tableId) {
     String displayName;
-    List<KeyValueStoreEntry> entries = ODKDatabaseUtils.getDBTableMetadata(db, tableId,
+    List<KeyValueStoreEntry> entries = ODKDatabaseUtils.get().getDBTableMetadata(db, tableId,
             KeyValueStoreConstants.PARTITION_TABLE, KeyValueStoreConstants.ASPECT_DEFAULT, KeyValueStoreConstants.TABLE_DISPLAY_NAME);
     if ( entries.size() == 1 ) {
       displayName = entries.get(0).value;
@@ -436,7 +433,7 @@ public class SyncProcessor implements SynchronizerStatus {
     final TableResult tableResult = mUserResult.getTableResult(tableId);
     String displayName = getLocalizedTableDisplayName(db, tableId);
     tableResult.setTableDisplayName(displayName);
-    TableDefinitionEntry te = ODKDatabaseUtils.getTableDefinitionEntry(db, tableId);
+    TableDefinitionEntry te = ODKDatabaseUtils.get().getTableDefinitionEntry(db, tableId);
     try {
       String dataETag = te.getLastDataETag();
       String schemaETag = te.getSchemaETag();
@@ -462,10 +459,10 @@ public class SyncProcessor implements SynchronizerStatus {
           db.beginTransaction();
           // change row sync and conflict status to handle new server schema.
           // Clean up this table and set the dataETag to null.
-          ODKDatabaseUtils.changeDataRowsToNewRowState(db, tableId);
+          ODKDatabaseUtils.get().changeDataRowsToNewRowState(db, tableId);
           // we need to clear out the dataETag so
           // that we will pull all server changes and sync our properties.
-          ODKDatabaseUtils.updateDBTableETags(db, tableId, null, null);
+          ODKDatabaseUtils.get().updateDBTableETags(db, tableId, null, null);
           db.setTransactionSuccessful();
         } finally {
           if ( db != null ) {
@@ -495,7 +492,7 @@ public class SyncProcessor implements SynchronizerStatus {
         try {
           db.beginTransaction();
           // update schemaETag to that on server (dataETag is null already).
-          ODKDatabaseUtils.updateDBTableETags(db, tableId, schemaETag, null);
+          ODKDatabaseUtils.get().updateDBTableETags(db, tableId, schemaETag, null);
           db.setTransactionSuccessful();
         } finally {
           if ( db != null ) {
@@ -661,10 +658,9 @@ public class SyncProcessor implements SynchronizerStatus {
     
     SQLiteDatabase db = null;
     try {
-      DataModelDatabaseHelper dbh = DataModelDatabaseHelperFactory.getDbHelper(context, appName);
-      db = dbh.getWritableDatabase();
+      db = DataModelDatabaseHelperFactory.getDatabase(context, appName);
   
-      List<String> tableIds = ODKDatabaseUtils.getAllTableIds(db);
+      List<String> tableIds = ODKDatabaseUtils.get().getAllTableIds(db);
   
       // we can assume that all the local table properties should
       // sync with the server.
@@ -672,8 +668,8 @@ public class SyncProcessor implements SynchronizerStatus {
         // Sync the local media files with the server if the table
         // existed locally before we attempted downloading it.
   
-        TableDefinitionEntry te = ODKDatabaseUtils.getTableDefinitionEntry(db, tableId);
-        List<Column> columns = ODKDatabaseUtils.getUserDefinedColumns(db, tableId);
+        TableDefinitionEntry te = ODKDatabaseUtils.get().getTableDefinitionEntry(db, tableId);
+        List<Column> columns = ODKDatabaseUtils.get().getUserDefinedColumns(db, tableId);
         ArrayList<ColumnDefinition> orderedDefns = ColumnDefinition.buildColumnDefinitions(columns);
         synchronizeTableDataRowsAndAttachments(db, te, orderedDefns);
         ++iMajorSyncStep;
@@ -821,7 +817,7 @@ public class SyncProcessor implements SynchronizerStatus {
               }
             }
             
-            UserTable localDataTable = ODKDatabaseUtils.rawSqlQuery(db, 
+            UserTable localDataTable = ODKDatabaseUtils.get().rawSqlQuery(db, 
                     appName, tableId, persistedColumns, null, null, null, null, DataTableColumns.ID, "ASC");
 
             containsConflicts = localDataTable.hasConflictRows();
@@ -1074,7 +1070,7 @@ public class SyncProcessor implements SynchronizerStatus {
                 // knows we saw its changes. Otherwise it won't let us
                 // put up new information.
                 if (success) {
-                  ODKDatabaseUtils.updateDBTableETags(db, tableId, modification.getTableSchemaETag(), modification.getTableDataETag());
+                  ODKDatabaseUtils.get().updateDBTableETags(db, tableId, modification.getTableSchemaETag(), modification.getTableDataETag());
                   te.setSchemaETag(modification.getTableSchemaETag());
                   te.setLastDataETag(modification.getTableDataETag());
                 }
@@ -1117,7 +1113,7 @@ public class SyncProcessor implements SynchronizerStatus {
                 ContentValues values = new ContentValues();
                 values.put(DataTableColumns.ROW_ETAG, rm.getRowETag());
                 values.put(DataTableColumns.SYNC_STATE, SyncState.synced_pending_files.name());
-                ODKDatabaseUtils.updateDataInExistingDBTableWithId(db, tableId, orderedColumns, values, rm.getRowId());
+                ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, tableId, orderedColumns, values, rm.getRowId());
                 tableResult.incServerUpserts();
 
                 boolean outcome = synchronizer.putFileAttachments(resource.getInstanceFilesUri(), tableId, syncRow);
@@ -1125,13 +1121,13 @@ public class SyncProcessor implements SynchronizerStatus {
                   // move to synced state
                   values.clear();
                   values.put(DataTableColumns.SYNC_STATE, SyncState.synced.name());
-                  ODKDatabaseUtils.updateDataInExistingDBTableWithId(db, tableId, orderedColumns, values, syncRow.getRowId());
+                  ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, tableId, orderedColumns, values, syncRow.getRowId());
                 } else {
                   instanceFileSuccess = false;
                 }
 
                 if (success) {
-                  ODKDatabaseUtils.updateDBTableETags(db, tableId, rm.getTableSchemaETag(), rm.getTableDataETag());
+                  ODKDatabaseUtils.get().updateDBTableETags(db, tableId, rm.getTableSchemaETag(), rm.getTableDataETag());
                   te.setSchemaETag(rm.getTableSchemaETag());
                   te.setLastDataETag(rm.getTableDataETag());
                 }
@@ -1146,10 +1142,10 @@ public class SyncProcessor implements SynchronizerStatus {
               count = 0;
               for (SyncRow syncRow : rowsToDeleteOnServer) {
                 RowModification rm = synchronizer.deleteRow(tableId, te.getSchemaETag(), te.getLastDataETag(), syncRow);
-                ODKDatabaseUtils.deleteDataInDBTableWithId(db, appName, tableId, rm.getRowId());
+                ODKDatabaseUtils.get().deleteDataInDBTableWithId(db, appName, tableId, rm.getRowId());
                 tableResult.incServerDeletes();
                 if (success) {
-                  ODKDatabaseUtils.updateDBTableETags(db, tableId, rm.getTableSchemaETag(), rm.getTableDataETag());
+                  ODKDatabaseUtils.get().updateDBTableETags(db, tableId, rm.getTableSchemaETag(), rm.getTableDataETag());
                   te.setSchemaETag(modification.getTableSchemaETag());
                   te.setLastDataETag(modification.getTableDataETag());
                 }
@@ -1170,7 +1166,7 @@ public class SyncProcessor implements SynchronizerStatus {
                   if (outcome) {
                     ContentValues values = new ContentValues();
                     values.put(DataTableColumns.SYNC_STATE, SyncState.synced.name());
-                    ODKDatabaseUtils.updateDataInExistingDBTableWithId(db, tableId, orderedColumns, values, syncRow.getRowId());
+                    ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, tableId, orderedColumns, values, syncRow.getRowId());
                   }
                 }
                 if ( !outcome ) {
@@ -1220,8 +1216,8 @@ public class SyncProcessor implements SynchronizerStatus {
       }
 
       // It is possible the table properties changed. Refresh just in case.
-      if (success && ODKDatabaseUtils.hasTableId(db, tableId)) // null in case we deleted the tp.
-        ODKDatabaseUtils.updateDBTableLastSyncTime(db, tableId);
+      if (success && ODKDatabaseUtils.get().hasTableId(db, tableId)) // null in case we deleted the tp.
+        ODKDatabaseUtils.get().updateDBTableLastSyncTime(db, tableId);
     } finally {
       // Here we also want to add the TableResult to the value.
       if (success) {
@@ -1301,7 +1297,7 @@ public class SyncProcessor implements SynchronizerStatus {
       ContentValues values = new ContentValues();
 
       // delete the old server-values in_conflict row if it exists
-      ODKDatabaseUtils.deleteServerConflictRows(db, tableId, serverRow.getRowId());
+      ODKDatabaseUtils.get().deleteServerConflictRows(db, tableId, serverRow.getRowId());
       // update existing localRow
 
       // the localRow conflict type was determined when the
@@ -1321,14 +1317,14 @@ public class SyncProcessor implements SynchronizerStatus {
 
         // special case -- the server and local rows are both being deleted
         // just delete them!
-        ODKDatabaseUtils.deleteDataInDBTableWithId(db, appName, tableId, serverRow.getRowId());
+        ODKDatabaseUtils.get().deleteDataInDBTableWithId(db, appName, tableId, serverRow.getRowId());
         tableResult.incLocalDeletes();
       } else {
         // update the localRow to be in_conflict
         values.put(DataTableColumns.ID, serverRow.getRowId());
         values.put(DataTableColumns.SYNC_STATE, SyncState.in_conflict.name());
         values.put(DataTableColumns.CONFLICT_TYPE, localRowConflictType);
-        ODKDatabaseUtils.updateDataInExistingDBTableWithId(db, tableId, orderedColumns, values, serverRow.getRowId());
+        ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, tableId, orderedColumns, values, serverRow.getRowId());
 
         // set up to insert the in_conflict row from the server
         for (DataKeyValue entry : serverRow.getValues()) {
@@ -1348,7 +1344,7 @@ public class SyncProcessor implements SynchronizerStatus {
         values.put(DataTableColumns.FILTER_TYPE,
             (type == null) ? Scope.Type.DEFAULT.name() : type.name());
         values.put(DataTableColumns.FILTER_VALUE, serverRow.getFilterScope().getValue());
-        ODKDatabaseUtils.insertDataIntoExistingDBTableWithId(db, tableId, orderedColumns, values, serverRow.getRowId());
+        ODKDatabaseUtils.get().insertDataIntoExistingDBTableWithId(db, tableId, orderedColumns, values, serverRow.getRowId());
 
         // We're going to check our representation invariant here. A local and
         // a server version of the row should only ever be changed/changed,
@@ -1408,7 +1404,7 @@ public class SyncProcessor implements SynchronizerStatus {
         values.put(colName, entry.value);
       }
 
-      ODKDatabaseUtils.insertDataIntoExistingDBTableWithId(db, tableId, orderedColumns, values, serverRow.getRowId());
+      ODKDatabaseUtils.get().insertDataIntoExistingDBTableWithId(db, tableId, orderedColumns, values, serverRow.getRowId());
       tableResult.incLocalInserts();
 
       // ensure we have the file attachments for the inserted row
@@ -1417,7 +1413,7 @@ public class SyncProcessor implements SynchronizerStatus {
         // move to synced state
         values.clear();
         values.put(DataTableColumns.SYNC_STATE, SyncState.synced.name());
-        ODKDatabaseUtils.updateDataInExistingDBTableWithId(db, tableId, orderedColumns, values, serverRow.getRowId());
+        ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, tableId, orderedColumns, values, serverRow.getRowId());
       } else {
         fileSuccess = false;
       }
@@ -1471,7 +1467,7 @@ public class SyncProcessor implements SynchronizerStatus {
           values.put(colName, entry.value);
         }
 
-        ODKDatabaseUtils.updateDataInExistingDBTableWithId(db, tableId, orderedColumns, values, serverRow.getRowId());
+        ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, tableId, orderedColumns, values, serverRow.getRowId());
         tableResult.incLocalUpdates();
 
         // and try to get the file attachments for the row
@@ -1480,7 +1476,7 @@ public class SyncProcessor implements SynchronizerStatus {
           // move to synced state
           values.clear();
           values.put(DataTableColumns.SYNC_STATE, SyncState.synced.name());
-          ODKDatabaseUtils.updateDataInExistingDBTableWithId(db, tableId, orderedColumns, values, serverRow.getRowId());
+          ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, tableId, orderedColumns, values, serverRow.getRowId());
         } else {
           fileSuccess = false;
         }
@@ -1505,7 +1501,7 @@ public class SyncProcessor implements SynchronizerStatus {
       if (change.isRestPendingFiles) {
         boolean outcome = synchronizer.putFileAttachments(resource.getInstanceFilesUri(), tableId, change.localRow);
         if (outcome) {
-          ODKDatabaseUtils.deleteDataInDBTableWithId(db, appName, tableId, change.serverRow.getRowId());
+          ODKDatabaseUtils.get().deleteDataInDBTableWithId(db, appName, tableId, change.serverRow.getRowId());
           tableResult.incLocalDeletes();
         } else {
           deletesAllSuccessful = false;
@@ -1568,14 +1564,14 @@ public class SyncProcessor implements SynchronizerStatus {
     if (doesNotExistLocally) {
       try {
         db.beginTransaction();
-        orderedDefns = ODKDatabaseUtils.createOrOpenDBTableWithColumns(db, definitionResource.getTableId(), definitionResource.getColumns());
-        ODKDatabaseUtils.updateDBTableETags(db, definitionResource.getTableId(), definitionResource.getSchemaETag(), null);
+        orderedDefns = ODKDatabaseUtils.get().createOrOpenDBTableWithColumns(db, definitionResource.getTableId(), definitionResource.getColumns());
+        ODKDatabaseUtils.get().updateDBTableETags(db, definitionResource.getTableId(), definitionResource.getSchemaETag(), null);
         db.setTransactionSuccessful();
       } finally {
         db.endTransaction();
       }
     } else {
-      List<Column> localColumns = ODKDatabaseUtils.getUserDefinedColumns(db, definitionResource.getTableId());
+      List<Column> localColumns = ODKDatabaseUtils.get().getUserDefinedColumns(db, definitionResource.getTableId());
       List<Column> serverColumns = definitionResource.getColumns();
       orderedDefns = ColumnDefinition.buildColumnDefinitions(localColumns);
 
@@ -1591,7 +1587,7 @@ public class SyncProcessor implements SynchronizerStatus {
         }
       }
 
-      TableDefinitionEntry te = ODKDatabaseUtils.getTableDefinitionEntry(db, definitionResource.getTableId());
+      TableDefinitionEntry te = ODKDatabaseUtils.get().getTableDefinitionEntry(db, definitionResource.getTableId());
       String schemaETag = te.getSchemaETag();
       if (schemaETag == null || !schemaETag.equals(definitionResource.getSchemaETag())) {
         // server has changed its schema
@@ -1599,10 +1595,10 @@ public class SyncProcessor implements SynchronizerStatus {
           db.beginTransaction();
           // change row sync and conflict status to handle new server schema.
           // Clean up this table and set the dataETag to null.
-          ODKDatabaseUtils.changeDataRowsToNewRowState(db, definitionResource.getTableId());
+          ODKDatabaseUtils.get().changeDataRowsToNewRowState(db, definitionResource.getTableId());
           // and update to the new schemaETag, but clear our dataETag
           // so that all data rows sync.
-          ODKDatabaseUtils.updateDBTableETags(db, definitionResource.getTableId(), definitionResource.getSchemaETag(), null);
+          ODKDatabaseUtils.get().updateDBTableETags(db, definitionResource.getTableId(), definitionResource.getSchemaETag(), null);
           db.setTransactionSuccessful();
         } finally {
           db.endTransaction();

@@ -13,7 +13,6 @@ import org.opendatakit.common.android.data.ElementType;
 import org.opendatakit.common.android.data.KeyValueStoreEntry;
 import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
-import org.opendatakit.common.android.database.DataModelDatabaseHelper;
 import org.opendatakit.common.android.database.DataModelDatabaseHelperFactory;
 import org.opendatakit.common.android.provider.DataTableColumns;
 import org.opendatakit.common.android.utilities.NameUtil;
@@ -106,12 +105,11 @@ public class CheckpointResolutionRowActivity extends ListActivity
     
     List<String> persistedColumns = new ArrayList<String>();
     Map<String,String> persistedDisplayNames = new HashMap<String,String>();
-    DataModelDatabaseHelper dbh = DataModelDatabaseHelperFactory.getDbHelper(this, mAppName);
     {
       SQLiteDatabase db = null;
       try {
-        db = dbh.getReadableDatabase();
-        List<Column> columns = ODKDatabaseUtils.getUserDefinedColumns(db, mTableId);
+        db = DataModelDatabaseHelperFactory.getDatabase(this, mAppName);
+        List<Column> columns = ODKDatabaseUtils.get().getUserDefinedColumns(db, mTableId);
         mOrderedDefns = ColumnDefinition.buildColumnDefinitions(columns);
         for ( ColumnDefinition col : mOrderedDefns ) {
           if ( col.isUnitOfRetention() ) {
@@ -119,14 +117,14 @@ public class CheckpointResolutionRowActivity extends ListActivity
           }
         }
         List<KeyValueStoreEntry> columnDisplayNames =
-            ODKDatabaseUtils.getDBTableMetadata(db, mTableId, 
+            ODKDatabaseUtils.get().getDBTableMetadata(db, mTableId, 
                 KeyValueStoreConstants.PARTITION_COLUMN, null, KeyValueStoreConstants.COLUMN_DISPLAY_NAME);
         for ( KeyValueStoreEntry e : columnDisplayNames ) {
           if ( persistedColumns.contains(e.aspect) ) {
             persistedDisplayNames.put(e.aspect, e.value);
           }
         }
-        mConflictTable = ODKDatabaseUtils.rawSqlQuery(db, mAppName, mTableId,
+        mConflictTable = ODKDatabaseUtils.get().rawSqlQuery(db, mAppName, mTableId,
             persistedColumns, DataTableColumns.ID + "=?",
             new String[] {mRowId}, null, null, DataTableColumns.SAVEPOINT_TIMESTAMP, "ASC");
       } finally {
@@ -365,11 +363,9 @@ public class CheckpointResolutionRowActivity extends ListActivity
 
               SQLiteDatabase db = null;
               try {
-                DataModelDatabaseHelper dbh = 
-                    DataModelDatabaseHelperFactory.getDbHelper(CheckpointResolutionRowActivity.this, mAppName);
-                db = dbh.getWritableDatabase();
+                db = DataModelDatabaseHelperFactory.getDatabase(CheckpointResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
-                ODKDatabaseUtils.saveAsIncompleteMostRecentCheckpointDataInDBTableWithId(db, mTableId, mRowId);
+                ODKDatabaseUtils.get().saveAsIncompleteMostRecentCheckpointDataInDBTableWithId(db, mTableId, mRowId);
                 db.setTransactionSuccessful();
               } finally {
                 if ( db != null ) {
@@ -423,11 +419,9 @@ public class CheckpointResolutionRowActivity extends ListActivity
 
               SQLiteDatabase db = null;
               try {
-                DataModelDatabaseHelper dbh = 
-                    DataModelDatabaseHelperFactory.getDbHelper(CheckpointResolutionRowActivity.this, mAppName);
-                db = dbh.getWritableDatabase();
+                db = DataModelDatabaseHelperFactory.getDatabase(CheckpointResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
-                ODKDatabaseUtils.deleteDataInDBTableWithId(db, mAppName, mTableId, mRowId);
+                ODKDatabaseUtils.get().deleteDataInDBTableWithId(db, mAppName, mTableId, mRowId);
                 db.setTransactionSuccessful();
               } finally {
                 if ( db != null ) {
@@ -480,11 +474,9 @@ public class CheckpointResolutionRowActivity extends ListActivity
 
               SQLiteDatabase db = null;
               try {
-                DataModelDatabaseHelper dbh = 
-                    DataModelDatabaseHelperFactory.getDbHelper(CheckpointResolutionRowActivity.this, mAppName);
-                db = dbh.getWritableDatabase();
+                db = DataModelDatabaseHelperFactory.getDatabase(CheckpointResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
-                ODKDatabaseUtils.deleteCheckpointDataInDBTableWithId(db, mTableId, mRowId );
+                ODKDatabaseUtils.get().deleteCheckpointDataInDBTableWithId(db, mTableId, mRowId );
                 db.setTransactionSuccessful();
               } finally {
                 if ( db != null ) {
