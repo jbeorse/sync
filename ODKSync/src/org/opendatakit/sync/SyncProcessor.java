@@ -358,7 +358,7 @@ public class SyncProcessor implements SynchronizerStatus {
         try {
           DataModelDatabaseHelper dbHelper = DataModelDatabaseHelperFactory.getDbHelper(context, appName);
           db = dbHelper.getReadableDatabase();
-          ODKDatabaseUtils.deleteTableAndData(db, localTableId);
+          ODKDatabaseUtils.deleteTableAndData(db, appName, localTableId);
           tableResult.setStatus(Status.SUCCESS);
         } catch (SQLiteException e ) {
           tableResult.setStatus(Status.EXCEPTION);
