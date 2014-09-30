@@ -37,7 +37,7 @@ import org.opendatakit.common.android.data.KeyValueStoreEntry;
 import org.opendatakit.common.android.data.TableDefinitionEntry;
 import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
-import org.opendatakit.common.android.database.DataModelDatabaseHelperFactory;
+import org.opendatakit.common.android.database.DatabaseFactory;
 import org.opendatakit.common.android.provider.DataTableColumns;
 import org.opendatakit.common.android.utilities.CsvUtil;
 import org.opendatakit.common.android.utilities.DataUtil;
@@ -177,7 +177,7 @@ public class SyncProcessor implements SynchronizerStatus {
     List<String> localTableIds = new ArrayList<String>();
     SQLiteDatabase db = null;
     try {
-      db = DataModelDatabaseHelperFactory.getDatabase(context, appName);
+      db = DatabaseFactory.get().getDatabase(context, appName);
       localTableIds = ODKDatabaseUtils.get().getAllTableIds(db);
       db.close();
     } catch (SQLiteException e ) {
@@ -354,7 +354,7 @@ public class SyncProcessor implements SynchronizerStatus {
         // eventually might not be true if there are multiple syncs running simultaneously...
         TableResult tableResult = mUserResult.getTableResult(localTableId);
         try {
-          db = DataModelDatabaseHelperFactory.getDatabase(context, appName);
+          db = DatabaseFactory.get().getDatabase(context, appName);
           ODKDatabaseUtils.get().deleteTableAndData(db, appName, localTableId);
           tableResult.setStatus(Status.SUCCESS);
         } catch (SQLiteException e ) {
@@ -658,7 +658,7 @@ public class SyncProcessor implements SynchronizerStatus {
     
     SQLiteDatabase db = null;
     try {
-      db = DataModelDatabaseHelperFactory.getDatabase(context, appName);
+      db = DatabaseFactory.get().getDatabase(context, appName);
   
       List<String> tableIds = ODKDatabaseUtils.get().getAllTableIds(db);
   

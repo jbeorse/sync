@@ -13,7 +13,7 @@ import org.opendatakit.common.android.data.ElementType;
 import org.opendatakit.common.android.data.KeyValueStoreEntry;
 import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
-import org.opendatakit.common.android.database.DataModelDatabaseHelperFactory;
+import org.opendatakit.common.android.database.DatabaseFactory;
 import org.opendatakit.common.android.provider.DataTableColumns;
 import org.opendatakit.common.android.utilities.NameUtil;
 import org.opendatakit.common.android.utilities.ODKDataUtils;
@@ -108,7 +108,7 @@ public class CheckpointResolutionRowActivity extends ListActivity
     {
       SQLiteDatabase db = null;
       try {
-        db = DataModelDatabaseHelperFactory.getDatabase(this, mAppName);
+        db = DatabaseFactory.get().getDatabase(this, mAppName);
         List<Column> columns = ODKDatabaseUtils.get().getUserDefinedColumns(db, mTableId);
         mOrderedDefns = ColumnDefinition.buildColumnDefinitions(columns);
         for ( ColumnDefinition col : mOrderedDefns ) {
@@ -363,7 +363,7 @@ public class CheckpointResolutionRowActivity extends ListActivity
 
               SQLiteDatabase db = null;
               try {
-                db = DataModelDatabaseHelperFactory.getDatabase(CheckpointResolutionRowActivity.this, mAppName);
+                db = DatabaseFactory.get().getDatabase(CheckpointResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
                 ODKDatabaseUtils.get().saveAsIncompleteMostRecentCheckpointDataInDBTableWithId(db, mTableId, mRowId);
                 db.setTransactionSuccessful();
@@ -419,7 +419,7 @@ public class CheckpointResolutionRowActivity extends ListActivity
 
               SQLiteDatabase db = null;
               try {
-                db = DataModelDatabaseHelperFactory.getDatabase(CheckpointResolutionRowActivity.this, mAppName);
+                db = DatabaseFactory.get().getDatabase(CheckpointResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
                 ODKDatabaseUtils.get().deleteDataInDBTableWithId(db, mAppName, mTableId, mRowId);
                 db.setTransactionSuccessful();
@@ -474,7 +474,7 @@ public class CheckpointResolutionRowActivity extends ListActivity
 
               SQLiteDatabase db = null;
               try {
-                db = DataModelDatabaseHelperFactory.getDatabase(CheckpointResolutionRowActivity.this, mAppName);
+                db = DatabaseFactory.get().getDatabase(CheckpointResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
                 ODKDatabaseUtils.get().deleteCheckpointDataInDBTableWithId(db, mTableId, mRowId );
                 db.setTransactionSuccessful();

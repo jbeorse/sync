@@ -14,7 +14,7 @@ import org.opendatakit.common.android.data.ElementType;
 import org.opendatakit.common.android.data.KeyValueStoreEntry;
 import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
-import org.opendatakit.common.android.database.DataModelDatabaseHelperFactory;
+import org.opendatakit.common.android.database.DatabaseFactory;
 import org.opendatakit.common.android.provider.DataTableColumns;
 import org.opendatakit.common.android.utilities.NameUtil;
 import org.opendatakit.common.android.utilities.ODKDataUtils;
@@ -129,7 +129,7 @@ public class ConflictResolutionRowActivity extends ListActivity
     {
       SQLiteDatabase db = null;
       try {
-        db = DataModelDatabaseHelperFactory.getDatabase(this, mAppName);
+        db = DatabaseFactory.get().getDatabase(this, mAppName);
         List<Column> columns = ODKDatabaseUtils.get().getUserDefinedColumns(db, mTableId);
         mOrderedDefns = ColumnDefinition.buildColumnDefinitions(columns);
         for ( ColumnDefinition col : mOrderedDefns ) {
@@ -482,7 +482,7 @@ public class ConflictResolutionRowActivity extends ListActivity
               mIsShowingTakeServerDialog = false;
               SQLiteDatabase db = null;
               try {
-                db = DataModelDatabaseHelperFactory.getDatabase(ConflictResolutionRowActivity.this, mAppName);
+                db = DatabaseFactory.get().getDatabase(ConflictResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
                 ODKDatabaseUtils.get().deleteDataInDBTableWithId(db, mAppName, mTableId, mRowId);
                 db.setTransactionSuccessful();
@@ -551,7 +551,7 @@ public class ConflictResolutionRowActivity extends ListActivity
 
               SQLiteDatabase db = null;
               try {
-                db = DataModelDatabaseHelperFactory.getDatabase(ConflictResolutionRowActivity.this, mAppName);
+                db = DatabaseFactory.get().getDatabase(ConflictResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
                 ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
                 ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
@@ -613,7 +613,7 @@ public class ConflictResolutionRowActivity extends ListActivity
 
               SQLiteDatabase db = null;
               try {
-                db = DataModelDatabaseHelperFactory.getDatabase(ConflictResolutionRowActivity.this, mAppName);
+                db = DatabaseFactory.get().getDatabase(ConflictResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
                 ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
                 ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
@@ -675,7 +675,7 @@ public class ConflictResolutionRowActivity extends ListActivity
 
               SQLiteDatabase db = null;
               try {
-                db = DataModelDatabaseHelperFactory.getDatabase(ConflictResolutionRowActivity.this, mAppName);
+                db = DatabaseFactory.get().getDatabase(ConflictResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
                 ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
                 ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
@@ -749,7 +749,7 @@ public class ConflictResolutionRowActivity extends ListActivity
 
               SQLiteDatabase db = null;
               try {
-                db = DataModelDatabaseHelperFactory.getDatabase(ConflictResolutionRowActivity.this, mAppName);
+                db = DatabaseFactory.get().getDatabase(ConflictResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
                 ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
                 ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);

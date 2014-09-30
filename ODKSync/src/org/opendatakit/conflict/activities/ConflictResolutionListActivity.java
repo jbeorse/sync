@@ -8,7 +8,7 @@ import org.opendatakit.aggregate.odktables.rest.entity.Column;
 import org.opendatakit.common.android.data.ColumnDefinition;
 import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
-import org.opendatakit.common.android.database.DataModelDatabaseHelperFactory;
+import org.opendatakit.common.android.database.DatabaseFactory;
 import org.opendatakit.common.android.provider.DataTableColumns;
 import org.opendatakit.common.android.utilities.ODKDatabaseUtils;
 
@@ -64,7 +64,7 @@ public class ConflictResolutionListActivity extends ListActivity {
     SQLiteDatabase db = null;
     UserTable table = null;
     try {
-      db = DataModelDatabaseHelperFactory.getDatabase(this, mAppName);
+      db = DatabaseFactory.get().getDatabase(this, mAppName);
       List<Column> columns = ODKDatabaseUtils.get().getUserDefinedColumns(db, mTableId);
       ArrayList<ColumnDefinition> orderedDefns = ColumnDefinition.buildColumnDefinitions(columns);
       List<String> persistedColumns = new ArrayList<String>();
