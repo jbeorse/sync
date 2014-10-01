@@ -7,7 +7,6 @@ import java.util.Map;
 
 import org.opendatakit.aggregate.odktables.rest.KeyValueStoreConstants;
 import org.opendatakit.aggregate.odktables.rest.SavepointTypeManipulator;
-import org.opendatakit.aggregate.odktables.rest.entity.Column;
 import org.opendatakit.common.android.data.ColumnDefinition;
 import org.opendatakit.common.android.data.ElementType;
 import org.opendatakit.common.android.data.KeyValueStoreEntry;
@@ -18,6 +17,7 @@ import org.opendatakit.common.android.provider.DataTableColumns;
 import org.opendatakit.common.android.utilities.NameUtil;
 import org.opendatakit.common.android.utilities.ODKDataUtils;
 import org.opendatakit.common.android.utilities.ODKDatabaseUtils;
+import org.opendatakit.common.android.utilities.TableUtil;
 import org.opendatakit.sync.R;
 import org.opendatakit.sync.views.components.ConcordantColumn;
 import org.opendatakit.sync.views.components.ConflictColumn;
@@ -109,8 +109,7 @@ public class CheckpointResolutionRowActivity extends ListActivity
       SQLiteDatabase db = null;
       try {
         db = DatabaseFactory.get().getDatabase(this, mAppName);
-        List<Column> columns = ODKDatabaseUtils.get().getUserDefinedColumns(db, mTableId);
-        mOrderedDefns = ColumnDefinition.buildColumnDefinitions(columns);
+        mOrderedDefns = TableUtil.get().getColumnDefinitions(db, mTableId);
         for ( ColumnDefinition col : mOrderedDefns ) {
           if ( col.isUnitOfRetention() ) {
             persistedColumns.add(col.getElementKey());

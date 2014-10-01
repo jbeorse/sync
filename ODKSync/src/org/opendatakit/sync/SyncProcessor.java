@@ -48,6 +48,7 @@ import org.opendatakit.common.android.utilities.NameUtil;
 import org.opendatakit.common.android.utilities.ODKDataUtils;
 import org.opendatakit.common.android.utilities.ODKDatabaseUtils;
 import org.opendatakit.common.android.utilities.ODKFileUtils;
+import org.opendatakit.common.android.utilities.TableUtil;
 import org.opendatakit.sync.SynchronizationResult.Status;
 import org.opendatakit.sync.Synchronizer.OnTablePropertiesChanged;
 import org.opendatakit.sync.Synchronizer.SynchronizerStatus;
@@ -277,9 +278,7 @@ public class SyncProcessor implements SynchronizerStatus {
         Log.i(TAG, "[synchronizeConfigurationAndContent] synchronizing table " + localTableId);
 
         if (!localTableId.equals("framework")) {
-          List<Column> columns = ODKDatabaseUtils.get().getUserDefinedColumns(db, localTableId);
-          ArrayList<ColumnDefinition> orderedDefns = ColumnDefinition
-              .buildColumnDefinitions(columns);
+          ArrayList<ColumnDefinition> orderedDefns = TableUtil.get().getColumnDefinitions(db, localTableId);
 
           // do not sync the framework table
           synchronizeTableConfigurationAndContent(db, localTableId, orderedDefns, matchingResource,
@@ -700,8 +699,7 @@ public class SyncProcessor implements SynchronizerStatus {
         // existed locally before we attempted downloading it.
 
         TableDefinitionEntry te = ODKDatabaseUtils.get().getTableDefinitionEntry(db, tableId);
-        List<Column> columns = ODKDatabaseUtils.get().getUserDefinedColumns(db, tableId);
-        ArrayList<ColumnDefinition> orderedDefns = ColumnDefinition.buildColumnDefinitions(columns);
+        ArrayList<ColumnDefinition> orderedDefns = TableUtil.get().getColumnDefinitions(db, tableId);
         synchronizeTableDataRowsAndAttachments(db, te, orderedDefns);
         ++iMajorSyncStep;
       }
@@ -1699,15 +1697,16 @@ public class SyncProcessor implements SynchronizerStatus {
   private ArrayList<ColumnDefinition> addTableFromDefinitionResource(SQLiteDatabase db,
       TableDefinitionResource definitionResource, boolean doesNotExistLocally)
       throws JsonParseException, JsonMappingException, IOException, SchemaMismatchException {
-    ArrayList<ColumnDefinition> orderedDefns;
     if (doesNotExistLocally) {
       try {
+        ArrayList<ColumnDefinition> orderedDefns;
         db.beginTransaction();
         orderedDefns = ODKDatabaseUtils.get().createOrOpenDBTableWithColumns(db,
             definitionResource.getTableId(), definitionResource.getColumns());
         ODKDatabaseUtils.get().updateDBTableETags(db, definitionResource.getTableId(),
             definitionResource.getSchemaETag(), null);
         db.setTransactionSuccessful();
+        return orderedDefns;
       } finally {
         db.endTransaction();
       }
@@ -1715,7 +1714,6 @@ public class SyncProcessor implements SynchronizerStatus {
       List<Column> localColumns = ODKDatabaseUtils.get().getUserDefinedColumns(db,
           definitionResource.getTableId());
       List<Column> serverColumns = definitionResource.getColumns();
-      orderedDefns = ColumnDefinition.buildColumnDefinitions(localColumns);
 
       if (localColumns.size() != serverColumns.size()) {
         throw new SchemaMismatchException("Server schema differs from local schema");
@@ -1748,8 +1746,8 @@ public class SyncProcessor implements SynchronizerStatus {
           db.endTransaction();
         }
       }
+      return ColumnDefinition.buildColumnDefinitions(localColumns);
     }
-    return orderedDefns;
   }
 
   private boolean containsAllChildren(List<ColumnDefinition> cpListChildElementKeys,

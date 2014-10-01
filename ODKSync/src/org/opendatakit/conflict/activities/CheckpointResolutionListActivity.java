@@ -5,13 +5,13 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
-import org.opendatakit.aggregate.odktables.rest.entity.Column;
 import org.opendatakit.common.android.data.ColumnDefinition;
 import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
 import org.opendatakit.common.android.database.DatabaseFactory;
 import org.opendatakit.common.android.provider.DataTableColumns;
 import org.opendatakit.common.android.utilities.ODKDatabaseUtils;
+import org.opendatakit.common.android.utilities.TableUtil;
 
 import android.app.ListActivity;
 import android.content.Intent;
@@ -66,8 +66,7 @@ public class CheckpointResolutionListActivity extends ListActivity {
     UserTable table = null;
     try {
       db = DatabaseFactory.get().getDatabase(this, mAppName);
-      List<Column> columns = ODKDatabaseUtils.get().getUserDefinedColumns(db, mTableId);
-      ArrayList<ColumnDefinition> orderedDefns = ColumnDefinition.buildColumnDefinitions(columns);
+      ArrayList<ColumnDefinition> orderedDefns = TableUtil.get().getColumnDefinitions(db, mTableId);
       List<String> persistedColumns = new ArrayList<String>();
       for ( ColumnDefinition col : orderedDefns ) {
         if ( col.isUnitOfRetention() ) {
