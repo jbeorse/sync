@@ -51,7 +51,6 @@ import org.opendatakit.aggregate.odktables.rest.entity.OdkTablesFileManifest;
 import org.opendatakit.aggregate.odktables.rest.entity.OdkTablesFileManifestEntry;
 import org.opendatakit.aggregate.odktables.rest.entity.Row;
 import org.opendatakit.aggregate.odktables.rest.entity.RowList;
-import org.opendatakit.aggregate.odktables.rest.entity.RowOutcome;
 import org.opendatakit.aggregate.odktables.rest.entity.RowOutcomeList;
 import org.opendatakit.aggregate.odktables.rest.entity.RowResource;
 import org.opendatakit.aggregate.odktables.rest.entity.RowResourceList;
@@ -59,7 +58,6 @@ import org.opendatakit.aggregate.odktables.rest.entity.TableDefinition;
 import org.opendatakit.aggregate.odktables.rest.entity.TableDefinitionResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResourceList;
-import org.opendatakit.aggregate.odktables.rest.entity.RowOutcome.OutcomeType;
 import org.opendatakit.common.android.utilities.ODKFileUtils;
 import org.opendatakit.common.android.utilities.WebUtils;
 import org.opendatakit.httpclientandroidlib.Header;
@@ -582,10 +580,9 @@ public class AggregateSynchronizer implements Synchronizer {
    *          the row to insert or update
    * @return a RowModification containing the (rowId, rowETag, table dataETag) after the modification
    */
-  public RowOutcomeList insertOrUpdateRows(String tableId, SyncTag currentSyncTag, List<SyncRow> rowsToInsertOrUpdate)
+  public RowOutcomeList insertOrUpdateRows(String tableId, String tableSchemaETag, String tableDataETag, List<SyncRow> rowsToInsertOrUpdate)
       throws ResourceAccessException {
         TableResource resource = getTable(tableId);
-        SyncTag lastKnownServerSyncTag = new SyncTag(currentSyncTag.getDataETag(), currentSyncTag.getSchemaETag());
 
         ArrayList<Row> rows = new ArrayList<Row>();
         for ( SyncRow rowToInsertOrUpdate : rowsToInsertOrUpdate ) {

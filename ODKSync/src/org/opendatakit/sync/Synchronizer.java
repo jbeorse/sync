@@ -125,7 +125,17 @@ public interface Synchronizer {
    */
   public IncomingRowModifications getUpdates(String tableId, String schemaETag, String dataETag) throws IOException;
 
-  public RowOutcomeList insertOrUpdateRows(String tableId, SyncTag currentSyncTag, List<SyncRow> rowsToInsertOrUpdate)
+  /**
+   * Apply updates in a collection up to the server.
+   * 
+   * @param tableId
+   * @param schemaETag
+   * @param dataETag
+   * @param rowsToInsertOrUpdate
+   * @return
+   * @throws ResourceAccessException
+   */
+  public RowOutcomeList insertOrUpdateRows(String tableId, String schemaETag, String dataETag, List<SyncRow> rowsToInsertOrUpdate)
       throws ResourceAccessException;
 
   /**
