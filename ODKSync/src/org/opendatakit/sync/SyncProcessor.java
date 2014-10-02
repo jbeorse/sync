@@ -1739,7 +1739,7 @@ public class SyncProcessor implements SynchronizerStatus {
           db.endTransaction();
         }
       }
-      return ColumnDefinition.buildColumnDefinitions(localColumns);
+      return ColumnDefinition.buildColumnDefinitions(definitionResource.getTableId(), localColumns);
     }
   }
 
