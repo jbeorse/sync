@@ -842,15 +842,8 @@ public class SyncProcessor implements SynchronizerStatus {
 
             // get all the rows in the data table -- we will iterate through
             // them all.
-            List<String> persistedColumns = new ArrayList<String>();
-            for (ColumnDefinition cd : orderedColumns) {
-              if (cd.isUnitOfRetention()) {
-                persistedColumns.add(cd.getElementKey());
-              }
-            }
-
             UserTable localDataTable = ODKDatabaseUtils.get().rawSqlQuery(db, appName, tableId,
-                persistedColumns, null, null, null, null, DataTableColumns.ID, "ASC");
+                orderedColumns, null, null, null, null, DataTableColumns.ID, "ASC");
 
             containsConflicts = localDataTable.hasConflictRows();
 

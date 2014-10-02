@@ -1,7 +1,6 @@
 package org.opendatakit.conflict.activities;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -67,14 +66,8 @@ public class CheckpointResolutionListActivity extends ListActivity {
     try {
       db = DatabaseFactory.get().getDatabase(this, mAppName);
       ArrayList<ColumnDefinition> orderedDefns = TableUtil.get().getColumnDefinitions(db, mTableId);
-      List<String> persistedColumns = new ArrayList<String>();
-      for ( ColumnDefinition col : orderedDefns ) {
-        if ( col.isUnitOfRetention() ) {
-          persistedColumns.add(col.getElementKey());
-        }
-      }
       table = ODKDatabaseUtils.get().rawSqlQuery(db, mAppName, mTableId, 
-          persistedColumns, DataTableColumns.SAVEPOINT_TYPE + " IS NULL", null,
+          orderedDefns, DataTableColumns.SAVEPOINT_TYPE + " IS NULL", null,
           null, null, DataTableColumns.ID, "ASC");
     } finally {
       db.close();

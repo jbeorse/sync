@@ -1,7 +1,6 @@
 package org.opendatakit.conflict.activities;
 
 import java.util.ArrayList;
-import java.util.List;
 
 import org.opendatakit.aggregate.odktables.rest.ConflictType;
 import org.opendatakit.common.android.data.ColumnDefinition;
@@ -66,14 +65,8 @@ public class ConflictResolutionListActivity extends ListActivity {
     try {
       db = DatabaseFactory.get().getDatabase(this, mAppName);
       ArrayList<ColumnDefinition> orderedDefns = TableUtil.get().getColumnDefinitions(db, mTableId);
-      List<String> persistedColumns = new ArrayList<String>();
-      for ( ColumnDefinition col : orderedDefns ) {
-        if ( col.isUnitOfRetention() ) {
-          persistedColumns.add(col.getElementKey());
-        }
-      }
       table = ODKDatabaseUtils.get().rawSqlQuery(db, mAppName, mTableId, 
-          persistedColumns, 
+          orderedDefns, 
           DataTableColumns.CONFLICT_TYPE + " IN ( ?, ?)",
           new String[] { Integer.toString(ConflictType.LOCAL_DELETED_OLD_VALUES),
               Integer.toString(ConflictType.LOCAL_UPDATED_UPDATED_VALUES) },

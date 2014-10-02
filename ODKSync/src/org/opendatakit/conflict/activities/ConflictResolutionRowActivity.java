@@ -124,27 +124,24 @@ public class ConflictResolutionRowActivity extends ListActivity
         getIntent().getStringExtra(Constants.TABLE_ID);
     this.mRowId = getIntent().getStringExtra(INTENT_KEY_ROW_ID);
     
-    List<String> persistedColumns = new ArrayList<String>();
     Map<String,String> persistedDisplayNames = new HashMap<String,String>();
     {
       SQLiteDatabase db = null;
       try {
         db = DatabaseFactory.get().getDatabase(this, mAppName);
         mOrderedDefns = TableUtil.get().getColumnDefinitions(db, mTableId);
-        for ( ColumnDefinition col : mOrderedDefns ) {
-          if ( col.isUnitOfRetention() ) {
-            persistedColumns.add(col.getElementKey());
-          }
-        }
         List<KeyValueStoreEntry> columnDisplayNames =
             ODKDatabaseUtils.get().getDBTableMetadata(db, mTableId, 
                 KeyValueStoreConstants.PARTITION_COLUMN, null, KeyValueStoreConstants.COLUMN_DISPLAY_NAME);
         for ( KeyValueStoreEntry e : columnDisplayNames ) {
-          if ( persistedColumns.contains(e.aspect) ) {
+          try {
+            ColumnDefinition.find(mOrderedDefns, e.aspect);
             persistedDisplayNames.put(e.aspect, e.value);
+          } catch ( IllegalArgumentException ex ) {
+            // ignore
           }
         }
-        this.mConflictTable = getConflictTable(db, mTableId, persistedColumns);
+        this.mConflictTable = getConflictTable(db, mTableId, mOrderedDefns);
       } finally {
         db.close();
       }
@@ -172,9 +169,11 @@ public class ConflictResolutionRowActivity extends ListActivity
     List<ConcordantColumn> noConflictColumns =
         new ArrayList<ConcordantColumn>();
     
-    for (int i = 0; i < persistedColumns.size(); i++) {
-      String elementKey = persistedColumns.get(i);
-      ColumnDefinition cd = ColumnDefinition.find(mOrderedDefns, elementKey);
+    for ( ColumnDefinition cd : mOrderedDefns ) {
+      if ( !cd.isUnitOfRetention() ) {
+        continue;
+      }
+      String elementKey = cd.getElementKey();
       ElementType elementType = cd.getType();
       String columnDisplayName = persistedDisplayNames.get(elementKey);
       if ( columnDisplayName != null ) {
@@ -295,7 +294,8 @@ public class ConflictResolutionRowActivity extends ListActivity
     }
   }
 
-  public ConflictTable getConflictTable(SQLiteDatabase db, String tableId, List<String> persistedColumns) {
+  public ConflictTable getConflictTable(SQLiteDatabase db, String tableId, 
+      ArrayList<ColumnDefinition> orderedDefns) {
     // The new protocol for syncing is as follows:
     // local rows and server rows both have SYNC_STATE=CONFLICT.
     // The server version will have their _conflict_type column set to either
@@ -317,12 +317,12 @@ public class ConflictResolutionRowActivity extends ListActivity
     String conflictTypeServerUpdatedStr = Integer.toString(
         ConflictType.SERVER_UPDATED_UPDATED_VALUES);
     UserTable localTable = ODKDatabaseUtils.get().rawSqlQuery(db, 
-        mAppName, tableId, persistedColumns,
+        mAppName, tableId, orderedDefns,
         SQL_FOR_SYNC_STATE_AND_CONFLICT_STATE, 
         new String[] {syncStateConflictStr, conflictTypeLocalDeletedStr,
             conflictTypeLocalUpdatedStr}, null, null, DataTableColumns.ID, "ASC");
     UserTable serverTable = ODKDatabaseUtils.get().rawSqlQuery(db, 
-        mAppName, tableId, persistedColumns,
+        mAppName, tableId, orderedDefns,
         SQL_FOR_SYNC_STATE_AND_CONFLICT_STATE, 
         new String[] {syncStateConflictStr, conflictTypeServerDeletedStr,
             conflictTypeServerUpdatedStr}, null, null, DataTableColumns.ID, "ASC");

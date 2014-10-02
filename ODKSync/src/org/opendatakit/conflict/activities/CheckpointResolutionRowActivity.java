@@ -103,28 +103,28 @@ public class CheckpointResolutionRowActivity extends ListActivity
         getIntent().getStringExtra(Constants.TABLE_ID);
     this.mRowId = getIntent().getStringExtra(INTENT_KEY_ROW_ID);
     
-    List<String> persistedColumns = new ArrayList<String>();
     Map<String,String> persistedDisplayNames = new HashMap<String,String>();
     {
       SQLiteDatabase db = null;
       try {
         db = DatabaseFactory.get().getDatabase(this, mAppName);
         mOrderedDefns = TableUtil.get().getColumnDefinitions(db, mTableId);
-        for ( ColumnDefinition col : mOrderedDefns ) {
-          if ( col.isUnitOfRetention() ) {
-            persistedColumns.add(col.getElementKey());
-          }
-        }
+
         List<KeyValueStoreEntry> columnDisplayNames =
             ODKDatabaseUtils.get().getDBTableMetadata(db, mTableId, 
                 KeyValueStoreConstants.PARTITION_COLUMN, null, KeyValueStoreConstants.COLUMN_DISPLAY_NAME);
+
         for ( KeyValueStoreEntry e : columnDisplayNames ) {
-          if ( persistedColumns.contains(e.aspect) ) {
+          try {
+            ColumnDefinition.find(mOrderedDefns, e.aspect);
             persistedDisplayNames.put(e.aspect, e.value);
+          } catch ( IllegalArgumentException ex ) {
+            // ignore
           }
         }
+        
         mConflictTable = ODKDatabaseUtils.get().rawSqlQuery(db, mAppName, mTableId,
-            persistedColumns, DataTableColumns.ID + "=?",
+            mOrderedDefns, DataTableColumns.ID + "=?",
             new String[] {mRowId}, null, null, DataTableColumns.SAVEPOINT_TIMESTAMP, "ASC");
       } finally {
         db.close();
@@ -173,9 +173,11 @@ public class CheckpointResolutionRowActivity extends ListActivity
     this.mConflictColumns = new ArrayList<ConflictColumn>();
     List<ConcordantColumn> noConflictColumns =
         new ArrayList<ConcordantColumn>();
-    for (int i = 0; i < persistedColumns.size(); i++) {
-      String elementKey = persistedColumns.get(i);
-      ColumnDefinition cd = ColumnDefinition.find(mOrderedDefns, elementKey);
+    for ( ColumnDefinition cd : mOrderedDefns ) {
+      if ( !cd.isUnitOfRetention() ) {
+        continue;
+      }
+      String elementKey = cd.getElementKey();
       ElementType elementType = cd.getType();
       String columnDisplayName = persistedDisplayNames.get(elementKey);
       if ( columnDisplayName != null ) {
