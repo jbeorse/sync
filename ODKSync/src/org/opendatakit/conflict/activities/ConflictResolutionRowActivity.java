@@ -6,12 +6,20 @@ import java.util.List;
 import java.util.Map;
 
 import org.opendatakit.aggregate.odktables.rest.ConflictType;
-import org.opendatakit.common.android.data.ConflictTable;
-import org.opendatakit.common.android.data.DbTable;
-import org.opendatakit.common.android.data.TableProperties;
+import org.opendatakit.aggregate.odktables.rest.KeyValueStoreConstants;
+import org.opendatakit.aggregate.odktables.rest.SyncState;
+import org.opendatakit.common.android.data.ColumnDefinition;
+import org.opendatakit.common.android.data.ElementType;
+import org.opendatakit.common.android.data.KeyValueStoreEntry;
 import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
+import org.opendatakit.common.android.database.DatabaseFactory;
 import org.opendatakit.common.android.provider.DataTableColumns;
+import org.opendatakit.common.android.utilities.NameUtil;
+import org.opendatakit.common.android.utilities.ODKDataUtils;
+import org.opendatakit.common.android.utilities.ODKDatabaseUtils;
+import org.opendatakit.common.android.utilities.TableUtil;
+import org.opendatakit.sync.ConflictTable;
 import org.opendatakit.sync.R;
 import org.opendatakit.sync.views.components.ConcordantColumn;
 import org.opendatakit.sync.views.components.ConflictColumn;
@@ -21,8 +29,10 @@ import org.opendatakit.sync.views.components.ConflictResolutionListAdapter.Secti
 
 import android.app.AlertDialog;
 import android.app.ListActivity;
+import android.content.ContentValues;
 import android.content.DialogInterface;
 import android.content.DialogInterface.OnCancelListener;
+import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
@@ -42,6 +52,10 @@ public class ConflictResolutionRowActivity extends ListActivity
   private static final String TAG =
       ConflictResolutionRowActivity.class.getSimpleName();
 
+  private static final String SQL_FOR_SYNC_STATE_AND_CONFLICT_STATE =
+      DataTableColumns.SYNC_STATE + " = ? AND "
+      + DataTableColumns.CONFLICT_TYPE + " IN ( ?, ? )";
+
   public static final String INTENT_KEY_ROW_ID = "rowId";
 
   private static final String BUNDLE_KEY_SHOWING_LOCAL_DIALOG =
@@ -56,6 +70,9 @@ public class ConflictResolutionRowActivity extends ListActivity
   private static final String BUNDLE_KEY_RESOLUTION_VALUES =
       "resolutionValues";
 
+  private String mAppName;
+  private String mTableId;
+  private ArrayList<ColumnDefinition> mOrderedDefns;
   private ConflictTable mConflictTable;
   private ConflictResolutionListAdapter mAdapter;
   /** The row number of the row in conflict within the {@link ConflictTable}.*/
@@ -86,9 +103,9 @@ public class ConflictResolutionRowActivity extends ListActivity
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
-    String appName = getIntent().getStringExtra(Constants.APP_NAME);
-    if ( appName == null ) {
-      appName = Constants.DEFAULT_APP_NAME;
+    mAppName = getIntent().getStringExtra(Constants.APP_NAME);
+    if ( mAppName == null ) {
+      mAppName = Constants.DEFAULT_APP_NAME;
     }
     this.setContentView(R.layout.conflict_resolution_row_activity);
     this.mTextViewConflictMessage = (TextView)
@@ -103,13 +120,33 @@ public class ConflictResolutionRowActivity extends ListActivity
         (Button) findViewById(R.id.conflict_resolution_button_resolve_row);
     this.mButtonResolveRow.setOnClickListener(new ResolveRowClickListener());
 
-    String tableId =
+    mTableId =
         getIntent().getStringExtra(Constants.TABLE_ID);
     this.mRowId = getIntent().getStringExtra(INTENT_KEY_ROW_ID);
-    TableProperties tableProperties =
-        TableProperties.getTablePropertiesForTable(this, appName, tableId);
-    DbTable dbTable = DbTable.getDbTable(tableProperties);
-    this.mConflictTable = dbTable.getConflictTable();
+    
+    Map<String,String> persistedDisplayNames = new HashMap<String,String>();
+    {
+      SQLiteDatabase db = null;
+      try {
+        db = DatabaseFactory.get().getDatabase(this, mAppName);
+        mOrderedDefns = TableUtil.get().getColumnDefinitions(db, mTableId);
+        List<KeyValueStoreEntry> columnDisplayNames =
+            ODKDatabaseUtils.get().getDBTableMetadata(db, mTableId, 
+                KeyValueStoreConstants.PARTITION_COLUMN, null, KeyValueStoreConstants.COLUMN_DISPLAY_NAME);
+        for ( KeyValueStoreEntry e : columnDisplayNames ) {
+          try {
+            ColumnDefinition.find(mOrderedDefns, e.aspect);
+            persistedDisplayNames.put(e.aspect, e.value);
+          } catch ( IllegalArgumentException ex ) {
+            // ignore
+          }
+        }
+        this.mConflictTable = getConflictTable(db, mTableId, mOrderedDefns);
+      } finally {
+        db.close();
+      }
+    }
+    
     this.mLocal = mConflictTable.getLocalTable();
     this.mServer = mConflictTable.getServerTable();
     //
@@ -123,8 +160,6 @@ public class ConflictResolutionRowActivity extends ListActivity
     Row localRow = this.mLocal.getRowAtIndex(mRowNumber);
     Row serverRow = this.mServer.getRowAtIndex(mRowNumber);
     this.mServerRowETag = serverRow.getRawDataOrMetadataByElementKey(DataTableColumns.ROW_ETAG);
-    TableProperties tp = mConflictTable.getLocalTable().getTableProperties();
-    List<String> columnOrder = tp.getPersistedColumns();
     // This will be the number of rows down we are in the adapter. Each
     // heading and each cell value gets its own row. Columns in conflict get
     // two, as we'll need to display each one to the user.
@@ -133,17 +168,26 @@ public class ConflictResolutionRowActivity extends ListActivity
     this.mConflictColumns = new ArrayList<ConflictColumn>();
     List<ConcordantColumn> noConflictColumns =
         new ArrayList<ConcordantColumn>();
-    for (int i = 0; i < columnOrder.size(); i++) {
-      String elementKey = columnOrder.get(i);
-      String columnDisplayName =
-          tp.getColumnByElementKey(elementKey).getLocalizedDisplayName();
+    
+    for ( ColumnDefinition cd : mOrderedDefns ) {
+      if ( !cd.isUnitOfRetention() ) {
+        continue;
+      }
+      String elementKey = cd.getElementKey();
+      ElementType elementType = cd.getType();
+      String columnDisplayName = persistedDisplayNames.get(elementKey);
+      if ( columnDisplayName != null ) {
+        columnDisplayName = ODKDataUtils.getLocalizedDisplayName(columnDisplayName);
+      } else {
+        columnDisplayName = NameUtil.constructSimpleDisplayName(elementKey);
+      }
       Section newSection = new Section(adapterOffset, columnDisplayName);
       ++adapterOffset;
       sections.add(newSection);
       String localRawValue = localRow.getRawDataOrMetadataByElementKey(elementKey);
-      String localDisplayValue = localRow.getDisplayTextOfData(this, elementKey, true);
+      String localDisplayValue = localRow.getDisplayTextOfData(this, elementType, elementKey, true);
       String serverRawValue = serverRow.getRawDataOrMetadataByElementKey(elementKey);
-      String serverDisplayValue = serverRow.getDisplayTextOfData(this, elementKey, true);
+      String serverDisplayValue = serverRow.getDisplayTextOfData(this, elementType, elementKey, true);
       if ((localRawValue == null && serverRawValue == null) ||
     	  (localRawValue != null && localRawValue.equals(serverRawValue))) {
         // TODO: this doesn't compare actual equality of blobs if their display
@@ -248,6 +292,41 @@ public class ConflictResolutionRowActivity extends ListActivity
       		" pair of conflict types. local: " + localConflictType +
       		", sever: " + serverConflictType);
     }
+  }
+
+  public ConflictTable getConflictTable(SQLiteDatabase db, String tableId, 
+      ArrayList<ColumnDefinition> orderedDefns) {
+    // The new protocol for syncing is as follows:
+    // local rows and server rows both have SYNC_STATE=CONFLICT.
+    // The server version will have their _conflict_type column set to either
+    // SERVER_DELETED_OLD_VALUES or SERVER_UPDATED_UPDATED_VALUES. The local
+    // version will have its _conflict_type column set to either
+    // LOCAL_DELETED_OLD_VALUES or LOCAL_UPDATED_UPDATED_VALUES. See the
+    // lengthy discussion of these states and their implications at
+    // ConflictType.
+    String[] selectionKeys = new String[2];
+    selectionKeys[0] = DataTableColumns.SYNC_STATE;
+    selectionKeys[1] = DataTableColumns.CONFLICT_TYPE;
+    String syncStateConflictStr = SyncState.in_conflict.name();
+    String conflictTypeLocalDeletedStr =
+        Integer.toString(ConflictType.LOCAL_DELETED_OLD_VALUES);
+    String conflictTypeLocalUpdatedStr =
+        Integer.toString(ConflictType.LOCAL_UPDATED_UPDATED_VALUES);
+    String conflictTypeServerDeletedStr =
+        Integer.toString(ConflictType.SERVER_DELETED_OLD_VALUES);
+    String conflictTypeServerUpdatedStr = Integer.toString(
+        ConflictType.SERVER_UPDATED_UPDATED_VALUES);
+    UserTable localTable = ODKDatabaseUtils.get().rawSqlQuery(db, 
+        mAppName, tableId, orderedDefns,
+        SQL_FOR_SYNC_STATE_AND_CONFLICT_STATE, 
+        new String[] {syncStateConflictStr, conflictTypeLocalDeletedStr,
+            conflictTypeLocalUpdatedStr}, null, null, DataTableColumns.ID, "ASC");
+    UserTable serverTable = ODKDatabaseUtils.get().rawSqlQuery(db, 
+        mAppName, tableId, orderedDefns,
+        SQL_FOR_SYNC_STATE_AND_CONFLICT_STATE, 
+        new String[] {syncStateConflictStr, conflictTypeServerDeletedStr,
+            conflictTypeServerUpdatedStr}, null, null, DataTableColumns.ID, "ASC");
+    return new ConflictTable(localTable, serverTable);
   }
 
   /*
@@ -400,9 +479,18 @@ public class ConflictResolutionRowActivity extends ListActivity
               // this will be a simple matter of deleting all the rows with the
               // same rowid on the local device.
               mIsShowingTakeServerDialog = false;
-              DbTable dbTable =
-                  DbTable.getDbTable(mLocal.getTableProperties());
-              dbTable.deleteRowActual(mRowId);
+              SQLiteDatabase db = null;
+              try {
+                db = DatabaseFactory.get().getDatabase(ConflictResolutionRowActivity.this, mAppName);
+                db.beginTransaction();
+                ODKDatabaseUtils.get().deleteDataInDBTableWithId(db, mAppName, mTableId, mRowId);
+                db.setTransactionSuccessful();
+              } finally {
+                if ( db != null ) {
+                  db.endTransaction();
+                  db.close();
+                }
+              }
               ConflictResolutionRowActivity.this.finish();
               Log.d(TAG, "deleted local and server versions");
             }
@@ -449,16 +537,30 @@ public class ConflictResolutionRowActivity extends ListActivity
               // takeServer was pressed. Then we're going to flag row as
               // deleted.
               mIsShowingTakeLocalDialog = false;
-              DbTable dbTable =
-                  DbTable.getDbTable(mLocal.getTableProperties());
-              Map<String, String> valuesToUse = new HashMap<String, String>();
-              for (ConflictColumn cc : mConflictColumns) {
-                valuesToUse.put(cc.getElementKey(), cc.getServerRawValue());
-              }
-              dbTable.resolveConflict(mRowId, mServerRowETag, valuesToUse);
-              dbTable.markDeleted(mRowId);
               Log.d(TAG, "deleted the local version and marked the server" +
               		" version as deleting.");
+              // replacement
+              ContentValues updateValues = new ContentValues();
+              updateValues.put(DataTableColumns.SYNC_STATE, SyncState.deleted.name());
+              updateValues.put(DataTableColumns.ROW_ETAG, mServerRowETag);
+              updateValues.putNull(DataTableColumns.CONFLICT_TYPE);
+              for (ConflictColumn cc : mConflictColumns) {
+                  updateValues.put(cc.getElementKey(), cc.getServerRawValue());
+              }
+
+              SQLiteDatabase db = null;
+              try {
+                db = DatabaseFactory.get().getDatabase(ConflictResolutionRowActivity.this, mAppName);
+                db.beginTransaction();
+                ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
+                ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
+                db.setTransactionSuccessful();
+              } finally {
+                if ( db != null ) {
+                  db.endTransaction();
+                  db.close();
+                }
+              }
               ConflictResolutionRowActivity.this.finish();
             }
           });
@@ -498,13 +600,29 @@ public class ConflictResolutionRowActivity extends ListActivity
             @Override
             public void onClick(DialogInterface dialog, int which) {
               mIsShowingTakeLocalDialog = false;
-              DbTable dbTable =
-                  DbTable.getDbTable(mLocal.getTableProperties());
-              Map<String, String> valuesToUse = new HashMap<String, String>();
+
+              // replacement
+              ContentValues updateValues = new ContentValues();
+              updateValues.put(DataTableColumns.SYNC_STATE, SyncState.changed.name());
+              updateValues.put(DataTableColumns.ROW_ETAG, mServerRowETag);
+              updateValues.putNull(DataTableColumns.CONFLICT_TYPE);
               for (ConflictColumn cc : mConflictColumns) {
-                valuesToUse.put(cc.getElementKey(), cc.getLocalRawValue());
+                  updateValues.put(cc.getElementKey(), cc.getLocalRawValue());
               }
-              dbTable.resolveConflict(mRowId, mServerRowETag, valuesToUse);
+
+              SQLiteDatabase db = null;
+              try {
+                db = DatabaseFactory.get().getDatabase(ConflictResolutionRowActivity.this, mAppName);
+                db.beginTransaction();
+                ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
+                ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
+                db.setTransactionSuccessful();
+              } finally {
+                if ( db != null ) {
+                  db.endTransaction();
+                  db.close();
+                }
+              }
               ConflictResolutionRowActivity.this.finish();
             }
           });
@@ -545,13 +663,28 @@ public class ConflictResolutionRowActivity extends ListActivity
             @Override
             public void onClick(DialogInterface dialog, int which) {
               mIsShowingTakeServerDialog = false;
-              DbTable dbTable =
-                  DbTable.getDbTable(mLocal.getTableProperties());
-              Map<String, String> valuesToUse = new HashMap<String, String>();
+              // replacement
+              ContentValues updateValues = new ContentValues();
+              updateValues.put(DataTableColumns.SYNC_STATE, SyncState.changed.name());
+              updateValues.put(DataTableColumns.ROW_ETAG, mServerRowETag);
+              updateValues.putNull(DataTableColumns.CONFLICT_TYPE);
               for (ConflictColumn cc : mConflictColumns) {
-                valuesToUse.put(cc.getElementKey(), cc.getServerRawValue());
+                  updateValues.put(cc.getElementKey(), cc.getServerRawValue());
               }
-              dbTable.resolveConflict(mRowId, mServerRowETag, valuesToUse);
+
+              SQLiteDatabase db = null;
+              try {
+                db = DatabaseFactory.get().getDatabase(ConflictResolutionRowActivity.this, mAppName);
+                db.beginTransaction();
+                ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
+                ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
+                db.setTransactionSuccessful();
+              } finally {
+                if ( db != null ) {
+                  db.endTransaction();
+                  db.close();
+                }
+              }
               ConflictResolutionRowActivity.this.finish();
             }
           });
@@ -593,8 +726,6 @@ public class ConflictResolutionRowActivity extends ListActivity
             @Override
             public void onClick(DialogInterface dialog, int which) {
               mIsShowingResolveDialog = false;
-              DbTable dbTable =
-                  DbTable.getDbTable(mLocal.getTableProperties());
               if (!isResolvable()) {
                 // We should never have gotten here! Triz-ouble.
                 Log.e(TAG, "[onClick--positive button] the row is not " +
@@ -606,7 +737,28 @@ public class ConflictResolutionRowActivity extends ListActivity
                 return;
               }
               Map<String, String> valuesToUse = mAdapter.getResolvedValues();
-              dbTable.resolveConflict(mRowId, mServerRowETag, valuesToUse);
+              // replacement
+              ContentValues updateValues = new ContentValues();
+              updateValues.put(DataTableColumns.SYNC_STATE, SyncState.changed.name());
+              updateValues.put(DataTableColumns.ROW_ETAG, mServerRowETag);
+              updateValues.putNull(DataTableColumns.CONFLICT_TYPE);
+              for (Map.Entry<String, String> kv : valuesToUse.entrySet()) {
+                  updateValues.put(kv.getKey(), kv.getValue());
+              }
+
+              SQLiteDatabase db = null;
+              try {
+                db = DatabaseFactory.get().getDatabase(ConflictResolutionRowActivity.this, mAppName);
+                db.beginTransaction();
+                ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
+                ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
+                db.setTransactionSuccessful();
+              } finally {
+                if ( db != null ) {
+                  db.endTransaction();
+                  db.close();
+                }
+              }
               ConflictResolutionRowActivity.this.finish();
             }
           });

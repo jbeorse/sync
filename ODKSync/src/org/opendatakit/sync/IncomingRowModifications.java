@@ -18,8 +18,6 @@ package org.opendatakit.sync;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.opendatakit.common.android.sync.aggregate.SyncTag;
-
 /**
  * An IncomingModification represents changes coming down from the server.
  *
@@ -33,11 +31,13 @@ public class IncomingRowModifications {
   // rowId to SyncRow
   private Map<String, SyncRow> rows;
 
-  private SyncTag tableSyncTag;
+  private String tableSchemaETag;
+  private String tableDataETag;
 
   public IncomingRowModifications() {
     this.rows = new HashMap<String, SyncRow>();
-    this.tableSyncTag = new SyncTag(null,null);
+    tableSchemaETag = null;
+    tableDataETag = null;
   }
 
   /**
@@ -53,8 +53,12 @@ public class IncomingRowModifications {
    *
    * @return the latest synchronization tag
    */
-  public SyncTag getTableSyncTag() {
-    return this.tableSyncTag;
+  public String getTableSchemaETag() {
+    return tableSchemaETag;
+  }
+  
+  public String getTableDataETag() {
+    return tableDataETag;
   }
 
   /**
@@ -79,8 +83,12 @@ public class IncomingRowModifications {
    * @param tableSyncTag
    *          the latest synchronization tag
    */
-  public void setTableSyncTag(final SyncTag tableSyncTag) {
-    this.tableSyncTag = tableSyncTag;
+  public void setTableSchemaETag(final String tableSchemaETag) {
+    this.tableSchemaETag = tableSchemaETag;
+  }
+  
+  public void setTableDataETag(final String tableDataETag) {
+    this.tableDataETag = tableDataETag;
   }
 
   @Override
@@ -97,10 +105,15 @@ public class IncomingRowModifications {
         return false;
     } else if (!rows.equals(other.rows))
       return false;
-    if (tableSyncTag == null) {
-      if (other.tableSyncTag != null)
+    if (tableSchemaETag == null) {
+      if (other.tableSchemaETag != null)
         return false;
-    } else if (!tableSyncTag.equals(other.tableSyncTag))
+    } else if (!tableSchemaETag.equals(other.tableSchemaETag))
+      return false;
+    if (tableDataETag == null) {
+      if (other.tableDataETag != null)
+        return false;
+    } else if (!tableDataETag.equals(other.tableDataETag))
       return false;
     return true;
   }
@@ -114,14 +127,16 @@ public class IncomingRowModifications {
     final int prime = 31;
     int result = 1;
     result = prime * result + ((rows == null) ? 0 : rows.hashCode());
-    result = prime * result + ((tableSyncTag == null) ? 0 : tableSyncTag.hashCode());
+    result = prime * result + ((tableSchemaETag == null) ? 0 : tableSchemaETag.hashCode());
+    result = prime * result + ((tableDataETag == null) ? 0 : tableDataETag.hashCode());
     return result;
   }
 
   @Override
   public String toString() {
     return "IncomingModification [rows=" + rows
-        + ", tableSyncTag=" + tableSyncTag
+        + ", tableSchemaETag=" + tableSchemaETag
+        + ", tableDataETag=" + tableDataETag
         + "]";
   }
 }

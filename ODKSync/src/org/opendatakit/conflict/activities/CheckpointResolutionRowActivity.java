@@ -5,12 +5,19 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.opendatakit.aggregate.odktables.rest.KeyValueStoreConstants;
 import org.opendatakit.aggregate.odktables.rest.SavepointTypeManipulator;
-import org.opendatakit.common.android.data.DbTable;
-import org.opendatakit.common.android.data.TableProperties;
+import org.opendatakit.common.android.data.ColumnDefinition;
+import org.opendatakit.common.android.data.ElementType;
+import org.opendatakit.common.android.data.KeyValueStoreEntry;
 import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
+import org.opendatakit.common.android.database.DatabaseFactory;
 import org.opendatakit.common.android.provider.DataTableColumns;
+import org.opendatakit.common.android.utilities.NameUtil;
+import org.opendatakit.common.android.utilities.ODKDataUtils;
+import org.opendatakit.common.android.utilities.ODKDatabaseUtils;
+import org.opendatakit.common.android.utilities.TableUtil;
 import org.opendatakit.sync.R;
 import org.opendatakit.sync.views.components.ConcordantColumn;
 import org.opendatakit.sync.views.components.ConflictColumn;
@@ -56,8 +63,11 @@ public class CheckpointResolutionRowActivity extends ListActivity
   private ConflictResolutionListAdapter mAdapter;
   private String mAppName;
   private String mTableId;
-  private String mRowId;
+  private ArrayList<ColumnDefinition> mOrderedDefns;
 
+  private String mRowId;
+  UserTable mConflictTable;
+  
   private Button mButtonTakeOldest;
   private Button mButtonTakeNewest;
   private List<ConflictColumn> mConflictColumns;
@@ -92,13 +102,36 @@ public class CheckpointResolutionRowActivity extends ListActivity
     mTableId =
         getIntent().getStringExtra(Constants.TABLE_ID);
     this.mRowId = getIntent().getStringExtra(INTENT_KEY_ROW_ID);
-    TableProperties tp =
-        TableProperties.getTablePropertiesForTable(this, mAppName, mTableId);
-    DbTable dbTable = DbTable.getDbTable(tp);
+    
+    Map<String,String> persistedDisplayNames = new HashMap<String,String>();
+    {
+      SQLiteDatabase db = null;
+      try {
+        db = DatabaseFactory.get().getDatabase(this, mAppName);
+        mOrderedDefns = TableUtil.get().getColumnDefinitions(db, mTableId);
 
-    UserTable conflictTable = dbTable.rawSqlQuery(DataTableColumns.ID + "=?",
-        new String[] {mRowId}, null, null, DataTableColumns.SAVEPOINT_TIMESTAMP, "ASC");
-    if ( conflictTable.getNumberOfRows() == 0 ) {
+        List<KeyValueStoreEntry> columnDisplayNames =
+            ODKDatabaseUtils.get().getDBTableMetadata(db, mTableId, 
+                KeyValueStoreConstants.PARTITION_COLUMN, null, KeyValueStoreConstants.COLUMN_DISPLAY_NAME);
+
+        for ( KeyValueStoreEntry e : columnDisplayNames ) {
+          try {
+            ColumnDefinition.find(mOrderedDefns, e.aspect);
+            persistedDisplayNames.put(e.aspect, e.value);
+          } catch ( IllegalArgumentException ex ) {
+            // ignore
+          }
+        }
+        
+        mConflictTable = ODKDatabaseUtils.get().rawSqlQuery(db, mAppName, mTableId,
+            mOrderedDefns, DataTableColumns.ID + "=?",
+            new String[] {mRowId}, null, null, DataTableColumns.SAVEPOINT_TIMESTAMP, "ASC");
+      } finally {
+        db.close();
+      }
+    }
+
+    if ( mConflictTable.getNumberOfRows() == 0 ) {
       // another process deleted this row?
       setResult(RESULT_OK);
       finish();
@@ -109,12 +142,12 @@ public class CheckpointResolutionRowActivity extends ListActivity
     // if it isn't, then this is a new row and the option is to delete it or
     // save as incomplete. Otherwise, it is to roll back or update to incomplete.
 
-    Row rowStarting = conflictTable.getRowAtIndex(0);
+    Row rowStarting = mConflictTable.getRowAtIndex(0);
     String type = rowStarting.getRawDataOrMetadataByElementKey(DataTableColumns.SAVEPOINT_TYPE);
     boolean deleteEntirely = ( type == null || type.length() == 0 );
 
     if ( !deleteEntirely ) {
-      if ( conflictTable.getNumberOfRows() == 1 &&
+      if ( mConflictTable.getNumberOfRows() == 1 &&
           ( SavepointTypeManipulator.isComplete(type) || SavepointTypeManipulator.isIncomplete(type) )) {
         // something else seems to have resolved this?
         setResult(RESULT_OK);
@@ -123,7 +156,7 @@ public class CheckpointResolutionRowActivity extends ListActivity
       }
     }
 
-    Row rowEnding = conflictTable.getRowAtIndex(conflictTable.getNumberOfRows()-1);
+    Row rowEnding = mConflictTable.getRowAtIndex(mConflictTable.getNumberOfRows()-1);
     //
     // And now we need to construct up the adapter.
 
@@ -132,7 +165,6 @@ public class CheckpointResolutionRowActivity extends ListActivity
     // all the values which are in conflict, as well as those that are not.
     // We'll present them in user-defined order, as they may have set up the
     // useful information together.
-    List<String> columnOrder = tp.getPersistedColumns();
     // This will be the number of rows down we are in the adapter. Each
     // heading and each cell value gets its own row. Columns in conflict get
     // two, as we'll need to display each one to the user.
@@ -141,17 +173,25 @@ public class CheckpointResolutionRowActivity extends ListActivity
     this.mConflictColumns = new ArrayList<ConflictColumn>();
     List<ConcordantColumn> noConflictColumns =
         new ArrayList<ConcordantColumn>();
-    for (int i = 0; i < columnOrder.size(); i++) {
-      String elementKey = columnOrder.get(i);
-      String columnDisplayName =
-          tp.getColumnByElementKey(elementKey).getLocalizedDisplayName();
+    for ( ColumnDefinition cd : mOrderedDefns ) {
+      if ( !cd.isUnitOfRetention() ) {
+        continue;
+      }
+      String elementKey = cd.getElementKey();
+      ElementType elementType = cd.getType();
+      String columnDisplayName = persistedDisplayNames.get(elementKey);
+      if ( columnDisplayName != null ) {
+        columnDisplayName = ODKDataUtils.getLocalizedDisplayName(columnDisplayName);
+      } else {
+        columnDisplayName = NameUtil.constructSimpleDisplayName(elementKey);
+      }
       Section newSection = new Section(adapterOffset, columnDisplayName);
       ++adapterOffset;
       sections.add(newSection);
       String localRawValue = rowEnding.getRawDataOrMetadataByElementKey(elementKey);
-      String localDisplayValue = rowEnding.getDisplayTextOfData(this, elementKey, true);
+      String localDisplayValue = rowEnding.getDisplayTextOfData(this, elementType, elementKey, true);
       String serverRawValue = rowStarting.getRawDataOrMetadataByElementKey(elementKey);
-      String serverDisplayValue = rowStarting.getDisplayTextOfData(this, elementKey, true);
+      String serverDisplayValue = rowStarting.getDisplayTextOfData(this, elementType, elementKey, true);
       if (deleteEntirely || (localRawValue == null && serverRawValue == null) ||
     	  (localRawValue != null && localRawValue.equals(serverRawValue))) {
         // TODO: this doesn't compare actual equality of blobs if their display
@@ -321,27 +361,21 @@ public class CheckpointResolutionRowActivity extends ListActivity
             @Override
             public void onClick(DialogInterface dialog, int which) {
               mIsShowingTakeNewestDialog = false;
-              TableProperties tp =
-                  TableProperties.getTablePropertiesForTable(
-                      CheckpointResolutionRowActivity.this, mAppName, mTableId);
-              SQLiteDatabase db = tp.getWritableDatabase();
+
+              SQLiteDatabase db = null;
               try {
+                db = DatabaseFactory.get().getDatabase(CheckpointResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
-                db.execSQL("UPDATE \"" + tp.getDbTableName() + "\" SET " +
-                    DataTableColumns.SAVEPOINT_TYPE + "= ? WHERE " +
-                    DataTableColumns.ID + "=?",
-                    new String[] { SavepointTypeManipulator.incomplete(), mRowId });
-                db.execSQL("DELETE FROM \"" + tp.getDbTableName() + "\" WHERE " +
-                    DataTableColumns.ID + "=? AND " + DataTableColumns.SAVEPOINT_TIMESTAMP +
-                    " NOT IN (SELECT MAX(" + DataTableColumns.SAVEPOINT_TIMESTAMP + ") FROM \"" +
-                    tp.getDbTableName() + "\" WHERE " + DataTableColumns.ID + "=?)",
-                    new String[] { mRowId, mRowId });
+                ODKDatabaseUtils.get().saveAsIncompleteMostRecentCheckpointDataInDBTableWithId(db, mTableId, mRowId);
                 db.setTransactionSuccessful();
               } finally {
-                db.endTransaction();
-                db.close();
+                if ( db != null ) {
+                  db.endTransaction();
+                  db.close();
+                }
               }
               CheckpointResolutionRowActivity.this.finish();
+              Log.d(TAG, "update to checkpointed version");
             }
           });
       builder.setCancelable(true);
@@ -383,13 +417,22 @@ public class CheckpointResolutionRowActivity extends ListActivity
             @Override
             public void onClick(DialogInterface dialog, int which) {
               mIsShowingTakeOldestDialog = false;
-              TableProperties tp =
-                  TableProperties.getTablePropertiesForTable(
-                      CheckpointResolutionRowActivity.this, mAppName, mTableId);
-              DbTable dbTable = DbTable.getDbTable(tp);
-              dbTable.deleteRowActual(mRowId);
+
+              SQLiteDatabase db = null;
+              try {
+                db = DatabaseFactory.get().getDatabase(CheckpointResolutionRowActivity.this, mAppName);
+                db.beginTransaction();
+                ODKDatabaseUtils.get().deleteDataInDBTableWithId(db, mAppName, mTableId, mRowId);
+                db.setTransactionSuccessful();
+              } finally {
+                if ( db != null ) {
+                  db.endTransaction();
+                  db.close();
+                }
+              }
+
               CheckpointResolutionRowActivity.this.finish();
-              Log.d(TAG, "deleted local and server versions");
+              Log.d(TAG, "deleted all versions");
             }
           });
       builder.setCancelable(true);
@@ -429,22 +472,21 @@ public class CheckpointResolutionRowActivity extends ListActivity
             @Override
             public void onClick(DialogInterface dialog, int which) {
               mIsShowingTakeOldestDialog = false;
-              TableProperties tp =
-                  TableProperties.getTablePropertiesForTable(
-                      CheckpointResolutionRowActivity.this, mAppName, mTableId);
-              // TODO: delete all but oldest non-null savepoint...
-              SQLiteDatabase db = tp.getWritableDatabase();
+
+              SQLiteDatabase db = null;
               try {
+                db = DatabaseFactory.get().getDatabase(CheckpointResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
-                db.execSQL("DELETE FROM \"" + tp.getDbTableName() + "\" WHERE " +
-                    DataTableColumns.ID + "=? AND " + DataTableColumns.SAVEPOINT_TYPE + " IS NULL",
-                    new String[] { mRowId });
+                ODKDatabaseUtils.get().deleteCheckpointDataInDBTableWithId(db, mTableId, mRowId );
                 db.setTransactionSuccessful();
               } finally {
-                db.endTransaction();
-                db.close();
+                if ( db != null ) {
+                  db.endTransaction();
+                  db.close();
+                }
               }
               CheckpointResolutionRowActivity.this.finish();
+              Log.d(TAG, "delete the checkpointed version");
             }
           });
       builder.setCancelable(true);

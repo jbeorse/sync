@@ -15,7 +15,6 @@
  */
 package org.opendatakit.sync;
 
-import org.opendatakit.common.android.sync.aggregate.SyncTag;
 
 /**
  * A RowModification represents the update to a row's ETag and the dataset's
@@ -27,7 +26,9 @@ import org.opendatakit.common.android.sync.aggregate.SyncTag;
 public class RowModification {
   String rowId;
   String rowETag;
-  SyncTag tableSyncTag;
+  
+  String tableSchemaETag;
+  String tableDataETag;
 
   /**
    * Create a new Modification.
@@ -39,10 +40,12 @@ public class RowModification {
    * @param tableSyncTag
    *          the table-level syncTag
    */
-  public RowModification(final String rowId, final String rowETag, final SyncTag tableSyncTag) {
+  public RowModification(final String rowId, final String rowETag, 
+        final String tableSchemaETag, String tableDataETag) {
     this.rowId = rowId;
     this.rowETag = rowETag;
-    this.tableSyncTag = tableSyncTag;
+    this.tableSchemaETag = tableSchemaETag;
+    this.tableDataETag = tableDataETag;
   }
 
   public RowModification() {
@@ -68,8 +71,12 @@ public class RowModification {
    *
    * @return the table-level syncTag
    */
-  public SyncTag getTableSyncTag() {
-    return this.tableSyncTag;
+  public String getTableSchemaETag() {
+    return tableSchemaETag;
+  }
+  
+  public String getTableDataETag() {
+    return tableDataETag;
   }
 
   /**
@@ -77,8 +84,12 @@ public class RowModification {
    * @param tableSyncTag
    *          the table-level syncTag
    */
-  public void setTableSyncTag(final SyncTag tableSyncTag) {
-    this.tableSyncTag = tableSyncTag;
+  public void setTableSchemaETag(String tableSchemaETag) {
+    this.tableSchemaETag = tableSchemaETag;
+  }
+  
+  public void setTableDataETag(String tableDataETag) {
+    this.tableDataETag = tableDataETag;
   }
 
   @Override
@@ -94,8 +105,11 @@ public class RowModification {
       return false;
     if (this.getRowETag() == null ? other.getRowETag() != null : !this.getRowETag().equals(other.getRowETag()))
       return false;
-    if (this.getTableSyncTag() == null ? other.getTableSyncTag() != null : !this.getTableSyncTag()
-        .equals((java.lang.Object) other.getTableSyncTag()))
+    if (this.getTableSchemaETag() == null ? other.getTableSchemaETag() != null : !this.getTableSchemaETag()
+        .equals(other.getTableSchemaETag()))
+      return false;
+    if (this.getTableDataETag() == null ? other.getTableDataETag() != null : !this.getTableDataETag()
+        .equals(other.getTableDataETag()))
       return false;
     return true;
   }
@@ -111,13 +125,16 @@ public class RowModification {
     result = result * PRIME + (this.getRowId() == null ? 0 : this.getRowId().hashCode());
     result = result * PRIME + (this.getRowETag() == null ? 0 : this.getRowETag().hashCode());
     result = result * PRIME
-        + (this.getTableSyncTag() == null ? 0 : this.getTableSyncTag().hashCode());
+        + (this.getTableSchemaETag() == null ? 0 : this.getTableSchemaETag().hashCode());
+    result = result * PRIME
+        + (this.getTableDataETag() == null ? 0 : this.getTableDataETag().hashCode());
     return result;
   }
 
   @Override
   public java.lang.String toString() {
-    return "RowModification(rowId=" + this.getRowId() + ", rowETag=" + this.getRowETag() + ", tableSyncTag="
-        + this.getTableSyncTag() + ")";
+    return "RowModification(rowId=" + this.getRowId() + ", rowETag=" + this.getRowETag() + 
+        ", tableSchemaETag=" + this.getTableSchemaETag() +
+        ", tableDataETag=" + this.getTableDataETag() + ")";
   }
 }

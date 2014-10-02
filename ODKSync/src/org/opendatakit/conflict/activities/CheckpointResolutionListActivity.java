@@ -1,16 +1,20 @@
 package org.opendatakit.conflict.activities;
 
+import java.util.ArrayList;
 import java.util.Set;
 import java.util.TreeSet;
 
-import org.opendatakit.common.android.data.DbTable;
-import org.opendatakit.common.android.data.TableProperties;
+import org.opendatakit.common.android.data.ColumnDefinition;
 import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
+import org.opendatakit.common.android.database.DatabaseFactory;
 import org.opendatakit.common.android.provider.DataTableColumns;
+import org.opendatakit.common.android.utilities.ODKDatabaseUtils;
+import org.opendatakit.common.android.utilities.TableUtil;
 
 import android.app.ListActivity;
 import android.content.Intent;
+import android.database.sqlite.SQLiteDatabase;
 import android.util.Log;
 import android.view.View;
 import android.widget.ArrayAdapter;
@@ -57,40 +61,47 @@ public class CheckpointResolutionListActivity extends ListActivity {
     }
     mTableId = getIntent().getStringExtra(Constants.TABLE_ID);
 
-    TableProperties tableProperties = TableProperties.getTablePropertiesForTable(this, mAppName,
-        mTableId);
-    DbTable dbTable = DbTable.getDbTable(tableProperties);
-    UserTable table = dbTable.rawSqlQuery(
-        DataTableColumns.SAVEPOINT_TYPE + " IS NULL", null, null,
-        null, null, null);
-    this.mAdapter = new ArrayAdapter<ResolveRowEntry>(getActionBar().getThemedContext(),
-        android.R.layout.simple_list_item_1);
-    Set<String> rowIds = new TreeSet<String>();
-    for (int i = 0; i < table.getNumberOfRows(); i++) {
-      Row row = table.getRowAtIndex(i);
-      String rowId = row.getRawDataOrMetadataByElementKey(DataTableColumns.ID);
-      rowIds.add(rowId);
+    SQLiteDatabase db = null;
+    UserTable table = null;
+    try {
+      db = DatabaseFactory.get().getDatabase(this, mAppName);
+      ArrayList<ColumnDefinition> orderedDefns = TableUtil.get().getColumnDefinitions(db, mTableId);
+      table = ODKDatabaseUtils.get().rawSqlQuery(db, mAppName, mTableId, 
+          orderedDefns, DataTableColumns.SAVEPOINT_TYPE + " IS NULL", null,
+          null, null, DataTableColumns.ID, "ASC");
+    } finally {
+      db.close();
     }
-    if (rowIds.isEmpty()) {
-      this.setResult(RESULT_OK);
-      finish();
-      return;
-    }
-
-    ResolveRowEntry firstE = null;
-    int i = 0;
-    for (String rowId : rowIds) {
-      ++i;
-      ResolveRowEntry e = new ResolveRowEntry(rowId, "Resolve ODK Survey Checkpoint Record " + i);
-      this.mAdapter.add(e);
-      if (firstE == null) {
-        firstE = e;
+    if ( table != null ) {
+      this.mAdapter = new ArrayAdapter<ResolveRowEntry>(getActionBar().getThemedContext(),
+          android.R.layout.simple_list_item_1);
+      Set<String> rowIds = new TreeSet<String>();
+      for (int i = 0; i < table.getNumberOfRows(); i++) {
+        Row row = table.getRowAtIndex(i);
+        String rowId = row.getRawDataOrMetadataByElementKey(DataTableColumns.ID);
+        rowIds.add(rowId);
       }
-    }
-    this.setListAdapter(mAdapter);
-
-    if (rowIds.size() == 1) {
-      launchRowResolution(firstE);
+      if (rowIds.isEmpty()) {
+        this.setResult(RESULT_OK);
+        finish();
+        return;
+      }
+  
+      ResolveRowEntry firstE = null;
+      int i = 0;
+      for (String rowId : rowIds) {
+        ++i;
+        ResolveRowEntry e = new ResolveRowEntry(rowId, "Resolve ODK Survey Checkpoint Record " + i);
+        this.mAdapter.add(e);
+        if (firstE == null) {
+          firstE = e;
+        }
+      }
+      this.setListAdapter(mAdapter);
+  
+      if (rowIds.size() == 1) {
+        launchRowResolution(firstE);
+      }
     }
   }
 
