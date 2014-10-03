@@ -19,13 +19,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.TimeZone;
 
 import org.opendatakit.aggregate.odktables.rest.ConflictType;
-import org.opendatakit.aggregate.odktables.rest.KeyValueStoreConstants;
 import org.opendatakit.aggregate.odktables.rest.SyncState;
 import org.opendatakit.aggregate.odktables.rest.entity.Column;
 import org.opendatakit.aggregate.odktables.rest.entity.DataKeyValue;
@@ -36,16 +33,12 @@ import org.opendatakit.aggregate.odktables.rest.entity.Scope;
 import org.opendatakit.aggregate.odktables.rest.entity.TableDefinitionResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResource;
 import org.opendatakit.common.android.data.ColumnDefinition;
-import org.opendatakit.common.android.data.KeyValueStoreEntry;
 import org.opendatakit.common.android.data.TableDefinitionEntry;
 import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
 import org.opendatakit.common.android.database.DatabaseFactory;
 import org.opendatakit.common.android.provider.DataTableColumns;
 import org.opendatakit.common.android.utilities.CsvUtil;
-import org.opendatakit.common.android.utilities.DataUtil;
-import org.opendatakit.common.android.utilities.NameUtil;
-import org.opendatakit.common.android.utilities.ODKDataUtils;
 import org.opendatakit.common.android.utilities.ODKDatabaseUtils;
 import org.opendatakit.common.android.utilities.ODKFileUtils;
 import org.opendatakit.common.android.utilities.TableUtil;
@@ -95,7 +88,6 @@ public class SyncProcessor implements SynchronizerStatus {
 
   private final Context context;
   private final String appName;
-  private final DataUtil du;
   private final SyncNotification syncProgress;
   private final Synchronizer synchronizer;
   /**
@@ -107,7 +99,6 @@ public class SyncProcessor implements SynchronizerStatus {
       SyncNotification syncProgress) {
     this.context = context;
     this.appName = appName;
-    this.du = new DataUtil(Locale.ENGLISH, TimeZone.getDefault());
     this.syncProgress = syncProgress;
     this.synchronizer = synchronizer;
     this.mUserResult = new SynchronizationResult();
@@ -186,7 +177,6 @@ public class SyncProcessor implements SynchronizerStatus {
     try {
       db = DatabaseFactory.get().getDatabase(context, appName);
       localTableIds = ODKDatabaseUtils.get().getAllTableIds(db);
-      db.close();
     } catch (SQLiteException e) {
       mUserResult.setAppLevelStatus(Status.EXCEPTION);
       Log.e(TAG,
@@ -278,10 +268,19 @@ public class SyncProcessor implements SynchronizerStatus {
         Log.i(TAG, "[synchronizeConfigurationAndContent] synchronizing table " + localTableId);
 
         if (!localTableId.equals("framework")) {
-          ArrayList<ColumnDefinition> orderedDefns = TableUtil.get().getColumnDefinitions(db, localTableId);
+          ArrayList<ColumnDefinition> orderedDefns;
+          try {
+            db = DatabaseFactory.get().getDatabase(context, appName);
+            orderedDefns = TableUtil.get().getColumnDefinitions(db, localTableId);
+          } finally {
+            if ( db != null ) {
+              db.close();
+              db = null;
+            }
+          }
 
           // do not sync the framework table
-          synchronizeTableConfigurationAndContent(db, localTableId, orderedDefns, matchingResource,
+          synchronizeTableConfigurationAndContent(localTableId, orderedDefns, matchingResource,
               true);
         }
         this.updateNotification(SyncProgressState.TABLE_FILES,
@@ -327,7 +326,15 @@ public class SyncProcessor implements SynchronizerStatus {
           TableDefinitionResource definitionResource = synchronizer.getTableDefinition(table
               .getDefinitionUri());
 
-          orderedDefns = addTableFromDefinitionResource(db, definitionResource, doesNotExistLocally);
+          try {
+            db = DatabaseFactory.get().getDatabase(context, appName);
+            orderedDefns = addTableFromDefinitionResource(db, definitionResource, doesNotExistLocally);
+          } finally {
+            if ( db != null ) {
+              db.close();
+              db = null;
+            }
+          }
         } catch (JsonParseException e) {
           e.printStackTrace();
           tableResult.setStatus(Status.EXCEPTION);
@@ -363,7 +370,7 @@ public class SyncProcessor implements SynchronizerStatus {
         // Sync the local media files with the server if the table
         // existed locally before we attempted downloading it.
 
-        synchronizeTableConfigurationAndContent(db, serverTableId, orderedDefns, table, false);
+        synchronizeTableConfigurationAndContent(serverTableId, orderedDefns, table, false);
         this.updateNotification(SyncProgressState.TABLE_FILES,
             R.string.table_level_file_sync_complete, new Object[] { serverTableId }, 100.0, false);
       }
@@ -401,28 +408,6 @@ public class SyncProcessor implements SynchronizerStatus {
     }
   }
 
-  private String getLocalizedTableDisplayName(SQLiteDatabase db, String tableId) {
-    String displayName;
-    List<KeyValueStoreEntry> entries = ODKDatabaseUtils.get().getDBTableMetadata(db, tableId,
-        KeyValueStoreConstants.PARTITION_TABLE, KeyValueStoreConstants.ASPECT_DEFAULT,
-        KeyValueStoreConstants.TABLE_DISPLAY_NAME);
-    if (entries.size() == 1) {
-      displayName = entries.get(0).value;
-      if (displayName != null) {
-        displayName = ODKDataUtils.getLocalizedDisplayName(displayName);
-      }
-      if (displayName == null || displayName.length() == 0) {
-        displayName = NameUtil.constructSimpleDisplayName(tableId);
-      }
-    } else {
-      if (!entries.isEmpty()) {
-        Log.e(TAG, "Unexpected duplicate table display names for tableId " + tableId);
-      }
-      displayName = NameUtil.constructSimpleDisplayName(tableId);
-    }
-    return displayName;
-  }
-
   /**
    * Synchronize the table represented by the given TableProperties with the
    * cloud.
@@ -445,7 +430,7 @@ public class SyncProcessor implements SynchronizerStatus {
    *          to the server. The data files on the server are always pulled
    *          down.
    */
-  private void synchronizeTableConfigurationAndContent(SQLiteDatabase db, String tableId,
+  private void synchronizeTableConfigurationAndContent(String tableId,
       ArrayList<ColumnDefinition> orderedDefns, TableResource resource,
       boolean pushLocalTableLevelFiles) {
 
@@ -460,9 +445,20 @@ public class SyncProcessor implements SynchronizerStatus {
     this.updateNotification(SyncProgressState.TABLE_FILES,
         R.string.verifying_table_schema_on_server, new Object[] { tableId }, 0.0, false);
     final TableResult tableResult = mUserResult.getTableResult(tableId);
-    String displayName = getLocalizedTableDisplayName(db, tableId);
-    tableResult.setTableDisplayName(displayName);
-    TableDefinitionEntry te = ODKDatabaseUtils.get().getTableDefinitionEntry(db, tableId);
+    String displayName;
+    TableDefinitionEntry te;
+    SQLiteDatabase db = null;
+    try {
+      db = DatabaseFactory.get().getDatabase(context, appName);
+      displayName = TableUtil.get().getLocalizedDisplayName(db, tableId);
+      tableResult.setTableDisplayName(displayName);
+      te = ODKDatabaseUtils.get().getTableDefinitionEntry(db, tableId);
+    } finally {
+      if ( db != null ) {
+        db.close();
+        db = null;
+      }
+    }
     try {
       String dataETag = te.getLastDataETag();
       String schemaETag = te.getSchemaETag();
@@ -485,6 +481,7 @@ public class SyncProcessor implements SynchronizerStatus {
 
         // we are creating data on the server
         try {
+          db = DatabaseFactory.get().getDatabase(context, appName);
           db.beginTransaction();
           // change row sync and conflict status to handle new server schema.
           // Clean up this table and set the dataETag to null.
@@ -496,6 +493,8 @@ public class SyncProcessor implements SynchronizerStatus {
         } finally {
           if (db != null) {
             db.endTransaction();
+            db.close();
+            db = null;
           }
         }
 
@@ -520,6 +519,7 @@ public class SyncProcessor implements SynchronizerStatus {
 
         schemaETag = resource.getSchemaETag();
         try {
+          db = DatabaseFactory.get().getDatabase(context, appName);
           db.beginTransaction();
           // update schemaETag to that on server (dataETag is null already).
           ODKDatabaseUtils.get().updateDBTableETags(db, tableId, schemaETag, null);
@@ -527,6 +527,8 @@ public class SyncProcessor implements SynchronizerStatus {
         } finally {
           if (db != null) {
             db.endTransaction();
+            db.close();
+            db = null;
           }
         }
         serverUpdated = true;
@@ -562,6 +564,7 @@ public class SyncProcessor implements SynchronizerStatus {
         // record that we have pulled it
         tableResult.setPulledServerSchema(true);
         try {
+          db = DatabaseFactory.get().getDatabase(context, appName);
           // apply changes
           // this also updates the data rows so they will sync
           orderedDefns = addTableFromDefinitionResource(db, definitionResource, false);
@@ -600,6 +603,11 @@ public class SyncProcessor implements SynchronizerStatus {
           tableResult.setMessage(msg);
           tableResult.setStatus(Status.EXCEPTION);
           return;
+        } finally {
+          if ( db != null ) {
+            db.close();
+            db = null;
+          }
         }
       }
 
@@ -608,7 +616,15 @@ public class SyncProcessor implements SynchronizerStatus {
       // write our properties and definitions files.
       final CsvUtil utils = new CsvUtil(context, appName);
       // write the current schema and properties set.
-      utils.writePropertiesCsv(db, tableId, orderedDefns);
+      try {
+        db = DatabaseFactory.get().getDatabase(context, appName);
+        utils.writePropertiesCsv(db, tableId, orderedDefns);
+      } finally {
+        if ( db != null ) {
+          db.close();
+          db = null;
+        }
+      }
 
       synchronizer.syncTableLevelFiles(tableId, new OnTablePropertiesChanged() {
         @Override
@@ -686,25 +702,42 @@ public class SyncProcessor implements SynchronizerStatus {
       return;
     }
 
+    List<String> tableIds;
     SQLiteDatabase db = null;
+
     try {
       db = DatabaseFactory.get().getDatabase(context, appName);
-
-      List<String> tableIds = ODKDatabaseUtils.get().getAllTableIds(db);
-
-      // we can assume that all the local table properties should
-      // sync with the server.
-      for (String tableId : tableIds) {
-        // Sync the local media files with the server if the table
-        // existed locally before we attempted downloading it.
-
-        TableDefinitionEntry te = ODKDatabaseUtils.get().getTableDefinitionEntry(db, tableId);
-        ArrayList<ColumnDefinition> orderedDefns = TableUtil.get().getColumnDefinitions(db, tableId);
-        synchronizeTableDataRowsAndAttachments(db, te, orderedDefns);
-        ++iMajorSyncStep;
-      }
+      tableIds = ODKDatabaseUtils.get().getAllTableIds(db);
     } finally {
-      db.close();
+      if ( db != null ) {
+        db.close();
+        db = null;
+      }
+    }
+
+    // we can assume that all the local table properties should
+    // sync with the server.
+    for (String tableId : tableIds) {
+      // Sync the local media files with the server if the table
+      // existed locally before we attempted downloading it.
+
+      TableDefinitionEntry te;
+      ArrayList<ColumnDefinition> orderedDefns;
+      String displayName;
+      try {
+        db = DatabaseFactory.get().getDatabase(context, appName);
+        te = ODKDatabaseUtils.get().getTableDefinitionEntry(db, tableId);
+        orderedDefns = TableUtil.get().getColumnDefinitions(db, tableId);
+        displayName = TableUtil.get().getLocalizedDisplayName(db, tableId);
+      } finally {
+        if ( db != null ) {
+          db.close();
+          db = null;
+        }
+      }
+      
+      synchronizeTableDataRowsAndAttachments(te, orderedDefns, displayName);
+      ++iMajorSyncStep;
     }
   }
 
@@ -731,20 +764,14 @@ public class SyncProcessor implements SynchronizerStatus {
    *          to the server. The data files on the server are always pulled
    *          down.
    */
-  private void synchronizeTableDataRowsAndAttachments(SQLiteDatabase db, TableDefinitionEntry te,
-      ArrayList<ColumnDefinition> orderedColumns) {
-    // DbTable table = new DbTable(tp);
-    // used to get the above from the ACTIVE store. if things go wonky, maybe
-    // check to see if it was ACTIVE rather than SERVER for a reason. can't
-    // think of one. one thing is that if it fails you'll see a table but won't
-    // be able to open it, as there won't be any KVS stuff appropriate for it.
+  private void synchronizeTableDataRowsAndAttachments(TableDefinitionEntry te,
+      ArrayList<ColumnDefinition> orderedColumns, String displayName) {
     boolean success = true;
     boolean instanceFileSuccess = true;
     // Prepare the tableResult. We'll start it as failure, and only update it
     // if we're successful at the end.
     String tableId = te.getTableId();
     TableResult tableResult = mUserResult.getTableResult(tableId);
-    String displayName = getLocalizedTableDisplayName(db, tableId);
     tableResult.setTableDisplayName(displayName);
     if (tableResult.getStatus() != Status.WORKING) {
       // there was some sort of error...
@@ -822,8 +849,10 @@ public class SyncProcessor implements SynchronizerStatus {
               modification = synchronizer.getUpdates(tableId, schemaETag, te.getLastDataETag());
             } catch (Exception e) {
               String msg = e.getMessage();
-              if (msg == null)
+              if (msg == null) {
                 msg = e.toString();
+              }
+              success = false;
               tableResult.setMessage(msg);
               tableResult.setStatus(Status.EXCEPTION);
               return;
@@ -842,8 +871,21 @@ public class SyncProcessor implements SynchronizerStatus {
 
             // get all the rows in the data table -- we will iterate through
             // them all.
-            UserTable localDataTable = ODKDatabaseUtils.get().rawSqlQuery(db, appName, tableId,
-                orderedColumns, null, null, null, null, DataTableColumns.ID, "ASC");
+            UserTable localDataTable;
+            {
+              SQLiteDatabase db = null;
+
+              try {
+                db = DatabaseFactory.get().getDatabase(context, appName);
+                localDataTable = ODKDatabaseUtils.get().rawSqlQuery(db, appName, tableId,
+                    orderedColumns, null, null, null, null, DataTableColumns.ID, "ASC");
+              } finally {
+                if ( db != null ) {
+                  db.close();
+                  db = null;
+                }
+              }
+            }
 
             containsConflicts = localDataTable.hasConflictRows();
 
@@ -1061,7 +1103,9 @@ public class SyncProcessor implements SynchronizerStatus {
             // / PERFORM LOCAL DATABASE CHANGES
 
             {
+              SQLiteDatabase db = null;
               try {
+                db = DatabaseFactory.get().getDatabase(context, appName);
                 db.beginTransaction();
                 success = deleteRowsInDb(db, resource, tableId, rowsToDeleteLocally, tableResult);
 
@@ -1103,7 +1147,11 @@ public class SyncProcessor implements SynchronizerStatus {
                 }
                 db.setTransactionSuccessful();
               } finally {
-                db.endTransaction();
+                if ( db != null ) {
+                  db.endTransaction();
+                  db.close();
+                  db = null;
+                }
               }
             }
 
@@ -1160,14 +1208,25 @@ public class SyncProcessor implements SynchronizerStatus {
                     throw new IllegalStateException("Unexpected reordering of return");
                   }
                   if (r.getOutcome() == OutcomeType.SUCCESS) {
+                    SQLiteDatabase db = null;
+
                     resource.setDataETag(r.getDataETagAtModification());
                     te.setLastDataETag(r.getDataETagAtModification());
 
                     ContentValues values = new ContentValues();
                     values.put(DataTableColumns.ROW_ETAG, r.getRowETag());
                     values.put(DataTableColumns.SYNC_STATE, SyncState.synced_pending_files.name());
-                    ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, tableId,
+                    try {
+                      db = DatabaseFactory.get().getDatabase(context, appName);
+                      ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, tableId,
                         orderedColumns, values, r.getRowId());
+                    } finally {
+                      if ( db != null ) {
+                        db.close();
+                        db = null;
+                      }
+                    }
+                    
                     tableResult.incServerUpserts();
 
                     boolean outcome = synchronizer.putFileAttachments(
@@ -1176,15 +1235,31 @@ public class SyncProcessor implements SynchronizerStatus {
                       // move to synced state
                       values.clear();
                       values.put(DataTableColumns.SYNC_STATE, SyncState.synced.name());
-                      ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, tableId,
+                      try {
+                        db = DatabaseFactory.get().getDatabase(context, appName);
+                        ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, tableId,
                           orderedColumns, values, syncRow.getRowId());
+                      } finally {
+                        if ( db != null ) {
+                          db.close();
+                          db = null;
+                        }
+                      }
                     } else {
                       instanceFileSuccess = false;
                     }
 
-                    ODKDatabaseUtils.get().updateDBTableETags(db, tableId, te.getSchemaETag(),
+                    try {
+                      db = DatabaseFactory.get().getDatabase(context, appName);
+                      ODKDatabaseUtils.get().updateDBTableETags(db, tableId, te.getSchemaETag(),
                         r.getDataETagAtModification());
-                    te.setLastDataETag(r.getDataETagAtModification());
+                      te.setLastDataETag(r.getDataETagAtModification());
+                    } finally {
+                      if ( db != null ) {
+                        db.close();
+                        db = null;
+                      }
+                    }
                   }
                   ++count;
                   ++rowsProcessed;
@@ -1238,14 +1313,23 @@ public class SyncProcessor implements SynchronizerStatus {
               for (SyncRow syncRow : rowsToDeleteOnServer) {
                 RowModification rm = synchronizer.deleteRow(tableId, te.getSchemaETag(),
                     te.getLastDataETag(), syncRow);
-                ODKDatabaseUtils.get().deleteDataInDBTableWithId(db, appName, tableId,
-                    rm.getRowId());
-                tableResult.incServerDeletes();
-                if (success) {
-                  ODKDatabaseUtils.get().updateDBTableETags(db, tableId, rm.getTableSchemaETag(),
-                      rm.getTableDataETag());
-                  te.setSchemaETag(modification.getTableSchemaETag());
-                  te.setLastDataETag(modification.getTableDataETag());
+                SQLiteDatabase db = null;
+                try {
+                  db = DatabaseFactory.get().getDatabase(context, appName);
+                  ODKDatabaseUtils.get().deleteDataInDBTableWithId(db, appName, tableId,
+                      rm.getRowId());
+                  tableResult.incServerDeletes();
+                  if (success) {
+                    ODKDatabaseUtils.get().updateDBTableETags(db, tableId, rm.getTableSchemaETag(),
+                        rm.getTableDataETag());
+                    te.setSchemaETag(modification.getTableSchemaETag());
+                    te.setLastDataETag(modification.getTableDataETag());
+                  }
+                } finally {
+                  if ( db != null ) {
+                    db.close();
+                    db = null;
+                  }
                 }
                 ++count;
                 ++rowsProcessed;
@@ -1265,10 +1349,21 @@ public class SyncProcessor implements SynchronizerStatus {
                   outcome = synchronizer.getFileAttachments(resource.getInstanceFilesUri(),
                       tableId, syncRow, true);
                   if (outcome) {
+                    SQLiteDatabase db = null;
+
                     ContentValues values = new ContentValues();
                     values.put(DataTableColumns.SYNC_STATE, SyncState.synced.name());
-                    ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, tableId,
+                    
+                    try {
+                      db = DatabaseFactory.get().getDatabase(context, appName);
+                      ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, tableId,
                         orderedColumns, values, syncRow.getRowId());
+                    } finally {
+                      if ( db != null ) {
+                        db.close();
+                        db = null;
+                      }
+                    }
                   }
                 }
                 if (!outcome) {
@@ -1319,12 +1414,22 @@ public class SyncProcessor implements SynchronizerStatus {
         }
       }
 
-      // It is possible the table properties changed. Refresh just in case.
-      if (success && ODKDatabaseUtils.get().hasTableId(db, tableId)) // null in
-                                                                     // case we
-                                                                     // deleted
-                                                                     // the tp.
-        ODKDatabaseUtils.get().updateDBTableLastSyncTime(db, tableId);
+      if (success) {
+        // update the last-sync-time
+        // but if the table was deleted, do nothing
+        SQLiteDatabase db = null;
+        try {
+          db = DatabaseFactory.get().getDatabase(context, appName);
+          if (ODKDatabaseUtils.get().hasTableId(db, tableId)) {
+            ODKDatabaseUtils.get().updateDBTableLastSyncTime(db, tableId);
+          }
+        } finally {
+          if ( db != null ) {
+            db.close();
+            db = null;
+          }
+        }
+      }
     } finally {
       // Here we also want to add the TableResult to the value.
       if (success) {
@@ -1673,8 +1778,7 @@ public class SyncProcessor implements SynchronizerStatus {
    * Update the database to reflect the new structure.
    * <p>
    * This should be called when downloading a table from the server, which is
-   * why the syncTag is separate. TODO: pass the db around rather than dbh so we
-   * can do this transactionally
+   * why the syncTag is separate. 
    *
    * @param definitionResource
    * @param syncTag
@@ -1686,7 +1790,6 @@ public class SyncProcessor implements SynchronizerStatus {
    * @throws JsonParseException
    * @throws SchemaMismatchException
    */
-  @SuppressWarnings("unchecked")
   private ArrayList<ColumnDefinition> addTableFromDefinitionResource(SQLiteDatabase db,
       TableDefinitionResource definitionResource, boolean doesNotExistLocally)
       throws JsonParseException, JsonMappingException, IOException, SchemaMismatchException {
@@ -1741,20 +1844,5 @@ public class SyncProcessor implements SynchronizerStatus {
       }
       return ColumnDefinition.buildColumnDefinitions(definitionResource.getTableId(), localColumns);
     }
-  }
-
-  private boolean containsAllChildren(List<ColumnDefinition> cpListChildElementKeys,
-      List<String> listChildElementKeys) {
-
-    if (cpListChildElementKeys.size() != listChildElementKeys.size()) {
-      return false;
-    }
-
-    for (ColumnDefinition defn : cpListChildElementKeys) {
-      if (!listChildElementKeys.contains(defn.getElementKey())) {
-        return false;
-      }
-    }
-    return true;
   }
 }

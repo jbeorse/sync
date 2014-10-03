@@ -273,6 +273,7 @@ public class AggregateSynchronizer implements Synchronizer {
 
       @Override
       public void handleError(ClientHttpResponse resp) throws IOException {
+        mHttpClient.getCookieStore().clear();
         switch ( resp.getStatusCode().value() ) {
         case HttpStatus.SC_OK:
           throw new IllegalStateException("OK should not get here");
@@ -535,8 +536,8 @@ public class AggregateSynchronizer implements Synchronizer {
     // vs. an entire bucket of changes.
 
     // get data updates
-    if (((resource.getDataETag() == null) && (dataETag != null)) ||
-         !resource.getDataETag().equals(dataETag)) {
+    if (((resourceDataETag == null) && (dataETag != null)) ||
+        ((resourceDataETag != null) && !resourceDataETag.equals(dataETag))) {
       URI url;
       if ((resource.getDataETag() == null) || dataETag == null) {
         url = normalizeUri(resource.getDataUri(), "/");
