@@ -539,11 +539,14 @@ public class ConflictResolutionRowActivity extends ListActivity
               mIsShowingTakeLocalDialog = false;
               Log.d(TAG, "deleted the local version and marked the server" +
               		" version as deleting.");
-              // replacement
+
+              int localConflictType = Integer.parseInt(mLocal.getRowAtIndex(mRowNumber)
+                  .getRawDataOrMetadataByElementKey(DataTableColumns.CONFLICT_TYPE));
+
+              // take the server's changes, but restore it into the deleted state.
               ContentValues updateValues = new ContentValues();
-              updateValues.put(DataTableColumns.SYNC_STATE, SyncState.deleted.name());
               updateValues.put(DataTableColumns.ROW_ETAG, mServerRowETag);
-              updateValues.putNull(DataTableColumns.CONFLICT_TYPE);
+              updateValues.put(DataTableColumns.CONFLICT_TYPE, localConflictType);
               for (ConflictColumn cc : mConflictColumns) {
                   updateValues.put(cc.getElementKey(), cc.getServerRawValue());
               }
@@ -552,8 +555,12 @@ public class ConflictResolutionRowActivity extends ListActivity
               try {
                 db = DatabaseFactory.get().getDatabase(ConflictResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
-                ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
+                // update with server's changes
                 ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
+                // delete the record of the server row
+                ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
+                // move the local conflict back into the normal (null) state
+                ODKDatabaseUtils.get().restoreRowFromConflict(db, mTableId, mRowId, SyncState.deleted, localConflictType);
                 db.setTransactionSuccessful();
               } finally {
                 if ( db != null ) {
@@ -601,11 +608,13 @@ public class ConflictResolutionRowActivity extends ListActivity
             public void onClick(DialogInterface dialog, int which) {
               mIsShowingTakeLocalDialog = false;
 
-              // replacement
+              int localConflictType = Integer.parseInt(mLocal.getRowAtIndex(mRowNumber)
+                  .getRawDataOrMetadataByElementKey(DataTableColumns.CONFLICT_TYPE));
+
+              // update the local conflict record with the server's changes
               ContentValues updateValues = new ContentValues();
-              updateValues.put(DataTableColumns.SYNC_STATE, SyncState.changed.name());
               updateValues.put(DataTableColumns.ROW_ETAG, mServerRowETag);
-              updateValues.putNull(DataTableColumns.CONFLICT_TYPE);
+              updateValues.put(DataTableColumns.CONFLICT_TYPE, localConflictType);
               for (ConflictColumn cc : mConflictColumns) {
                   updateValues.put(cc.getElementKey(), cc.getLocalRawValue());
               }
@@ -614,8 +623,12 @@ public class ConflictResolutionRowActivity extends ListActivity
               try {
                 db = DatabaseFactory.get().getDatabase(ConflictResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
-                ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
+                // update with server's changes
                 ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
+                // delete the record of the server row
+                ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
+                // move the local conflict back into the normal (null) state
+                ODKDatabaseUtils.get().restoreRowFromConflict(db, mTableId, mRowId, SyncState.changed, localConflictType);
                 db.setTransactionSuccessful();
               } finally {
                 if ( db != null ) {
@@ -663,11 +676,14 @@ public class ConflictResolutionRowActivity extends ListActivity
             @Override
             public void onClick(DialogInterface dialog, int which) {
               mIsShowingTakeServerDialog = false;
-              // replacement
+
+              int localConflictType = Integer.parseInt(mLocal.getRowAtIndex(mRowNumber)
+                  .getRawDataOrMetadataByElementKey(DataTableColumns.CONFLICT_TYPE));
+
+              // update the local conflict record with the server's changes
               ContentValues updateValues = new ContentValues();
-              updateValues.put(DataTableColumns.SYNC_STATE, SyncState.changed.name());
               updateValues.put(DataTableColumns.ROW_ETAG, mServerRowETag);
-              updateValues.putNull(DataTableColumns.CONFLICT_TYPE);
+              updateValues.put(DataTableColumns.CONFLICT_TYPE, localConflictType);
               for (ConflictColumn cc : mConflictColumns) {
                   updateValues.put(cc.getElementKey(), cc.getServerRawValue());
               }
@@ -676,8 +692,12 @@ public class ConflictResolutionRowActivity extends ListActivity
               try {
                 db = DatabaseFactory.get().getDatabase(ConflictResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
-                ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
+                // update with server's changes
                 ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
+                // delete the record of the server row
+                ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
+                // move the local conflict back into the normal (null) state
+                ODKDatabaseUtils.get().restoreRowFromConflict(db, mTableId, mRowId, SyncState.changed, localConflictType);
                 db.setTransactionSuccessful();
               } finally {
                 if ( db != null ) {
@@ -737,11 +757,14 @@ public class ConflictResolutionRowActivity extends ListActivity
                 return;
               }
               Map<String, String> valuesToUse = mAdapter.getResolvedValues();
-              // replacement
+
+              int localConflictType = Integer.parseInt(mLocal.getRowAtIndex(mRowNumber)
+                  .getRawDataOrMetadataByElementKey(DataTableColumns.CONFLICT_TYPE));
+
+              // update the local conflict record with the server's changes
               ContentValues updateValues = new ContentValues();
-              updateValues.put(DataTableColumns.SYNC_STATE, SyncState.changed.name());
               updateValues.put(DataTableColumns.ROW_ETAG, mServerRowETag);
-              updateValues.putNull(DataTableColumns.CONFLICT_TYPE);
+              updateValues.put(DataTableColumns.CONFLICT_TYPE, localConflictType );
               for (Map.Entry<String, String> kv : valuesToUse.entrySet()) {
                   updateValues.put(kv.getKey(), kv.getValue());
               }
@@ -750,8 +773,12 @@ public class ConflictResolutionRowActivity extends ListActivity
               try {
                 db = DatabaseFactory.get().getDatabase(ConflictResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
-                ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
+                // update with server's changes
                 ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
+                // delete the record of the server row
+                ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
+                // move the local conflict back into the normal (null) state
+                ODKDatabaseUtils.get().restoreRowFromConflict(db, mTableId, mRowId, SyncState.changed, localConflictType);
                 db.setTransactionSuccessful();
               } finally {
                 if ( db != null ) {

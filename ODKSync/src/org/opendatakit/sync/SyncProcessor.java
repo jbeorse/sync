@@ -1538,11 +1538,7 @@ public class SyncProcessor implements SynchronizerStatus {
         tableResult.incLocalDeletes();
       } else {
         // update the localRow to be in_conflict
-        values.put(DataTableColumns.ID, serverRow.getRowId());
-        values.put(DataTableColumns.SYNC_STATE, SyncState.in_conflict.name());
-        values.put(DataTableColumns.CONFLICT_TYPE, localRowConflictType);
-        ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, tableId, orderedColumns,
-            values, serverRow.getRowId());
+        ODKDatabaseUtils.get().placeRowIntoConflict(db, tableId, serverRow.getRowId(), localRowConflictType);
 
         // set up to insert the in_conflict row from the server
         for (DataKeyValue entry : serverRow.getValues()) {
