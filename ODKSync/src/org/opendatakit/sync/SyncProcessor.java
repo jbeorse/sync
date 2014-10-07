@@ -1213,13 +1213,10 @@ public class SyncProcessor implements SynchronizerStatus {
                     resource.setDataETag(r.getDataETagAtModification());
                     te.setLastDataETag(r.getDataETagAtModification());
 
-                    ContentValues values = new ContentValues();
-                    values.put(DataTableColumns.ROW_ETAG, r.getRowETag());
-                    values.put(DataTableColumns.SYNC_STATE, SyncState.synced_pending_files.name());
                     try {
                       db = DatabaseFactory.get().getDatabase(context, appName);
-                      ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, tableId,
-                        orderedColumns, values, r.getRowId());
+                      ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, 
+                          r.getRowId(), r.getRowETag(), SyncState.synced_pending_files);
                     } finally {
                       if ( db != null ) {
                         db.close();
@@ -1233,12 +1230,10 @@ public class SyncProcessor implements SynchronizerStatus {
                         resource.getInstanceFilesUri(), tableId, syncRow);
                     if (outcome) {
                       // move to synced state
-                      values.clear();
-                      values.put(DataTableColumns.SYNC_STATE, SyncState.synced.name());
                       try {
                         db = DatabaseFactory.get().getDatabase(context, appName);
-                        ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, tableId,
-                          orderedColumns, values, syncRow.getRowId());
+                        ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, 
+                            syncRow.getRowId(), syncRow.getRowETag(), SyncState.synced);
                       } finally {
                         if ( db != null ) {
                           db.close();
@@ -1351,13 +1346,10 @@ public class SyncProcessor implements SynchronizerStatus {
                   if (outcome) {
                     SQLiteDatabase db = null;
 
-                    ContentValues values = new ContentValues();
-                    values.put(DataTableColumns.SYNC_STATE, SyncState.synced.name());
-                    
                     try {
                       db = DatabaseFactory.get().getDatabase(context, appName);
-                      ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, tableId,
-                        orderedColumns, values, syncRow.getRowId());
+                      ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, 
+                          syncRow.getRowId(), syncRow.getRowETag(), SyncState.synced);
                     } finally {
                       if ( db != null ) {
                         db.close();
@@ -1632,10 +1624,9 @@ public class SyncProcessor implements SynchronizerStatus {
           serverRow, true);
       if (outcome) {
         // move to synced state
-        values.clear();
-        values.put(DataTableColumns.SYNC_STATE, SyncState.synced.name());
-        ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, tableId, orderedColumns,
-            values, serverRow.getRowId());
+        ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, 
+            serverRow.getRowId(), serverRow.getRowETag(), SyncState.synced);
+
       } else {
         fileSuccess = false;
       }
@@ -1682,8 +1673,11 @@ public class SyncProcessor implements SynchronizerStatus {
 
         values.put(DataTableColumns.ROW_ETAG, serverRow.getRowETag());
         values.put(DataTableColumns.SYNC_STATE, SyncState.synced_pending_files.name());
+        values.put(DataTableColumns.FILTER_TYPE, serverRow.getFilterScope().getType().name());
+        values.put(DataTableColumns.FILTER_VALUE, serverRow.getFilterScope().getValue());
         values.put(DataTableColumns.FORM_ID, serverRow.getFormId());
         values.put(DataTableColumns.LOCALE, serverRow.getLocale());
+        values.put(DataTableColumns.SAVEPOINT_TYPE, serverRow.getSavepointType());
         values.put(DataTableColumns.SAVEPOINT_TIMESTAMP, serverRow.getSavepointTimestamp());
         values.put(DataTableColumns.SAVEPOINT_CREATOR, serverRow.getSavepointCreator());
 
@@ -1701,10 +1695,8 @@ public class SyncProcessor implements SynchronizerStatus {
             serverRow, true);
         if (outcome) {
           // move to synced state
-          values.clear();
-          values.put(DataTableColumns.SYNC_STATE, SyncState.synced.name());
-          ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, tableId, orderedColumns,
-              values, serverRow.getRowId());
+          ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, 
+              serverRow.getRowId(), serverRow.getRowETag(), SyncState.synced);
         } else {
           fileSuccess = false;
         }

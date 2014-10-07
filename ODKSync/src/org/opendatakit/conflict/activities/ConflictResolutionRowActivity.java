@@ -546,7 +546,23 @@ public class ConflictResolutionRowActivity extends ListActivity
               // take the server's changes, but restore it into the deleted state.
               ContentValues updateValues = new ContentValues();
               updateValues.put(DataTableColumns.ROW_ETAG, mServerRowETag);
+              updateValues.put(DataTableColumns.SYNC_STATE, SyncState.in_conflict.name());
               updateValues.put(DataTableColumns.CONFLICT_TYPE, localConflictType);
+              // take the server's metadata values...
+              updateValues.put(DataTableColumns.FILTER_TYPE, 
+                  mServer.getRowAtIndex(mRowNumber).getRawDataOrMetadataByElementKey(DataTableColumns.FILTER_TYPE));
+              updateValues.put(DataTableColumns.FILTER_VALUE, 
+                  mServer.getRowAtIndex(mRowNumber).getRawDataOrMetadataByElementKey(DataTableColumns.FILTER_VALUE));
+              updateValues.put(DataTableColumns.FORM_ID, 
+                  mServer.getRowAtIndex(mRowNumber).getRawDataOrMetadataByElementKey(DataTableColumns.FORM_ID));
+              updateValues.put(DataTableColumns.LOCALE, 
+                  mServer.getRowAtIndex(mRowNumber).getRawDataOrMetadataByElementKey(DataTableColumns.LOCALE));
+              updateValues.put(DataTableColumns.SAVEPOINT_TYPE, 
+                  mServer.getRowAtIndex(mRowNumber).getRawDataOrMetadataByElementKey(DataTableColumns.SAVEPOINT_TYPE));
+              updateValues.put(DataTableColumns.SAVEPOINT_TIMESTAMP, 
+                  mServer.getRowAtIndex(mRowNumber).getRawDataOrMetadataByElementKey(DataTableColumns.SAVEPOINT_TIMESTAMP));
+              updateValues.put(DataTableColumns.SAVEPOINT_CREATOR, 
+                  mServer.getRowAtIndex(mRowNumber).getRawDataOrMetadataByElementKey(DataTableColumns.SAVEPOINT_CREATOR));
               for (ConflictColumn cc : mConflictColumns) {
                   updateValues.put(cc.getElementKey(), cc.getServerRawValue());
               }
@@ -555,7 +571,7 @@ public class ConflictResolutionRowActivity extends ListActivity
               try {
                 db = DatabaseFactory.get().getDatabase(ConflictResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
-                // update with server's changes
+                // update with server's changes -- leave all unspecified values unchanged
                 ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
                 // delete the record of the server row
                 ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
@@ -611,10 +627,27 @@ public class ConflictResolutionRowActivity extends ListActivity
               int localConflictType = Integer.parseInt(mLocal.getRowAtIndex(mRowNumber)
                   .getRawDataOrMetadataByElementKey(DataTableColumns.CONFLICT_TYPE));
 
-              // update the local conflict record with the server's changes
+              // update the local conflict record with the local's changes
               ContentValues updateValues = new ContentValues();
               updateValues.put(DataTableColumns.ROW_ETAG, mServerRowETag);
+              updateValues.put(DataTableColumns.SYNC_STATE, SyncState.in_conflict.name());
               updateValues.put(DataTableColumns.CONFLICT_TYPE, localConflictType);
+              // take the server's filter metadata values ...
+              updateValues.put(DataTableColumns.FILTER_TYPE, 
+                  mServer.getRowAtIndex(mRowNumber).getRawDataOrMetadataByElementKey(DataTableColumns.FILTER_TYPE));
+              updateValues.put(DataTableColumns.FILTER_VALUE, 
+                  mServer.getRowAtIndex(mRowNumber).getRawDataOrMetadataByElementKey(DataTableColumns.FILTER_VALUE));
+              // but take the local's metadata values (i.e., do not change these during the update) ...
+              updateValues.put(DataTableColumns.FORM_ID, 
+                  mLocal.getRowAtIndex(mRowNumber).getRawDataOrMetadataByElementKey(DataTableColumns.FORM_ID));
+              updateValues.put(DataTableColumns.LOCALE, 
+                  mLocal.getRowAtIndex(mRowNumber).getRawDataOrMetadataByElementKey(DataTableColumns.LOCALE));
+              updateValues.put(DataTableColumns.SAVEPOINT_TYPE, 
+                  mLocal.getRowAtIndex(mRowNumber).getRawDataOrMetadataByElementKey(DataTableColumns.SAVEPOINT_TYPE));
+              updateValues.put(DataTableColumns.SAVEPOINT_TIMESTAMP, 
+                  mLocal.getRowAtIndex(mRowNumber).getRawDataOrMetadataByElementKey(DataTableColumns.SAVEPOINT_TIMESTAMP));
+              updateValues.put(DataTableColumns.SAVEPOINT_CREATOR, 
+                  mLocal.getRowAtIndex(mRowNumber).getRawDataOrMetadataByElementKey(DataTableColumns.SAVEPOINT_CREATOR));
               for (ConflictColumn cc : mConflictColumns) {
                   updateValues.put(cc.getElementKey(), cc.getLocalRawValue());
               }
@@ -683,7 +716,23 @@ public class ConflictResolutionRowActivity extends ListActivity
               // update the local conflict record with the server's changes
               ContentValues updateValues = new ContentValues();
               updateValues.put(DataTableColumns.ROW_ETAG, mServerRowETag);
+              updateValues.put(DataTableColumns.SYNC_STATE, SyncState.in_conflict.name());
               updateValues.put(DataTableColumns.CONFLICT_TYPE, localConflictType);
+              // take the server's metadata values too...
+              updateValues.put(DataTableColumns.FILTER_TYPE, 
+                  mServer.getRowAtIndex(mRowNumber).getRawDataOrMetadataByElementKey(DataTableColumns.FILTER_TYPE));
+              updateValues.put(DataTableColumns.FILTER_VALUE, 
+                  mServer.getRowAtIndex(mRowNumber).getRawDataOrMetadataByElementKey(DataTableColumns.FILTER_VALUE));
+              updateValues.put(DataTableColumns.FORM_ID, 
+                  mServer.getRowAtIndex(mRowNumber).getRawDataOrMetadataByElementKey(DataTableColumns.FORM_ID));
+              updateValues.put(DataTableColumns.LOCALE, 
+                  mServer.getRowAtIndex(mRowNumber).getRawDataOrMetadataByElementKey(DataTableColumns.LOCALE));
+              updateValues.put(DataTableColumns.SAVEPOINT_TYPE, 
+                  mServer.getRowAtIndex(mRowNumber).getRawDataOrMetadataByElementKey(DataTableColumns.SAVEPOINT_TYPE));
+              updateValues.put(DataTableColumns.SAVEPOINT_TIMESTAMP, 
+                  mServer.getRowAtIndex(mRowNumber).getRawDataOrMetadataByElementKey(DataTableColumns.SAVEPOINT_TIMESTAMP));
+              updateValues.put(DataTableColumns.SAVEPOINT_CREATOR, 
+                  mServer.getRowAtIndex(mRowNumber).getRawDataOrMetadataByElementKey(DataTableColumns.SAVEPOINT_CREATOR));
               for (ConflictColumn cc : mConflictColumns) {
                   updateValues.put(cc.getElementKey(), cc.getServerRawValue());
               }
@@ -697,7 +746,7 @@ public class ConflictResolutionRowActivity extends ListActivity
                 // delete the record of the server row
                 ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
                 // move the local conflict back into the normal (null) state
-                ODKDatabaseUtils.get().restoreRowFromConflict(db, mTableId, mRowId, SyncState.changed, localConflictType);
+                ODKDatabaseUtils.get().restoreRowFromConflict(db, mTableId, mRowId, SyncState.synced_pending_files, localConflictType);
                 db.setTransactionSuccessful();
               } finally {
                 if ( db != null ) {
@@ -765,6 +814,11 @@ public class ConflictResolutionRowActivity extends ListActivity
               ContentValues updateValues = new ContentValues();
               updateValues.put(DataTableColumns.ROW_ETAG, mServerRowETag);
               updateValues.put(DataTableColumns.CONFLICT_TYPE, localConflictType );
+              // take the server's filter values, but otherwise update the local values during the update...
+              updateValues.put(DataTableColumns.FILTER_TYPE, 
+                  mServer.getRowAtIndex(mRowNumber).getRawDataOrMetadataByElementKey(DataTableColumns.FILTER_TYPE));
+              updateValues.put(DataTableColumns.FILTER_VALUE, 
+                  mServer.getRowAtIndex(mRowNumber).getRawDataOrMetadataByElementKey(DataTableColumns.FILTER_VALUE));
               for (Map.Entry<String, String> kv : valuesToUse.entrySet()) {
                   updateValues.put(kv.getKey(), kv.getValue());
               }
