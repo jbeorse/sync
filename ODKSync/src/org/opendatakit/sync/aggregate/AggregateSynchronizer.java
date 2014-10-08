@@ -563,7 +563,6 @@ public class AggregateSynchronizer implements Synchronizer {
                                       row.getFilterScope(),
                                       row.getValues());
         syncRows.put(row.getRowId(), syncRow);
-        modification.setTableDataETag(row.getDataETagAtModification());
       }
       modification.setRows(syncRows);
     }
