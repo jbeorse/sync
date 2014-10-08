@@ -1061,8 +1061,14 @@ public class SyncProcessor implements SynchronizerStatus {
                 } else {
                   throw new IllegalStateException("Unexpected state encountered");
                 }
-                rowsToMoveToInConflictLocally.add(new FileSyncRow(serverRow, convertToSyncRow(
-                    orderedColumns, localRow), false, localRowConflictType));
+                FileSyncRow syncRow = new FileSyncRow(serverRow, convertToSyncRow(
+                    orderedColumns, localRow), false, localRowConflictType);
+                
+                if ( !syncRow.identicalValues() ) {
+                  rowsToMoveToInConflictLocally.add(syncRow);
+                } else {
+                  Log.w(TAG, "identical rows returned from server -- SHOULDN'T THESE NOT HAPPEN?");
+                }
               }
             }
 
@@ -1144,8 +1150,8 @@ public class SyncProcessor implements SynchronizerStatus {
                   // TODO: need to handle larger sets of results
                   // TODO: This is INCORRECT if we have a cursor continuation!!!
                   ODKDatabaseUtils.get().updateDBTableETags(db, tableId,
-                      modification.getTableSchemaETag(), resource.getDataETag());
-                  te.setSchemaETag(modification.getTableSchemaETag());
+                      resource.getSchemaETag(), resource.getDataETag());
+                  te.setSchemaETag(resource.getSchemaETag());
                   te.setLastDataETag(resource.getDataETag());
                 }
                 db.setTransactionSuccessful();
@@ -1473,6 +1479,51 @@ public class SyncProcessor implements SynchronizerStatus {
       this.localRow = localRow;
       this.isRestPendingFiles = isRestPendingFiles;
       this.localRowConflictType = localRowConflictType;
+    }
+
+    boolean identicalValues() {
+      if ((serverRow.getSavepointTimestamp() == null) ? (localRow.getSavepointTimestamp() != null)
+          : !serverRow.getSavepointTimestamp().equals(localRow.getSavepointTimestamp())) {
+        return false;
+      }
+      if ((serverRow.getSavepointCreator() == null) ? (localRow.getSavepointCreator() != null)
+          : !serverRow.getSavepointCreator().equals(localRow.getSavepointCreator())) {
+        return false;
+      }
+      if ((serverRow.getFilterScope() == null) ? (localRow.getFilterScope() != null) : !serverRow
+          .getFilterScope().equals(localRow.getFilterScope())) {
+        return false;
+      }
+      if ((serverRow.getFormId() == null) ? (localRow.getFormId() != null) : !serverRow.getFormId()
+          .equals(localRow.getFormId())) {
+        return false;
+      }
+      if ((serverRow.getLocale() == null) ? (localRow.getLocale() != null) : !serverRow.getLocale()
+          .equals(localRow.getLocale())) {
+        return false;
+      }
+      if ((serverRow.getRowETag() == null) ? (localRow.getRowETag() != null) : !serverRow
+          .getRowETag().equals(localRow.getRowETag())) {
+        return false;
+      }
+      if ((serverRow.getRowId() == null) ? (localRow.getRowId() != null) : !serverRow.getRowId()
+          .equals(localRow.getRowId())) {
+        return false;
+      }
+      if ((serverRow.getSavepointType() == null) ? (localRow.getSavepointType() != null)
+          : !serverRow.getSavepointType().equals(localRow.getSavepointType())) {
+        return false;
+      }
+      ArrayList<DataKeyValue> localValues = localRow.getValues();
+      ArrayList<DataKeyValue> serverValues = serverRow.getValues();
+
+      if (localValues.size() != serverValues.size()) {
+        return false;
+      }
+      if (!localValues.containsAll(serverValues)) {
+        return false;
+      }
+      return true;
     }
   };
 

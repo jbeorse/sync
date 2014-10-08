@@ -553,7 +553,6 @@ public class AggregateSynchronizer implements Synchronizer {
         throw e;
       }
 
-      modification.setTableSchemaETag(resourceSchemaETag);
       Map<String, SyncRow> syncRows = new HashMap<String, SyncRow>();
       for (RowResource row : rows.getRows()) {
         SyncRow syncRow = new SyncRow(row.getRowId(), row.getRowETag(), row.isDeleted(),

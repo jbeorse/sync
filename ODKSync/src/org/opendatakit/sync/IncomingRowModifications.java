@@ -33,11 +33,8 @@ public class IncomingRowModifications {
   // rowId to SyncRow
   private Map<String, SyncRow> rows;
 
-  private String tableSchemaETag;
-
   public IncomingRowModifications() {
     this.rows = new HashMap<String, SyncRow>();
-    tableSchemaETag = null;
   }
 
   /**
@@ -47,14 +44,6 @@ public class IncomingRowModifications {
    */
   public Map<String, SyncRow> getRows() {
     return this.rows;
-  }
-
-  /**
-   *
-   * @return the latest synchronization tag
-   */
-  public String getTableSchemaETag() {
-    return tableSchemaETag;
   }
 
   /**
@@ -74,15 +63,6 @@ public class IncomingRowModifications {
     this.rows = rows;
   }
 
-  /**
-   *
-   * @param tableSyncTag
-   *          the latest synchronization tag
-   */
-  public void setTableSchemaETag(final String tableSchemaETag) {
-    this.tableSchemaETag = tableSchemaETag;
-  }
-
   @Override
   public boolean equals(Object obj) {
     if (this == obj)
@@ -97,11 +77,6 @@ public class IncomingRowModifications {
         return false;
     } else if (!rows.equals(other.rows))
       return false;
-    if (tableSchemaETag == null) {
-      if (other.tableSchemaETag != null)
-        return false;
-    } else if (!tableSchemaETag.equals(other.tableSchemaETag))
-      return false;
     return true;
   }
 
@@ -114,12 +89,11 @@ public class IncomingRowModifications {
     final int prime = 31;
     int result = 1;
     result = prime * result + ((rows == null) ? 0 : rows.hashCode());
-    result = prime * result + ((tableSchemaETag == null) ? 0 : tableSchemaETag.hashCode());
     return result;
   }
 
   @Override
   public String toString() {
-    return "IncomingModification [rows=" + rows + ", tableSchemaETag=" + tableSchemaETag + "]";
+    return "IncomingModification [rows=" + rows + "]";
   }
 }
