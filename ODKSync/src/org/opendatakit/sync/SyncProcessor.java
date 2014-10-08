@@ -273,7 +273,7 @@ public class SyncProcessor implements SynchronizerStatus {
             db = DatabaseFactory.get().getDatabase(context, appName);
             orderedDefns = TableUtil.get().getColumnDefinitions(db, localTableId);
           } finally {
-            if ( db != null ) {
+            if (db != null) {
               db.close();
               db = null;
             }
@@ -328,9 +328,10 @@ public class SyncProcessor implements SynchronizerStatus {
 
           try {
             db = DatabaseFactory.get().getDatabase(context, appName);
-            orderedDefns = addTableFromDefinitionResource(db, definitionResource, doesNotExistLocally);
+            orderedDefns = addTableFromDefinitionResource(db, definitionResource,
+                doesNotExistLocally);
           } finally {
-            if ( db != null ) {
+            if (db != null) {
               db.close();
               db = null;
             }
@@ -454,7 +455,7 @@ public class SyncProcessor implements SynchronizerStatus {
       tableResult.setTableDisplayName(displayName);
       te = ODKDatabaseUtils.get().getTableDefinitionEntry(db, tableId);
     } finally {
-      if ( db != null ) {
+      if (db != null) {
         db.close();
         db = null;
       }
@@ -604,7 +605,7 @@ public class SyncProcessor implements SynchronizerStatus {
           tableResult.setStatus(Status.EXCEPTION);
           return;
         } finally {
-          if ( db != null ) {
+          if (db != null) {
             db.close();
             db = null;
           }
@@ -620,7 +621,7 @@ public class SyncProcessor implements SynchronizerStatus {
         db = DatabaseFactory.get().getDatabase(context, appName);
         utils.writePropertiesCsv(db, tableId, orderedDefns);
       } finally {
-        if ( db != null ) {
+        if (db != null) {
           db.close();
           db = null;
         }
@@ -709,7 +710,7 @@ public class SyncProcessor implements SynchronizerStatus {
       db = DatabaseFactory.get().getDatabase(context, appName);
       tableIds = ODKDatabaseUtils.get().getAllTableIds(db);
     } finally {
-      if ( db != null ) {
+      if (db != null) {
         db.close();
         db = null;
       }
@@ -730,12 +731,12 @@ public class SyncProcessor implements SynchronizerStatus {
         orderedDefns = TableUtil.get().getColumnDefinitions(db, tableId);
         displayName = TableUtil.get().getLocalizedDisplayName(db, tableId);
       } finally {
-        if ( db != null ) {
+        if (db != null) {
           db.close();
           db = null;
         }
       }
-      
+
       synchronizeTableDataRowsAndAttachments(te, orderedDefns, displayName);
       ++iMajorSyncStep;
     }
@@ -880,7 +881,7 @@ public class SyncProcessor implements SynchronizerStatus {
                 localDataTable = ODKDatabaseUtils.get().rawSqlQuery(db, appName, tableId,
                     orderedColumns, null, null, null, null, DataTableColumns.ID, "ASC");
               } finally {
-                if ( db != null ) {
+                if (db != null) {
                   db.close();
                   db = null;
                 }
@@ -1140,14 +1141,16 @@ public class SyncProcessor implements SynchronizerStatus {
                 // knows we saw its changes. Otherwise it won't let us
                 // put up new information.
                 if (success) {
+                  // TODO: need to handle larger sets of results
+                  // TODO: This is INCORRECT if we have a cursor continuation!!!
                   ODKDatabaseUtils.get().updateDBTableETags(db, tableId,
-                      modification.getTableSchemaETag(), modification.getTableDataETag());
+                      modification.getTableSchemaETag(), resource.getDataETag());
                   te.setSchemaETag(modification.getTableSchemaETag());
-                  te.setLastDataETag(modification.getTableDataETag());
+                  te.setLastDataETag(resource.getDataETag());
                 }
                 db.setTransactionSuccessful();
               } finally {
-                if ( db != null ) {
+                if (db != null) {
                   db.endTransaction();
                   db.close();
                   db = null;
@@ -1215,15 +1218,15 @@ public class SyncProcessor implements SynchronizerStatus {
 
                     try {
                       db = DatabaseFactory.get().getDatabase(context, appName);
-                      ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, 
-                          r.getRowId(), r.getRowETag(), SyncState.synced_pending_files);
+                      ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, r.getRowId(),
+                          r.getRowETag(), SyncState.synced_pending_files);
                     } finally {
-                      if ( db != null ) {
+                      if (db != null) {
                         db.close();
                         db = null;
                       }
                     }
-                    
+
                     tableResult.incServerUpserts();
 
                     boolean outcome = synchronizer.putFileAttachments(
@@ -1232,10 +1235,10 @@ public class SyncProcessor implements SynchronizerStatus {
                       // move to synced state
                       try {
                         db = DatabaseFactory.get().getDatabase(context, appName);
-                        ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, 
+                        ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId,
                             syncRow.getRowId(), syncRow.getRowETag(), SyncState.synced);
                       } finally {
-                        if ( db != null ) {
+                        if (db != null) {
                           db.close();
                           db = null;
                         }
@@ -1247,10 +1250,10 @@ public class SyncProcessor implements SynchronizerStatus {
                     try {
                       db = DatabaseFactory.get().getDatabase(context, appName);
                       ODKDatabaseUtils.get().updateDBTableETags(db, tableId, te.getSchemaETag(),
-                        r.getDataETagAtModification());
+                          r.getDataETagAtModification());
                       te.setLastDataETag(r.getDataETagAtModification());
                     } finally {
-                      if ( db != null ) {
+                      if (db != null) {
                         db.close();
                         db = null;
                       }
@@ -1317,11 +1320,11 @@ public class SyncProcessor implements SynchronizerStatus {
                   if (success) {
                     ODKDatabaseUtils.get().updateDBTableETags(db, tableId, rm.getTableSchemaETag(),
                         rm.getTableDataETag());
-                    te.setSchemaETag(modification.getTableSchemaETag());
-                    te.setLastDataETag(modification.getTableDataETag());
+                    te.setSchemaETag(rm.getTableSchemaETag());
+                    te.setLastDataETag(rm.getTableDataETag());
                   }
                 } finally {
-                  if ( db != null ) {
+                  if (db != null) {
                     db.close();
                     db = null;
                   }
@@ -1348,10 +1351,10 @@ public class SyncProcessor implements SynchronizerStatus {
 
                     try {
                       db = DatabaseFactory.get().getDatabase(context, appName);
-                      ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, 
+                      ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId,
                           syncRow.getRowId(), syncRow.getRowETag(), SyncState.synced);
                     } finally {
-                      if ( db != null ) {
+                      if (db != null) {
                         db.close();
                         db = null;
                       }
@@ -1416,7 +1419,7 @@ public class SyncProcessor implements SynchronizerStatus {
             ODKDatabaseUtils.get().updateDBTableLastSyncTime(db, tableId);
           }
         } finally {
-          if ( db != null ) {
+          if (db != null) {
             db.close();
             db = null;
           }
@@ -1530,7 +1533,8 @@ public class SyncProcessor implements SynchronizerStatus {
         tableResult.incLocalDeletes();
       } else {
         // update the localRow to be in_conflict
-        ODKDatabaseUtils.get().placeRowIntoConflict(db, tableId, serverRow.getRowId(), localRowConflictType);
+        ODKDatabaseUtils.get().placeRowIntoConflict(db, tableId, serverRow.getRowId(),
+            localRowConflictType);
 
         // set up to insert the in_conflict row from the server
         for (DataKeyValue entry : serverRow.getValues()) {
@@ -1624,8 +1628,8 @@ public class SyncProcessor implements SynchronizerStatus {
           serverRow, true);
       if (outcome) {
         // move to synced state
-        ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, 
-            serverRow.getRowId(), serverRow.getRowETag(), SyncState.synced);
+        ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, serverRow.getRowId(),
+            serverRow.getRowETag(), SyncState.synced);
 
       } else {
         fileSuccess = false;
@@ -1695,8 +1699,8 @@ public class SyncProcessor implements SynchronizerStatus {
             serverRow, true);
         if (outcome) {
           // move to synced state
-          ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, 
-              serverRow.getRowId(), serverRow.getRowETag(), SyncState.synced);
+          ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, serverRow.getRowId(),
+              serverRow.getRowETag(), SyncState.synced);
         } else {
           fileSuccess = false;
         }
@@ -1766,7 +1770,7 @@ public class SyncProcessor implements SynchronizerStatus {
    * Update the database to reflect the new structure.
    * <p>
    * This should be called when downloading a table from the server, which is
-   * why the syncTag is separate. 
+   * why the syncTag is separate.
    *
    * @param definitionResource
    * @param syncTag
