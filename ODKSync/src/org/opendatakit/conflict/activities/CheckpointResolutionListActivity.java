@@ -65,7 +65,7 @@ public class CheckpointResolutionListActivity extends ListActivity {
     UserTable table = null;
     try {
       db = DatabaseFactory.get().getDatabase(this, mAppName);
-      ArrayList<ColumnDefinition> orderedDefns = TableUtil.get().getColumnDefinitions(db, mTableId);
+      ArrayList<ColumnDefinition> orderedDefns = TableUtil.get().getColumnDefinitions(db, mAppName, mTableId);
       table = ODKDatabaseUtils.get().rawSqlQuery(db, mAppName, mTableId, 
           orderedDefns, DataTableColumns.SAVEPOINT_TYPE + " IS NULL", null,
           null, null, DataTableColumns.ID, "ASC");

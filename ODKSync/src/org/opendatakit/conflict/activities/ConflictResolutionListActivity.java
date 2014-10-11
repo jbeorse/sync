@@ -64,7 +64,7 @@ public class ConflictResolutionListActivity extends ListActivity {
     UserTable table = null;
     try {
       db = DatabaseFactory.get().getDatabase(this, mAppName);
-      ArrayList<ColumnDefinition> orderedDefns = TableUtil.get().getColumnDefinitions(db, mTableId);
+      ArrayList<ColumnDefinition> orderedDefns = TableUtil.get().getColumnDefinitions(db, mAppName, mTableId);
       table = ODKDatabaseUtils.get().rawSqlQuery(db, mAppName, mTableId, 
           orderedDefns, 
           DataTableColumns.CONFLICT_TYPE + " IN ( ?, ?)",

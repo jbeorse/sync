@@ -271,7 +271,7 @@ public class SyncProcessor implements SynchronizerStatus {
           ArrayList<ColumnDefinition> orderedDefns;
           try {
             db = DatabaseFactory.get().getDatabase(context, appName);
-            orderedDefns = TableUtil.get().getColumnDefinitions(db, localTableId);
+            orderedDefns = TableUtil.get().getColumnDefinitions(db, appName, localTableId);
           } finally {
             if (db != null) {
               db.close();
@@ -728,7 +728,7 @@ public class SyncProcessor implements SynchronizerStatus {
       try {
         db = DatabaseFactory.get().getDatabase(context, appName);
         te = ODKDatabaseUtils.get().getTableDefinitionEntry(db, tableId);
-        orderedDefns = TableUtil.get().getColumnDefinitions(db, tableId);
+        orderedDefns = TableUtil.get().getColumnDefinitions(db, appName, tableId);
         displayName = TableUtil.get().getLocalizedDisplayName(db, tableId);
       } finally {
         if (db != null) {
@@ -1855,7 +1855,7 @@ public class SyncProcessor implements SynchronizerStatus {
         ArrayList<ColumnDefinition> orderedDefns;
         db.beginTransaction();
         orderedDefns = ODKDatabaseUtils.get().createOrOpenDBTableWithColumns(db,
-            definitionResource.getTableId(), definitionResource.getColumns());
+            appName, definitionResource.getTableId(), definitionResource.getColumns());
         ODKDatabaseUtils.get().updateDBTableETags(db, definitionResource.getTableId(),
             definitionResource.getSchemaETag(), null);
         db.setTransactionSuccessful();
@@ -1899,7 +1899,7 @@ public class SyncProcessor implements SynchronizerStatus {
           db.endTransaction();
         }
       }
-      return ColumnDefinition.buildColumnDefinitions(definitionResource.getTableId(), localColumns);
+      return ColumnDefinition.buildColumnDefinitions(appName, definitionResource.getTableId(), localColumns);
     }
   }
 }

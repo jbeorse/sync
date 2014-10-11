@@ -129,7 +129,7 @@ public class ConflictResolutionRowActivity extends ListActivity
       SQLiteDatabase db = null;
       try {
         db = DatabaseFactory.get().getDatabase(this, mAppName);
-        mOrderedDefns = TableUtil.get().getColumnDefinitions(db, mTableId);
+        mOrderedDefns = TableUtil.get().getColumnDefinitions(db, mAppName, mTableId);
         List<KeyValueStoreEntry> columnDisplayNames =
             ODKDatabaseUtils.get().getDBTableMetadata(db, mTableId, 
                 KeyValueStoreConstants.PARTITION_COLUMN, null, KeyValueStoreConstants.COLUMN_DISPLAY_NAME);

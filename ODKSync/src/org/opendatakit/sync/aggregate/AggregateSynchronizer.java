@@ -331,7 +331,8 @@ public class AggregateSynchronizer implements Synchronizer {
     this.rt.setInterceptors(interceptors);
     this.tokenRt.setInterceptors(interceptors);
 
-    HttpClientAndroidlibRequestFactory factory = new HttpClientAndroidlibRequestFactory(WebUtils.get().createHttpClient(WebUtils.CONNECTION_TIMEOUT, 1));
+    HttpClientAndroidlibRequestFactory factory = 
+        new HttpClientAndroidlibRequestFactory(appName, WebUtils.CONNECTION_TIMEOUT, 1);
     factory.setConnectTimeout(WebUtils.CONNECTION_TIMEOUT);
     factory.setReadTimeout(2*WebUtils.CONNECTION_TIMEOUT);
     this.rt.setRequestFactory(factory);
@@ -855,7 +856,7 @@ public class AggregateSynchronizer implements Synchronizer {
         if ( !localFile.exists() || !localFile.isFile() ) {
           // we need to delete this file from the server.
           serverFilesToDelete.add(entry.filename);
-        } else if ( ODKFileUtils.getMd5Hash(localFile).equals(entry.md5hash) ) {
+        } else if ( ODKFileUtils.getMd5Hash(appName, localFile).equals(entry.md5hash) ) {
           // we are ok -- no need to upload or delete
           relativePathsOnDevice.remove(entry.filename);
         }
@@ -987,7 +988,7 @@ public class AggregateSynchronizer implements Synchronizer {
         if ( !localFile.exists() || !localFile.isFile() ) {
           // we need to delete this file from the server.
           serverFilesToDelete.add(entry.filename);
-        } else if ( ODKFileUtils.getMd5Hash(localFile).equals(entry.md5hash) ) {
+        } else if ( ODKFileUtils.getMd5Hash(appName, localFile).equals(entry.md5hash) ) {
           // we are ok -- no need to upload or delete
           relativePathsOnDevice.remove(entry.filename);
         }
@@ -1242,7 +1243,7 @@ public class AggregateSynchronizer implements Synchronizer {
         }
       } else {
         // file exists, see if it's up to date
-        String md5hash = ODKFileUtils.getMd5Hash(newFile);
+        String md5hash = ODKFileUtils.getMd5Hash(appName, newFile);
         // so as it comes down from the manifest, the md5 hash includes a
         // "md5:" prefix. Add taht and then check.
         if (!md5hash.equals(entry.md5hash)) {
@@ -1464,7 +1465,7 @@ public class AggregateSynchronizer implements Synchronizer {
           if ( !downloadFile(localFile, entry.downloadUrl) ) {
             success = false;
           }
-        } else if ( !entry.md5hash.equals(ODKFileUtils.getMd5Hash(localFile)) ) {
+        } else if ( !entry.md5hash.equals(ODKFileUtils.getMd5Hash(appName, localFile)) ) {
           Log.e(LOGTAG, "File " + localFile.getAbsolutePath() + " MD5Hash has changed from that on server -- this is not supposed to happen!");
           success = false;
         }
@@ -1547,7 +1548,7 @@ public class AggregateSynchronizer implements Synchronizer {
           if ( !outcome ) {
             success = false;
           }
-        } else if ( !entry.md5hash.equals(ODKFileUtils.getMd5Hash(localFile)) ) {
+        } else if ( !entry.md5hash.equals(ODKFileUtils.getMd5Hash(appName, localFile)) ) {
           success = false;
           Log.e(LOGTAG, "File " + localFile.getAbsolutePath() + " MD5Hash has changed from that on server -- this is not supposed to happen!");
         }
