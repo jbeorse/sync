@@ -422,7 +422,7 @@ public class CheckpointResolutionRowActivity extends ListActivity
               try {
                 db = DatabaseFactory.get().getDatabase(CheckpointResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
-                ODKDatabaseUtils.get().deleteDataInDBTableWithId(db, mAppName, mTableId, mRowId);
+                ODKDatabaseUtils.get().deleteCheckpointRowsWithId(db, mAppName, mTableId, mRowId);
                 db.setTransactionSuccessful();
               } finally {
                 if ( db != null ) {
@@ -477,7 +477,7 @@ public class CheckpointResolutionRowActivity extends ListActivity
               try {
                 db = DatabaseFactory.get().getDatabase(CheckpointResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
-                ODKDatabaseUtils.get().deleteCheckpointDataInDBTableWithId(db, mTableId, mRowId );
+                ODKDatabaseUtils.get().deleteCheckpointRowsWithId(db, mAppName, mTableId, mRowId );
                 db.setTransactionSuccessful();
               } finally {
                 if ( db != null ) {

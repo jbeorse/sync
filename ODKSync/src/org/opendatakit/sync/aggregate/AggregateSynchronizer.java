@@ -331,7 +331,7 @@ public class AggregateSynchronizer implements Synchronizer {
     this.rt.setInterceptors(interceptors);
     this.tokenRt.setInterceptors(interceptors);
 
-    HttpClientAndroidlibRequestFactory factory = new HttpClientAndroidlibRequestFactory(WebUtils.createHttpClient(WebUtils.CONNECTION_TIMEOUT, 1));
+    HttpClientAndroidlibRequestFactory factory = new HttpClientAndroidlibRequestFactory(WebUtils.get().createHttpClient(WebUtils.CONNECTION_TIMEOUT, 1));
     factory.setConnectTimeout(WebUtils.CONNECTION_TIMEOUT);
     factory.setReadTimeout(2*WebUtils.CONNECTION_TIMEOUT);
     this.rt.setRequestFactory(factory);

@@ -475,15 +475,20 @@ public class ConflictResolutionRowActivity extends ListActivity
 
             @Override
             public void onClick(DialogInterface dialog, int which) {
-              // TODO: delete the local version.
-              // this will be a simple matter of deleting all the rows with the
-              // same rowid on the local device.
+              // delete all data (since it was deleted on the server and we accepted that)
               mIsShowingTakeServerDialog = false;
               SQLiteDatabase db = null;
               try {
                 db = DatabaseFactory.get().getDatabase(ConflictResolutionRowActivity.this, mAppName);
                 db.beginTransaction();
-                ODKDatabaseUtils.get().deleteDataInDBTableWithId(db, mAppName, mTableId, mRowId);
+                // delete the server conflict row
+                ODKDatabaseUtils.get().deleteServerConflictRowWithId(db, mTableId, mRowId);
+                // move the local record into the 'new_row' sync state
+                // so it can be physically deleted.
+                ODKDatabaseUtils.get().updateRowETagAndSyncState(db, mTableId, mRowId, 
+                                                                 null, SyncState.new_row);
+                // and physically delete it.
+                ODKDatabaseUtils.get().deleteDataInExistingDBTableWithId(db, mAppName, mTableId, mRowId);
                 db.setTransactionSuccessful();
               } finally {
                 if ( db != null ) {
@@ -574,7 +579,7 @@ public class ConflictResolutionRowActivity extends ListActivity
                 // update with server's changes -- leave all unspecified values unchanged
                 ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
                 // delete the record of the server row
-                ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
+                ODKDatabaseUtils.get().deleteServerConflictRowWithId(db, mTableId, mRowId);
                 // move the local conflict back into the normal (null) state
                 ODKDatabaseUtils.get().restoreRowFromConflict(db, mTableId, mRowId, SyncState.deleted, localConflictType);
                 db.setTransactionSuccessful();
@@ -659,7 +664,7 @@ public class ConflictResolutionRowActivity extends ListActivity
                 // update with server's changes
                 ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
                 // delete the record of the server row
-                ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
+                ODKDatabaseUtils.get().deleteServerConflictRowWithId(db, mTableId, mRowId);
                 // move the local conflict back into the normal (null) state
                 ODKDatabaseUtils.get().restoreRowFromConflict(db, mTableId, mRowId, SyncState.changed, localConflictType);
                 db.setTransactionSuccessful();
@@ -744,7 +749,7 @@ public class ConflictResolutionRowActivity extends ListActivity
                 // update with server's changes
                 ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
                 // delete the record of the server row
-                ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
+                ODKDatabaseUtils.get().deleteServerConflictRowWithId(db, mTableId, mRowId);
                 // move the local conflict back into the normal (null) state
                 ODKDatabaseUtils.get().restoreRowFromConflict(db, mTableId, mRowId, SyncState.synced_pending_files, localConflictType);
                 db.setTransactionSuccessful();
@@ -830,7 +835,7 @@ public class ConflictResolutionRowActivity extends ListActivity
                 // update with server's changes
                 ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns, updateValues, mRowId);
                 // delete the record of the server row
-                ODKDatabaseUtils.get().deleteServerConflictRows(db, mTableId, mRowId);
+                ODKDatabaseUtils.get().deleteServerConflictRowWithId(db, mTableId, mRowId);
                 // move the local conflict back into the normal (null) state
                 ODKDatabaseUtils.get().restoreRowFromConflict(db, mTableId, mRowId, SyncState.changed, localConflictType);
                 db.setTransactionSuccessful();

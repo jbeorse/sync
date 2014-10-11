@@ -16,9 +16,7 @@
 package org.opendatakit.sync;
 
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * An IncomingModification represents changes coming down from the server.

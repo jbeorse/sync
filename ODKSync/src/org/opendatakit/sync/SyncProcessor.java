@@ -386,7 +386,7 @@ public class SyncProcessor implements SynchronizerStatus {
         TableResult tableResult = mUserResult.getTableResult(localTableId);
         try {
           db = DatabaseFactory.get().getDatabase(context, appName);
-          ODKDatabaseUtils.get().deleteTableAndData(db, appName, localTableId);
+          ODKDatabaseUtils.get().deleteDBTableAndAllData(db, appName, localTableId);
           tableResult.setStatus(Status.SUCCESS);
         } catch (SQLiteException e) {
           tableResult.setStatus(Status.EXCEPTION);
@@ -1320,8 +1320,12 @@ public class SyncProcessor implements SynchronizerStatus {
                 SQLiteDatabase db = null;
                 try {
                   db = DatabaseFactory.get().getDatabase(context, appName);
-                  ODKDatabaseUtils.get().deleteDataInDBTableWithId(db, appName, tableId,
-                      rm.getRowId());
+                  // move the local record into the 'new_row' sync state
+                  // so it can be physically deleted.
+                  ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, rm.getRowId(), 
+                                                                   null, SyncState.new_row);
+                  // and physically delete it.
+                  ODKDatabaseUtils.get().deleteDataInExistingDBTableWithId(db, appName, tableId, rm.getRowId());
                   tableResult.incServerDeletes();
                   if (success) {
                     ODKDatabaseUtils.get().updateDBTableETags(db, tableId, rm.getTableSchemaETag(),
@@ -1559,7 +1563,7 @@ public class SyncProcessor implements SynchronizerStatus {
       ContentValues values = new ContentValues();
 
       // delete the old server-values in_conflict row if it exists
-      ODKDatabaseUtils.get().deleteServerConflictRows(db, tableId, serverRow.getRowId());
+      ODKDatabaseUtils.get().deleteServerConflictRowWithId(db, tableId, serverRow.getRowId());
       // update existing localRow
 
       // the localRow conflict type was determined when the
@@ -1577,10 +1581,15 @@ public class SyncProcessor implements SynchronizerStatus {
       if (serverRowConflictType == ConflictType.SERVER_DELETED_OLD_VALUES
           && localRowConflictType == ConflictType.LOCAL_DELETED_OLD_VALUES) {
 
-        // special case -- the server and local rows are both being deleted
-        // just delete them!
-        ODKDatabaseUtils.get()
-            .deleteDataInDBTableWithId(db, appName, tableId, serverRow.getRowId());
+        // special case -- the server and local rows are both being deleted -- just delete them!
+
+        // move the local record into the 'new_row' sync state
+        // so it can be physically deleted.
+        ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, serverRow.getRowId(), 
+                                                         null, SyncState.new_row);
+        // and physically delete it.
+        ODKDatabaseUtils.get().deleteDataInExistingDBTableWithId(db, appName, tableId, serverRow.getRowId());
+        
         tableResult.incLocalDeletes();
       } else {
         // update the localRow to be in_conflict
@@ -1777,8 +1786,13 @@ public class SyncProcessor implements SynchronizerStatus {
         boolean outcome = synchronizer.putFileAttachments(resource.getInstanceFilesUri(), tableId,
             change.localRow);
         if (outcome) {
-          ODKDatabaseUtils.get().deleteDataInDBTableWithId(db, appName, tableId,
-              change.serverRow.getRowId());
+          // move the local record into the 'new_row' sync state
+          // so it can be physically deleted.
+          ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, change.serverRow.getRowId(), 
+                                                           null, SyncState.new_row);
+          // and physically delete it.
+          ODKDatabaseUtils.get().deleteDataInExistingDBTableWithId(db, appName, tableId, change.serverRow.getRowId());
+
           tableResult.incLocalDeletes();
         } else {
           deletesAllSuccessful = false;
