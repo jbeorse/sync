@@ -27,6 +27,7 @@ public class SyncUtil {
 
   public static final String getDefaultAppName() {
     Log.w("SyncUtil", "appName is null on intent");
+    Thread.dumpStack();
     return DEFAULT_APP_NAME;
   }
 }

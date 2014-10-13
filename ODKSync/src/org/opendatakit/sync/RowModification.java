@@ -15,7 +15,6 @@
  */
 package org.opendatakit.sync;
 
-
 /**
  * A RowModification represents the update to a row's ETag and the dataset's
  * sync tag after the server update completes.
@@ -26,7 +25,7 @@ package org.opendatakit.sync;
 public class RowModification {
   String rowId;
   String rowETag;
-  
+
   String tableSchemaETag;
   String tableDataETag;
 
@@ -40,8 +39,8 @@ public class RowModification {
    * @param tableSyncTag
    *          the table-level syncTag
    */
-  public RowModification(final String rowId, final String rowETag, 
-        final String tableSchemaETag, String tableDataETag) {
+  public RowModification(final String rowId, final String rowETag, final String tableSchemaETag,
+      String tableDataETag) {
     this.rowId = rowId;
     this.rowETag = rowETag;
     this.tableSchemaETag = tableSchemaETag;
@@ -74,7 +73,7 @@ public class RowModification {
   public String getTableSchemaETag() {
     return tableSchemaETag;
   }
-  
+
   public String getTableDataETag() {
     return tableDataETag;
   }
@@ -87,7 +86,7 @@ public class RowModification {
   public void setTableSchemaETag(String tableSchemaETag) {
     this.tableSchemaETag = tableSchemaETag;
   }
-  
+
   public void setTableDataETag(String tableDataETag) {
     this.tableDataETag = tableDataETag;
   }
@@ -101,15 +100,17 @@ public class RowModification {
     final RowModification other = (RowModification) o;
     if (!other.canEqual((java.lang.Object) this))
       return false;
-    if (this.getRowId() == null ? other.getRowId() != null : !this.getRowId().equals(other.getRowId()))
+    if (this.getRowId() == null ? other.getRowId() != null : !this.getRowId().equals(
+        other.getRowId()))
       return false;
-    if (this.getRowETag() == null ? other.getRowETag() != null : !this.getRowETag().equals(other.getRowETag()))
+    if (this.getRowETag() == null ? other.getRowETag() != null : !this.getRowETag().equals(
+        other.getRowETag()))
       return false;
-    if (this.getTableSchemaETag() == null ? other.getTableSchemaETag() != null : !this.getTableSchemaETag()
-        .equals(other.getTableSchemaETag()))
+    if (this.getTableSchemaETag() == null ? other.getTableSchemaETag() != null : !this
+        .getTableSchemaETag().equals(other.getTableSchemaETag()))
       return false;
-    if (this.getTableDataETag() == null ? other.getTableDataETag() != null : !this.getTableDataETag()
-        .equals(other.getTableDataETag()))
+    if (this.getTableDataETag() == null ? other.getTableDataETag() != null : !this
+        .getTableDataETag().equals(other.getTableDataETag()))
       return false;
     return true;
   }
@@ -133,8 +134,8 @@ public class RowModification {
 
   @Override
   public java.lang.String toString() {
-    return "RowModification(rowId=" + this.getRowId() + ", rowETag=" + this.getRowETag() + 
-        ", tableSchemaETag=" + this.getTableSchemaETag() +
-        ", tableDataETag=" + this.getTableDataETag() + ")";
+    return "RowModification(rowId=" + this.getRowId() + ", rowETag=" + this.getRowETag()
+        + ", tableSchemaETag=" + this.getTableSchemaETag() + ", tableDataETag="
+        + this.getTableDataETag() + ")";
   }
 }

@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.opendatakit.common.android.utilities.WebLogger;
 import org.opendatakit.sync.OdkSyncServiceProxy;
 import org.opendatakit.sync.R;
 import org.opendatakit.sync.SyncApp;
@@ -39,7 +40,6 @@ import android.content.DialogInterface.OnClickListener;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.RemoteException;
-import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -67,9 +67,9 @@ public class SyncActivity extends Activity {
 
   static final AtomicBoolean refreshRequired = new AtomicBoolean(false);
 
-  public static final void refreshActivityUINeeded() {
+  public static final void refreshActivityUINeeded(String appName) {
     refreshRequired.set(true);
-    Log.e(LOGTAG, "FROM UI THREAD: triggering another polling cycle");
+    WebLogger.getLogger(appName).e(LOGTAG, "FROM UI THREAD: triggering another polling cycle");
   }
 
   private EditText uriField;
@@ -100,10 +100,10 @@ public class SyncActivity extends Activity {
     try {
       SyncPreferences prefs = new SyncPreferences(this, appName);
       initializeData(prefs);
-      refreshActivityUINeeded();
+      refreshActivityUINeeded(appName);
     } catch (IOException e) {
       // TODO Auto-generated catch block
-      e.printStackTrace();
+      WebLogger.getLogger(appName).printStackTrace(e);
     }
 
     authorizeAccountSuccessful = false;
@@ -118,7 +118,7 @@ public class SyncActivity extends Activity {
   @Override
   protected void onResume() {
     super.onResume();
-    refreshActivityUINeeded();
+    refreshActivityUINeeded(appName);
     launchUpdateThread();
   }
 
@@ -221,13 +221,14 @@ public class SyncActivity extends Activity {
           // SS Oct 15: clear the auth token here.
           // TODO if you change a user you can switch to their privileges
           // without this.
-          Log.d(LOGTAG, "[onClickSaveSettings][onClick] invalidated authtoken");
+          WebLogger.getLogger(appName).d(LOGTAG,
+              "[onClickSaveSettings][onClick] invalidated authtoken");
           invalidateAuthToken(SyncActivity.this, appName);
-          refreshActivityUINeeded();
+          refreshActivityUINeeded(appName);
         } catch (NoAppNameSpecifiedException e) {
-          e.printStackTrace();
+          WebLogger.getLogger(appName).printStackTrace(e);
         } catch (IOException e) {
-          e.printStackTrace();
+          WebLogger.getLogger(appName).printStackTrace(e);
         }
       }
     });
@@ -242,7 +243,7 @@ public class SyncActivity extends Activity {
    */
   public void onClickAuthorizeAccount(View v) {
     try {
-      Log.d(LOGTAG, "[onClickAuthorizeAccount] invalidated authtoken");
+      WebLogger.getLogger(appName).d(LOGTAG, "[onClickAuthorizeAccount] invalidated authtoken");
       invalidateAuthToken(SyncActivity.this, appName);
       SyncPreferences prefs = new SyncPreferences(this, appName);
       Intent i = new Intent(this, AccountInfoActivity.class);
@@ -252,7 +253,7 @@ public class SyncActivity extends Activity {
       startActivityForResult(i, AUTHORIZE_ACCOUNT_RESULT_ID);
     } catch (IOException e) {
       // TODO Auto-generated catch block
-      e.printStackTrace();
+      WebLogger.getLogger(appName).printStackTrace(e);
     }
   }
 
@@ -260,7 +261,7 @@ public class SyncActivity extends Activity {
    * Hooked to syncNowButton's onClick in aggregate_activity.xml
    */
   public void onClickSyncNowPush(View v) {
-    Log.d(LOGTAG, "in onClickSyncNowPush");
+    WebLogger.getLogger(appName).d(LOGTAG, "in onClickSyncNowPush");
     // ask whether to sync app files and table-level files
 
     // show warning message
@@ -273,7 +274,8 @@ public class SyncActivity extends Activity {
         try {
           SyncPreferences prefs = new SyncPreferences(SyncActivity.this, appName);
           String accountName = prefs.getAccount();
-          Log.e(LOGTAG, "[onClickSyncNowPush] timestamp: " + System.currentTimeMillis());
+          WebLogger.getLogger(appName).e(LOGTAG,
+              "[onClickSyncNowPush] timestamp: " + System.currentTimeMillis());
           if (accountName == null) {
             Toast.makeText(SyncActivity.this, getString(R.string.choose_account),
                 Toast.LENGTH_SHORT).show();
@@ -282,12 +284,12 @@ public class SyncActivity extends Activity {
               disableButtons();
               SyncApp.getInstance().getOdkSyncServiceProxy().pushToServer(appName);
             } catch (RemoteException e) {
-              Log.e(LOGTAG, "Problem with push command");
+              WebLogger.getLogger(appName).e(LOGTAG, "Problem with push command");
             }
           }
         } catch (IOException e) {
           // TODO Auto-generated catch block
-          e.printStackTrace();
+          WebLogger.getLogger(appName).printStackTrace(e);
         }
       }
     });
@@ -300,12 +302,13 @@ public class SyncActivity extends Activity {
    * Hooked to syncNowButton's onClick in aggregate_activity.xml
    */
   public void onClickSyncNowPull(View v) {
-    Log.d(LOGTAG, "in onClickSyncNowPull");
+    WebLogger.getLogger(appName).d(LOGTAG, "in onClickSyncNowPull");
     // ask whether to sync app files and table-level files
     try {
       SyncPreferences prefs = new SyncPreferences(this, appName);
       String accountName = prefs.getAccount();
-      Log.e(LOGTAG, "[onClickSyncNowPull] timestamp: " + System.currentTimeMillis());
+      WebLogger.getLogger(appName).e(LOGTAG,
+          "[onClickSyncNowPull] timestamp: " + System.currentTimeMillis());
       if (accountName == null) {
         Toast.makeText(this, getString(R.string.choose_account), Toast.LENGTH_SHORT).show();
       } else {
@@ -313,12 +316,12 @@ public class SyncActivity extends Activity {
           disableButtons();
           SyncApp.getInstance().getOdkSyncServiceProxy().synchronizeFromServer(appName);
         } catch (RemoteException e) {
-          Log.e(LOGTAG, "Problem with pull command");
+          WebLogger.getLogger(appName).e(LOGTAG, "Problem with pull command");
         }
       }
     } catch (IOException e) {
       // TODO Auto-generated catch block
-      e.printStackTrace();
+      WebLogger.getLogger(appName).printStackTrace(e);
     }
 
   }
@@ -328,10 +331,10 @@ public class SyncActivity extends Activity {
       SyncPreferences prefs = new SyncPreferences(context, appName);
       AccountManager.get(context).invalidateAuthToken(ACCOUNT_TYPE_G, prefs.getAuthToken());
       prefs.setAuthToken(null);
-      refreshActivityUINeeded();
+      refreshActivityUINeeded(appName);
     } catch (IOException e) {
       // TODO Auto-generated catch block
-      e.printStackTrace();
+      WebLogger.getLogger(appName).printStackTrace(e);
     }
   }
 
@@ -343,7 +346,7 @@ public class SyncActivity extends Activity {
       this.authorizeAccountSuccessful = true;
       this.authorizeSinceCompletion = true;
     }
-    refreshActivityUINeeded();
+    refreshActivityUINeeded(appName);
   }
 
   private synchronized void launchUpdateThread() {
@@ -416,7 +419,7 @@ public class SyncActivity extends Activity {
           try {
             runningThread.join();
           } catch (InterruptedException e) {
-            e.printStackTrace();
+            WebLogger.getLogger(appName).printStackTrace(e);
           }
         }
       }
@@ -439,30 +442,32 @@ public class SyncActivity extends Activity {
               progressSettings.actionsEnabled = false;
               progressSettings.authenticateEnabled = true;
               progressSettings.settingsEnabled = true;
-              
+
               if (!createdFresh) {
                 SyncApp.getInstance().resetOdkSyncServiceProxy();
                 syncProxy = SyncApp.getInstance().getOdkSyncServiceProxy();
                 createdFresh = true;
                 refreshRequired.set(true);
-                Log.e(LOGTAG, "triggering another polling cycle (creating new proxy)");
+                WebLogger.getLogger(appName).e(LOGTAG,
+                    "triggering another polling cycle (creating new proxy)");
               } else {
                 refreshRequired.set(true);
-                Log.e(LOGTAG, "triggering another polling cycle (waiting for proxy to connect)");
+                WebLogger.getLogger(appName).e(LOGTAG,
+                    "triggering another polling cycle (waiting for proxy to connect)");
               }
 
             } else {
 
               if (createdFresh) {
                 createdFresh = false;
-                Log.e(LOGTAG, "proxy has connected!");
+                WebLogger.getLogger(appName).e(LOGTAG, "proxy has connected!");
               }
 
               SyncProgressState progress = syncProxy.getSyncProgress(appName);
 
               if (progress != priorProgress) {
                 refreshRequired.set(true);
-                Log.e(LOGTAG, "triggering another polling cycle");
+                WebLogger.getLogger(appName).e(LOGTAG, "triggering another polling cycle");
               }
               priorProgress = progress;
 
@@ -473,7 +478,7 @@ public class SyncActivity extends Activity {
                   progressSettings.progressStateText = progress.name();
                 }
               } else {
-                Log.e(LOGTAG, "NULL progressState variable");
+                WebLogger.getLogger(appName).e(LOGTAG, "NULL progressState variable");
               }
 
               String msg = syncProxy.getSyncUpdateMessage(appName);
@@ -484,7 +489,7 @@ public class SyncActivity extends Activity {
                   progressSettings.progressMessageText = msg;
                 }
               } else {
-                Log.e(LOGTAG, "NULL progressMessage variable");
+                WebLogger.getLogger(appName).e(LOGTAG, "NULL progressMessage variable");
               }
 
               if (refreshRequired.get()) {
@@ -507,7 +512,8 @@ public class SyncActivity extends Activity {
 
                   boolean isBound = syncProxy.isBoundToService();
 
-                  Log.e(LOGTAG,
+                  WebLogger.getLogger(appName).e(
+                      LOGTAG,
                       "refreshing - haveSettings: " + Boolean.toString(haveSettings) + " isBound: "
                           + Boolean.toString(isBound) + " isIdle: " + Boolean.toString(isIdle));
 
@@ -515,7 +521,7 @@ public class SyncActivity extends Activity {
                   if (!isBound) {
                     enableProxy = false;
                     refreshRequired.set(true);
-                    Log.e(LOGTAG, "triggering another polling cycle");
+                    WebLogger.getLogger(appName).e(LOGTAG, "triggering another polling cycle");
                   }
 
                   progressSettings.buttonChanged = true;
@@ -524,7 +530,7 @@ public class SyncActivity extends Activity {
                   progressSettings.actionsEnabled = enableProxy;
 
                 } catch (Exception e) {
-                  e.printStackTrace();
+                  WebLogger.getLogger(appName).printStackTrace(e);
                 }
               }
             }
@@ -539,21 +545,21 @@ public class SyncActivity extends Activity {
             });
 
           } catch (RemoteException e) {
-            Log.e(LOGTAG, "Problem with update messages");
+            WebLogger.getLogger(appName).e(LOGTAG, "Problem with update messages");
             refreshRequired.set(true);
-            Log.e(LOGTAG, "triggering another polling cycle");
+            WebLogger.getLogger(appName).e(LOGTAG, "triggering another polling cycle");
             SyncApp.getInstance().resetOdkSyncServiceProxy();
           } catch (Exception e) {
-            e.printStackTrace();
-            Log.e(LOGTAG, "in runnable for updateProgress");
+            WebLogger.getLogger(appName).printStackTrace(e);
+            WebLogger.getLogger(appName).e(LOGTAG, "in runnable for updateProgress");
             refreshRequired.set(true);
-            Log.e(LOGTAG, "triggering another polling cycle");
+            WebLogger.getLogger(appName).e(LOGTAG, "triggering another polling cycle");
             SyncApp.getInstance().resetOdkSyncServiceProxy();
           }
 
           Thread.sleep(DELAY_PROGRESS_REFRESH);
         } catch (InterruptedException e) {
-          Log.i(SyncActivity.LOGTAG, "Thread interrupt exception");
+          WebLogger.getLogger(appName).i(SyncActivity.LOGTAG, "Thread interrupt exception");
         }
       }
     }

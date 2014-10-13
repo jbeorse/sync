@@ -1,3 +1,18 @@
+/*
+ * Copyright (C) 2014 University of Washington
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy of
+ * the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations under
+ * the License.
+ */
 package org.opendatakit.conflict.activities;
 
 import java.util.ArrayList;
@@ -11,11 +26,11 @@ import org.opendatakit.common.android.database.DatabaseFactory;
 import org.opendatakit.common.android.provider.DataTableColumns;
 import org.opendatakit.common.android.utilities.ODKDatabaseUtils;
 import org.opendatakit.common.android.utilities.TableUtil;
+import org.opendatakit.common.android.utilities.WebLogger;
 
 import android.app.ListActivity;
 import android.content.Intent;
 import android.database.sqlite.SQLiteDatabase;
-import android.util.Log;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
@@ -65,14 +80,15 @@ public class CheckpointResolutionListActivity extends ListActivity {
     UserTable table = null;
     try {
       db = DatabaseFactory.get().getDatabase(this, mAppName);
-      ArrayList<ColumnDefinition> orderedDefns = TableUtil.get().getColumnDefinitions(db, mAppName, mTableId);
-      table = ODKDatabaseUtils.get().rawSqlQuery(db, mAppName, mTableId, 
-          orderedDefns, DataTableColumns.SAVEPOINT_TYPE + " IS NULL", null,
-          null, null, DataTableColumns.ID, "ASC");
+      ArrayList<ColumnDefinition> orderedDefns = TableUtil.get().getColumnDefinitions(db, mAppName,
+          mTableId);
+      table = ODKDatabaseUtils.get().rawSqlQuery(db, mAppName, mTableId, orderedDefns,
+          DataTableColumns.SAVEPOINT_TYPE + " IS NULL", null, null, null, DataTableColumns.ID,
+          "ASC");
     } finally {
       db.close();
     }
-    if ( table != null ) {
+    if (table != null) {
       this.mAdapter = new ArrayAdapter<ResolveRowEntry>(getActionBar().getThemedContext(),
           android.R.layout.simple_list_item_1);
       Set<String> rowIds = new TreeSet<String>();
@@ -86,7 +102,7 @@ public class CheckpointResolutionListActivity extends ListActivity {
         finish();
         return;
       }
-  
+
       ResolveRowEntry firstE = null;
       int i = 0;
       for (String rowId : rowIds) {
@@ -98,7 +114,7 @@ public class CheckpointResolutionListActivity extends ListActivity {
         }
       }
       this.setListAdapter(mAdapter);
-  
+
       if (rowIds.size() == 1) {
         launchRowResolution(firstE);
       }
@@ -113,7 +129,8 @@ public class CheckpointResolutionListActivity extends ListActivity {
   @Override
   protected void onListItemClick(ListView l, View v, int position, long id) {
     ResolveRowEntry e = mAdapter.getItem(position);
-    Log.e(TAG, "[onListItemClick] clicked position: " + position + " rowId: " + e.rowId);
+    WebLogger.getLogger(mAppName).e(TAG,
+        "[onListItemClick] clicked position: " + position + " rowId: " + e.rowId);
     launchRowResolution(e);
   }
 

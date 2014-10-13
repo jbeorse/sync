@@ -16,6 +16,7 @@ package org.opendatakit.sync.activities;
 
 import java.io.IOException;
 
+import org.opendatakit.common.android.utilities.WebLogger;
 import org.opendatakit.sync.R;
 import org.opendatakit.sync.SyncConsts;
 import org.opendatakit.sync.SyncPreferences;
@@ -31,7 +32,6 @@ import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.Intent;
 import android.os.Bundle;
-import android.util.Log;
 import android.widget.Toast;
 
 /**
@@ -102,7 +102,7 @@ public class AccountInfoActivity extends Activity {
           gotAuthToken(bundle);
         }
       } catch (final OperationCanceledException e) {
-        e.printStackTrace();
+        WebLogger.getLogger(appName).printStackTrace(e);
         AccountInfoActivity.this.runOnUiThread(new Runnable() {
 
           @Override
@@ -113,7 +113,7 @@ public class AccountInfoActivity extends Activity {
           }
         });
       } catch (final Exception e) {
-        e.printStackTrace();
+        WebLogger.getLogger(appName).printStackTrace(e);
         AccountInfoActivity.this.runOnUiThread(new Runnable() {
 
           @Override
@@ -148,12 +148,10 @@ public class AccountInfoActivity extends Activity {
     try {
       SyncPreferences prefs = new SyncPreferences(this, appName);
       prefs.setAuthToken(auth_token);
-      Log.e(LOGTAG, "TOKEN" + auth_token);
+      WebLogger.getLogger(appName).i(LOGTAG, "TOKEN" + auth_token);
 
     } catch (IOException e) {
-
-      // TODO Auto-generated catch block
-      e.printStackTrace();
+      WebLogger.getLogger(appName).printStackTrace(e);
     }
 
     dismissDialog(WAITING_ID);

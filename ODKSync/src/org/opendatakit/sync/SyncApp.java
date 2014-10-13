@@ -32,21 +32,21 @@ public class SyncApp extends Application {
   }
 
   private OdkSyncServiceProxy proxy = null;
-  
+
   public synchronized OdkSyncServiceProxy getOdkSyncServiceProxy() {
-    if ( proxy == null ) {
+    if (proxy == null) {
       proxy = new OdkSyncServiceProxy(this);
     }
     return proxy;
   }
-  
+
   public synchronized void resetOdkSyncServiceProxy() {
-    if ( proxy != null ) {
+    if (proxy != null) {
       proxy.shutdown();
       proxy = null;
     }
   }
-  
+
   public String getVersionCodeString() {
     try {
       PackageInfo pinfo;

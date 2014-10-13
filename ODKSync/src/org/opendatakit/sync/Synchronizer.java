@@ -40,11 +40,13 @@ public interface Synchronizer {
      * Status of this action.
      *
      * @param text
-     * @param progressPercentage  0..100
-     * @param indeterminateProgress true if progressGrains is N/A
+     * @param progressPercentage
+     *          0..100
+     * @param indeterminateProgress
+     *          true if progressGrains is N/A
      */
-    void updateNotification(SyncProgressState state, int textResource, Object[] formatArgVals, Double progressPercentage,
-                              boolean indeterminateProgress);
+    void updateNotification(SyncProgressState state, int textResource, Object[] formatArgVals,
+        Double progressPercentage, boolean indeterminateProgress);
   }
 
   public interface OnTablePropertiesChanged {
@@ -59,9 +61,8 @@ public interface Synchronizer {
   public List<TableResource> getTables() throws ResourceAccessException;
 
   /**
-   * Discover the current sync state of a given tableId.
-   * This may throw an exception if the table is not found on
-   * the server.
+   * Discover the current sync state of a given tableId. This may throw an
+   * exception if the table is not found on the server.
    *
    * @param tableId
    * @return
@@ -70,8 +71,8 @@ public interface Synchronizer {
   public TableResource getTable(String tableId) throws IOException;
 
   /**
-   * Returns the given tableId resource or null if the resource
-   * does not exist on the server.
+   * Returns the given tableId resource or null if the resource does not exist
+   * on the server.
    *
    * @param tableId
    * @return
@@ -96,7 +97,8 @@ public interface Synchronizer {
    *          the current SyncTag for the table
    * @param cols
    *          a map from column names to column types, see {@link ColumnType}
-   * @return the TableResource for the table (the server may return different SyncTag values)
+   * @return the TableResource for the table (the server may return different
+   *         SyncTag values)
    */
   public TableResource createTable(String tableId, String schemaETag, ArrayList<Column> columns)
       throws IOException;
@@ -117,13 +119,15 @@ public interface Synchronizer {
    * @param schemaETag
    *          tracks the schema instance that this id has
    * @param dataETag
-   *          tracks the last dataETag for the last successfully downloaded row in the table.
+   *          tracks the last dataETag for the last successfully downloaded row
+   *          in the table.
    * @return an IncomingModification representing the latest state of the table
    *         on server since the last sync or null if the table does not exist
    *         on the server.
    *
    */
-  public IncomingRowModifications getUpdates(String tableId, String schemaETag, String dataETag) throws IOException;
+  public IncomingRowModifications getUpdates(String tableId, String schemaETag, String dataETag)
+      throws IOException;
 
   /**
    * Apply updates in a collection up to the server.
@@ -135,8 +139,8 @@ public interface Synchronizer {
    * @return
    * @throws ResourceAccessException
    */
-  public RowOutcomeList insertOrUpdateRows(String tableId, String schemaETag, String dataETag, List<SyncRow> rowsToInsertOrUpdate)
-      throws ResourceAccessException;
+  public RowOutcomeList insertOrUpdateRows(String tableId, String schemaETag, String dataETag,
+      List<SyncRow> rowsToInsertOrUpdate) throws ResourceAccessException;
 
   /**
    * Insert or update the given row in the table on the server.
@@ -146,14 +150,15 @@ public interface Synchronizer {
    * @param schemaETag
    *          tracks the schema instance that this id has
    * @param dataETag
-   *          tracks the last dataETag for the last successfully downloaded row in the table.
+   *          tracks the last dataETag for the last successfully downloaded row
+   *          in the table.
    * @param rowToInsertOrUpdate
    *          the row to insert or update
-   * @return a RowModification containing the (rowId, rowETag, table dataETag) after the modification
+   * @return a RowModification containing the (rowId, rowETag, table dataETag)
+   *         after the modification
    */
-  public RowModification insertOrUpdateRow(String tableId, String schemaETag, String dataETag, SyncRow rowToInsertOrUpdate)
-      throws IOException;
-
+  public RowModification insertOrUpdateRow(String tableId, String schemaETag, String dataETag,
+      SyncRow rowToInsertOrUpdate) throws IOException;
 
   /**
    * Delete the given row ids from the server.
@@ -163,13 +168,15 @@ public interface Synchronizer {
    * @param schemaETag
    *          tracks the schema instance that this id has
    * @param dataETag
-   *          tracks the last dataETag for the last successfully downloaded row in the table.
+   *          tracks the last dataETag for the last successfully downloaded row
+   *          in the table.
    * @param rowToDelete
    *          the row to delete
-   * @return a RowModification containing the (rowId, null, table dataETag) after the modification
+   * @return a RowModification containing the (rowId, null, table dataETag)
+   *         after the modification
    */
-  public RowModification deleteRow(String tableId, String schemaETag, String dataETag, SyncRow rowToDelete)
-      throws IOException;
+  public RowModification deleteRow(String tableId, String schemaETag, String dataETag,
+      SyncRow rowToDelete) throws IOException;
 
   /**
    * Synchronizes the app level files. This includes any files that are not
@@ -177,17 +184,19 @@ public interface Synchronizer {
    * directory appid/tables/. It also excludes those files that are in a set of
    * directories that do not sync--appid/metadata, appid/logging, etc.
    *
-   * @param true if local files should be pushed. Otherwise they are only
-   *        pulled down.
-   * @param SynchronizerStatus for reporting detailed progress of app-level file sync
+   * @param true if local files should be pushed. Otherwise they are only pulled
+   *        down.
+   * @param SynchronizerStatus
+   *          for reporting detailed progress of app-level file sync
    * @return true if successful
    * @throws ResourceAccessException
    */
-  public boolean syncAppLevelFiles(boolean pushLocalFiles, SynchronizerStatus syncStatus) throws ResourceAccessException;
+  public boolean syncAppLevelFiles(boolean pushLocalFiles, SynchronizerStatus syncStatus)
+      throws ResourceAccessException;
 
   /**
-   * Sync only the files associated with the specified table. This does NOT
-   * sync any media files associated with individual rows of the table.
+   * Sync only the files associated with the specified table. This does NOT sync
+   * any media files associated with individual rows of the table.
    *
    * @param tableId
    * @param onChange
@@ -196,21 +205,24 @@ public interface Synchronizer {
    *          true if the local files should be pushed
    * @throws ResourceAccessException
    */
-  public void syncTableLevelFiles(String tableId, OnTablePropertiesChanged onChange, boolean pushLocal, SynchronizerStatus syncStatus) throws ResourceAccessException;
-
+  public void syncTableLevelFiles(String tableId, OnTablePropertiesChanged onChange,
+      boolean pushLocal, SynchronizerStatus syncStatus) throws ResourceAccessException;
 
   /**
-   * Ensure that the file attachments for the indicated row values are pulled down
-   * to the local system.
+   * Ensure that the file attachments for the indicated row values are pulled
+   * down to the local system.
    *
    * @param instanceFileUri
    * @param tableId
    * @param serverRow
-   * @param shouldDeleteLocal - true if all other files in the local instance folder should be removed.
+   * @param shouldDeleteLocal
+   *          - true if all other files in the local instance folder should be
+   *          removed.
    * @return true if successful
    * @throws ResourceAccessException
    */
-  public boolean getFileAttachments(String instanceFileUri, String tableId, SyncRow serverRow, boolean shouldDeleteLocal) throws ResourceAccessException;
+  public boolean getFileAttachments(String instanceFileUri, String tableId, SyncRow serverRow,
+      boolean shouldDeleteLocal) throws ResourceAccessException;
 
   /**
    * Ensure that the file attachments for the indicated row values exist on the
@@ -223,5 +235,6 @@ public interface Synchronizer {
    * @return true if successful
    * @throws ResourceAccessException
    */
-  public boolean putFileAttachments(String instanceFileUri, String tableId, SyncRow localRow) throws ResourceAccessException;
+  public boolean putFileAttachments(String instanceFileUri, String tableId, SyncRow localRow)
+      throws ResourceAccessException;
 }

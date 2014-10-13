@@ -1,13 +1,28 @@
+/*
+ * Copyright (C) 2014 University of Washington
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy of
+ * the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations under
+ * the License.
+ */
 package org.opendatakit.sync.views.components;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.opendatakit.common.android.utilities.WebLogger;
 import org.opendatakit.sync.R;
 
 import android.content.Context;
-import android.util.Log;
 import android.util.SparseArray;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -32,6 +47,7 @@ public class ConflictResolutionListAdapter extends BaseAdapter {
 
   private static final int INVALID_POSITION = -1;
 
+  private final String mAppName;
   private UICallbacks mCallbacks;
   private LayoutInflater mLayoutInflater;
   private SparseArray<Section> mSections = new SparseArray<Section>();
@@ -83,9 +99,10 @@ public class ConflictResolutionListAdapter extends BaseAdapter {
     }
   }
 
-  public ConflictResolutionListAdapter(Context context, UICallbacks callbacks,
+  public ConflictResolutionListAdapter(Context context, String appName, UICallbacks callbacks,
       List<Section> sections, List<ConcordantColumn> concordantColumns,
       List<ConflictColumn> conflictColumns) {
+    this.mAppName = appName;
     this.mLayoutInflater = (LayoutInflater) context
         .getSystemService(Context.LAYOUT_INFLATER_SERVICE);
     this.mResolvedValues = new HashMap<String, String>();
@@ -146,7 +163,8 @@ public class ConflictResolutionListAdapter extends BaseAdapter {
     } else if (isConcordantColumnPosition(position)) {
       return mConcordantColumns.get(position);
     } else {
-      Log.e(TAG, "[getItem] position " + position + " didn't match any of " + "the types!");
+      WebLogger.getLogger(mAppName).e(TAG,
+          "[getItem] position " + position + " didn't match any of " + "the types!");
       return null;
     }
   }
@@ -165,7 +183,8 @@ public class ConflictResolutionListAdapter extends BaseAdapter {
     } else if (isConcordantColumnPosition(position)) {
       return 2;
     } else {
-      Log.e(TAG, "[getItem] position " + position + " didn't match any of " + "the types!");
+      WebLogger.getLogger(mAppName).e(TAG,
+          "[getItem] position " + position + " didn't match any of " + "the types!");
       return -1;
     }
   }
@@ -183,7 +202,8 @@ public class ConflictResolutionListAdapter extends BaseAdapter {
     } else if (isConcordantColumnPosition(position)) {
       return false;
     } else {
-      Log.e(TAG, "[getItem] position " + position + " didn't match any of " + "the types!");
+      WebLogger.getLogger(mAppName).e(TAG,
+          "[getItem] position " + position + " didn't match any of " + "the types!");
       return false;
     }
   }
@@ -248,7 +268,8 @@ public class ConflictResolutionListAdapter extends BaseAdapter {
     } else if (decision == Resolution.SERVER) {
       chosenValue = conflictColumn.getServerRawValue();
     } else {
-      Log.e(TAG,
+      WebLogger.getLogger(mAppName).e(
+          TAG,
           "[setResolution] decision didn't match a known resolution" + " type: " + decision.name()
               + "! not setting anything");
       return;
@@ -316,8 +337,8 @@ public class ConflictResolutionListAdapter extends BaseAdapter {
       serverRow.setTag(R.id.list_view_conflict_row, position);
       localRow.setOnClickListener(new ResolutionOnClickListener());
       serverRow.setOnClickListener(new ResolutionOnClickListener());
-      localRow.setEnabled(false /*mConflictColumnsAreEnabled*/);
-      serverRow.setEnabled(false /*mConflictColumnsAreEnabled*/);
+      localRow.setEnabled(false /* mConflictColumnsAreEnabled */);
+      serverRow.setEnabled(false /* mConflictColumnsAreEnabled */);
       // We'll want the radio buttons to trigger their whole associated list
       // item to keep the UI the same. Otherwise you could press the radio
       // button and NOT have the whole row highlighted, which I find annoying.
@@ -334,7 +355,8 @@ public class ConflictResolutionListAdapter extends BaseAdapter {
       view.setText(mConcordantColumns.get(position).getDisplayValue());
       return view;
     } else {
-      Log.e(TAG, "[getView] ran into trouble, position didn't match any of " + "the types!");
+      WebLogger.getLogger(mAppName).e(TAG,
+          "[getView] ran into trouble, position didn't match any of " + "the types!");
       return null;
     }
   }
@@ -376,7 +398,8 @@ public class ConflictResolutionListAdapter extends BaseAdapter {
         setResolution(conflictColumn, Resolution.SERVER);
         mCallbacks.onDecisionMade();
       } else {
-        Log.e(TAG, "[onClick] wasn't a recognized id, not saving choice!");
+        WebLogger.getLogger(mAppName)
+            .e(TAG, "[onClick] wasn't a recognized id, not saving choice!");
       }
     }
 

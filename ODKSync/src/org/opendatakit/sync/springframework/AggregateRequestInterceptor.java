@@ -49,8 +49,10 @@ public class AggregateRequestInterceptor implements ClientHttpRequestInterceptor
   @Override
   public ClientHttpResponse intercept(HttpRequest request, byte[] body,
       ClientHttpRequestExecution execution) throws IOException {
-    request.getHeaders().set(ApiConstants.ACCEPT_CONTENT_ENCODING_HEADER, ApiConstants.GZIP_CONTENT_ENCODING);
-    request.getHeaders().set(ApiConstants.OPEN_DATA_KIT_VERSION_HEADER, ApiConstants.OPEN_DATA_KIT_VERSION);
+    request.getHeaders().set(ApiConstants.ACCEPT_CONTENT_ENCODING_HEADER,
+        ApiConstants.GZIP_CONTENT_ENCODING);
+    request.getHeaders().set(ApiConstants.OPEN_DATA_KIT_VERSION_HEADER,
+        ApiConstants.OPEN_DATA_KIT_VERSION);
     GregorianCalendar g = new GregorianCalendar(TimeZone.getTimeZone("GMT"));
     g.setTime(new Date());
     SimpleDateFormat formatter = new SimpleDateFormat("E, dd MMM yyyy HH:mm:ss zz");

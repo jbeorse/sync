@@ -76,7 +76,8 @@ public class OdkJsonHttpMessageConverter extends MappingJackson2HttpMessageConve
       throw new IllegalArgumentException("charset for the request is not utf-8");
     }
     try {
-      // Android RestTemplate already does GZIP decoding before it gets to this message converter
+      // Android RestTemplate already does GZIP decoding before it gets to this
+      // message converter
       stream = inputMessage.getBody();
       InputStreamReader r = new InputStreamReader(stream, Charset.forName(ApiConstants.UTF8_ENCODE));
       JavaType javaType = getJavaType(clazz);
@@ -100,7 +101,8 @@ public class OdkJsonHttpMessageConverter extends MappingJackson2HttpMessageConve
       headers.add(ApiConstants.ACCEPT_CONTENT_ENCODING_HEADER, ApiConstants.GZIP_CONTENT_ENCODING);
 
       // see if we should gzip the output
-      // The actual GZipping is done by a wrapper based upon the Content-Encoding setting
+      // The actual GZipping is done by a wrapper based upon the
+      // Content-Encoding setting
       OutputStream rawStream = outputMessage.getBody();
       if (requestHeaders == null) {
         // always send data to the server as encoded

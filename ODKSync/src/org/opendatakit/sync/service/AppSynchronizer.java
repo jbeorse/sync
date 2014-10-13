@@ -1,7 +1,23 @@
+/*
+ * Copyright (C) 2014 University of Washington
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy of
+ * the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations under
+ * the License.
+ */
 package org.opendatakit.sync.service;
 
 import java.util.Arrays;
 
+import org.opendatakit.common.android.utilities.WebLogger;
 import org.opendatakit.sync.R;
 import org.opendatakit.sync.SyncApp;
 import org.opendatakit.sync.SyncPreferences;
@@ -17,7 +33,6 @@ import org.opendatakit.sync.exceptions.NoAppNameSpecifiedException;
 
 import android.app.Service;
 import android.content.Context;
-import android.util.Log;
 
 public class AppSynchronizer {
 
@@ -82,14 +97,16 @@ public class AppSynchronizer {
         // android.os.Debug.waitForDebugger();
 
         globalNotifManager.startingSync(appName);
-        syncProgress.updateNotification(SyncProgressState.STARTING, cntxt.getString(R.string.starting_sync), 100, 0, false);
+        syncProgress.updateNotification(SyncProgressState.STARTING,
+            cntxt.getString(R.string.starting_sync), 100, 0, false);
         sync(syncProgress);
       } catch (NoAppNameSpecifiedException e) {
-        e.printStackTrace();
+        WebLogger.getLogger(appName).printStackTrace(e);
         status = SyncStatus.NETWORK_ERROR;
-        syncProgress.updateNotification(SyncProgressState.ERROR, "There were failures..." , 100, 0, false);
+        syncProgress.updateNotification(SyncProgressState.ERROR, "There were failures...", 100, 0,
+            false);
       } finally {
-        SyncActivity.refreshActivityUINeeded();
+        SyncActivity.refreshActivityUINeeded(appName);
         try {
           globalNotifManager.stoppingSync(appName);
         } catch (NoAppNameSpecifiedException e) {
@@ -105,10 +122,10 @@ public class AppSynchronizer {
       try {
         prefs = new SyncPreferences(cntxt, appName);
       } catch (Exception e1) {
-        e1.printStackTrace();
+        WebLogger.getLogger(appName).printStackTrace(e1);
       }
 
-      if(prefs == null) {
+      if (prefs == null) {
         status = SyncStatus.FILE_ERROR;
         syncProgress.finalErrorNotification("Unable to open SyncPreferences");
         return;
@@ -116,9 +133,9 @@ public class AppSynchronizer {
 
       try {
 
-        Log.i(LOGTAG, "APPNAME IN SERVICE: " + appName);
-        Log.i(LOGTAG, "TOKEN IN SERVICE:" + prefs.getAuthToken());
-        Log.i(LOGTAG, "URI IN SEVERICE:" + prefs.getServerUri());
+        WebLogger.getLogger(appName).i(LOGTAG, "APPNAME IN SERVICE: " + appName);
+        WebLogger.getLogger(appName).i(LOGTAG, "TOKEN IN SERVICE:" + prefs.getAuthToken());
+        WebLogger.getLogger(appName).i(LOGTAG, "URI IN SEVERICE:" + prefs.getServerUri());
 
         // TODO: should use the APK manager to search for org.opendatakit.N
         // packages, and collect N:V strings e.g., 'survey:1', 'tables:1',
@@ -155,7 +172,7 @@ public class AppSynchronizer {
         String reason = "none";
         // examine results
         SynchronizationResult overallResults = processor.getOverallResults();
-        if ( overallResults.getAppLevelStatus() != Status.SUCCESS ) {
+        if (overallResults.getAppLevelStatus() != Status.SUCCESS) {
           authProblems = (overallResults.getAppLevelStatus() == Status.AUTH_EXCEPTION);
           reason = "overall results";
           status = SyncStatus.NETWORK_ERROR;
@@ -165,13 +182,13 @@ public class AppSynchronizer {
           org.opendatakit.sync.SynchronizationResult.Status tableStatus = result.getStatus();
           // TODO: decide how to handle the status
           if (tableStatus != Status.SUCCESS) {
-            if(tableStatus == Status.AUTH_EXCEPTION) {
+            if (tableStatus == Status.AUTH_EXCEPTION) {
               authProblems = true;
-            } else if(tableStatus == Status.TABLE_PENDING_ATTACHMENTS) {
+            } else if (tableStatus == Status.TABLE_PENDING_ATTACHMENTS) {
               continue;
-            } else if(tableStatus == Status.TABLE_CONTAINS_CHECKPOINTS || 
-                      tableStatus == Status.TABLE_CONTAINS_CONFLICTS || 
-                      tableStatus == Status.TABLE_REQUIRES_APP_LEVEL_SYNC) {
+            } else if (tableStatus == Status.TABLE_CONTAINS_CHECKPOINTS
+                || tableStatus == Status.TABLE_CONTAINS_CONFLICTS
+                || tableStatus == Status.TABLE_REQUIRES_APP_LEVEL_SYNC) {
               status = SyncStatus.CONFLICT_RESOLUTION;
             } else {
               status = SyncStatus.NETWORK_ERROR;
@@ -180,13 +197,14 @@ public class AppSynchronizer {
           }
         }
 
-        if ( authProblems ) {
+        if (authProblems) {
           throw new InvalidAuthTokenException("Synthesized");
         }
 
         // if rows aren't successful, fail.
-        if (status != SyncStatus.SYNCING && status != SyncStatus.CONFLICT_RESOLUTION) { 
-          syncProgress.finalErrorNotification("There were failures. Status: " + status + " Reason:" + reason);
+        if (status != SyncStatus.SYNCING && status != SyncStatus.CONFLICT_RESOLUTION) {
+          syncProgress.finalErrorNotification("There were failures. Status: " + status + " Reason:"
+              + reason);
           return;
         }
 
@@ -197,23 +215,23 @@ public class AppSynchronizer {
         } else {
           syncProgress.finalErrorNotification("Conflicts exist.  Please resolve.");
         }
-        
-       
-        Log.i(LOGTAG, "[SyncThread] timestamp: " + System.currentTimeMillis());
+
+        WebLogger.getLogger(appName).i(LOGTAG,
+            "[SyncThread] timestamp: " + System.currentTimeMillis());
       } catch (InvalidAuthTokenException e) {
         SyncActivity.invalidateAuthToken(cntxt, appName);
         status = SyncStatus.AUTH_RESOLUTION;
         syncProgress.finalErrorNotification("Account Re-Authorization Required");
       } catch (Exception e) {
-        Log.i(
+        WebLogger.getLogger(appName).i(
             LOGTAG,
             "[exception during synchronization. stack trace:\n"
                 + Arrays.toString(e.getStackTrace()));
         String msg = e.getLocalizedMessage();
-        if ( msg == null ) {
+        if (msg == null) {
           msg = e.getMessage();
         }
-        if ( msg == null ) {
+        if (msg == null) {
           msg = e.toString();
         }
         status = SyncStatus.NETWORK_ERROR;

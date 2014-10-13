@@ -42,6 +42,7 @@ import org.opendatakit.common.android.utilities.CsvUtil;
 import org.opendatakit.common.android.utilities.ODKDatabaseUtils;
 import org.opendatakit.common.android.utilities.ODKFileUtils;
 import org.opendatakit.common.android.utilities.TableUtil;
+import org.opendatakit.common.android.utilities.WebLogger;
 import org.opendatakit.sync.SynchronizationResult.Status;
 import org.opendatakit.sync.Synchronizer.OnTablePropertiesChanged;
 import org.opendatakit.sync.Synchronizer.SynchronizerStatus;
@@ -54,7 +55,6 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
-import android.util.Log;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
 import com.fasterxml.jackson.core.JsonParseException;
@@ -82,6 +82,7 @@ public class SyncProcessor implements SynchronizerStatus {
     mapper.setVisibilityChecker(mapper.getVisibilityChecker().withFieldVisibility(Visibility.ANY));
   }
 
+  private WebLogger log;
   private int nMajorSyncSteps;
   private int iMajorSyncStep;
   private int GRAINS_PER_MAJOR_SYNC_STEP;
@@ -99,6 +100,7 @@ public class SyncProcessor implements SynchronizerStatus {
       SyncNotification syncProgress) {
     this.context = context;
     this.appName = appName;
+    this.log = WebLogger.getLogger(appName);
     this.syncProgress = syncProgress;
     this.synchronizer = synchronizer;
     this.mUserResult = new SynchronizationResult();
@@ -143,7 +145,7 @@ public class SyncProcessor implements SynchronizerStatus {
    * anything for those or just leave them as zip files locally.
    */
   public void synchronizeConfigurationAndContent(boolean pushToServer) {
-    Log.i(TAG, "entered synchronizeConfigurationAndContent()");
+    log.i(TAG, "entered synchronizeConfigurationAndContent()");
     ODKFileUtils.assertDirectoryStructure(appName);
     // android.os.Debug.waitForDebugger();
 
@@ -160,12 +162,15 @@ public class SyncProcessor implements SynchronizerStatus {
       }
     } catch (ResourceAccessException e) {
       mUserResult.setAppLevelStatus(Status.AUTH_EXCEPTION);
-      Log.i(TAG, "[synchronizeConfigurationAndContent] Could not retrieve server table list", e);
+      log.i(TAG,
+          "[synchronizeConfigurationAndContent] Could not retrieve server table list exception: "
+              + e.toString());
       return;
     } catch (Exception e) {
       mUserResult.setAppLevelStatus(Status.EXCEPTION);
-      Log.e(TAG,
-          "[synchronizeConfigurationAndContent] Unexpected exception getting server table list", e);
+      log.e(TAG,
+          "[synchronizeConfigurationAndContent] Unexpected exception getting server table list exception: "
+              + e.toString());
       return;
     }
 
@@ -179,8 +184,9 @@ public class SyncProcessor implements SynchronizerStatus {
       localTableIds = ODKDatabaseUtils.get().getAllTableIds(db);
     } catch (SQLiteException e) {
       mUserResult.setAppLevelStatus(Status.EXCEPTION);
-      Log.e(TAG,
-          "[synchronizeConfigurationAndContent] Unexpected exception getting local tableId list", e);
+      log.e(TAG,
+          "[synchronizeConfigurationAndContent] Unexpected exception getting local tableId list exception: "
+              + e.toString());
       return;
     } finally {
       if (db != null) {
@@ -241,9 +247,9 @@ public class SyncProcessor implements SynchronizerStatus {
     } catch (ResourceAccessException e) {
       // TODO: update a synchronization result to report back to them as well.
       mUserResult.setAppLevelStatus(Status.AUTH_EXCEPTION);
-      Log.e(TAG,
+      log.e(TAG,
           "[synchronizeConfigurationAndContent] error trying to synchronize app-level files.");
-      e.printStackTrace();
+      log.printStackTrace(e);
       return;
     }
 
@@ -265,7 +271,7 @@ public class SyncProcessor implements SynchronizerStatus {
             break;
           }
         }
-        Log.i(TAG, "[synchronizeConfigurationAndContent] synchronizing table " + localTableId);
+        log.i(TAG, "[synchronizeConfigurationAndContent] synchronizing table " + localTableId);
 
         if (!localTableId.equals("framework")) {
           ArrayList<ColumnDefinition> orderedDefns;
@@ -337,34 +343,32 @@ public class SyncProcessor implements SynchronizerStatus {
             }
           }
         } catch (JsonParseException e) {
-          e.printStackTrace();
+          log.printStackTrace(e);
           tableResult.setStatus(Status.EXCEPTION);
-          Log.e(TAG,
-              "[synchronizeConfigurationAndContent] Unexpected exception parsing table definition",
-              e);
+          log.e(TAG,
+              "[synchronizeConfigurationAndContent] Unexpected exception parsing table definition exception: "
+                  + e.toString());
           continue;
         } catch (JsonMappingException e) {
-          e.printStackTrace();
+          log.printStackTrace(e);
           tableResult.setStatus(Status.EXCEPTION);
-          Log.e(TAG,
-              "[synchronizeConfigurationAndContent] Unexpected exception parsing table definition",
-              e);
+          log.e(TAG,
+              "[synchronizeConfigurationAndContent] Unexpected exception parsing table definition exception: "
+                  + e.toString());
           continue;
         } catch (IOException e) {
-          e.printStackTrace();
+          log.printStackTrace(e);
           tableResult.setStatus(Status.EXCEPTION);
-          Log.e(
-              TAG,
-              "[synchronizeConfigurationAndContent] Unexpected exception accessing table definition",
-              e);
+          log.e(TAG,
+              "[synchronizeConfigurationAndContent] Unexpected exception accessing table definition exception: "
+                  + e.toString());
           continue;
         } catch (SchemaMismatchException e) {
-          e.printStackTrace();
+          log.printStackTrace(e);
           tableResult.setStatus(Status.EXCEPTION);
-          Log.e(
-              TAG,
-              "[synchronizeConfigurationAndContent] The schema for this table does not match that on the server",
-              e);
+          log.e(TAG,
+              "[synchronizeConfigurationAndContent] The schema for this table does not match that on the server"
+                  + e.toString());
           continue;
         }
 
@@ -390,14 +394,14 @@ public class SyncProcessor implements SynchronizerStatus {
           tableResult.setStatus(Status.SUCCESS);
         } catch (SQLiteException e) {
           tableResult.setStatus(Status.EXCEPTION);
-          Log.e(TAG,
+          log.e(TAG,
               "[synchronizeConfigurationAndContent] Unexpected exception deleting local tableId "
-                  + localTableId, e);
+                  + localTableId + " exception: " + e.toString());
         } catch (Exception e) {
           tableResult.setStatus(Status.EXCEPTION);
-          Log.e(TAG,
+          log.e(TAG,
               "[synchronizeConfigurationAndContent] Unexpected exception deleting local tableId "
-                  + localTableId, e);
+                  + localTableId + " exception: " + e.toString());
         } finally {
           if (db != null) {
             db.close();
@@ -509,7 +513,7 @@ public class SyncProcessor implements SynchronizerStatus {
           resource = synchronizer.createTable(tableId, schemaETag,
               ColumnDefinition.getColumns(orderedDefns));
         } catch (Exception e) {
-          e.printStackTrace();
+          log.printStackTrace(e);
           String msg = e.getMessage();
           if (msg == null)
             msg = e.toString();
@@ -545,7 +549,7 @@ public class SyncProcessor implements SynchronizerStatus {
        * table properties (i.e. the key value store).
        **************************/
       if (serverUpdated || !resource.getSchemaETag().equals(schemaETag)) {
-        Log.d(TAG, "updateDbFromServer setServerHadSchemaChanges(true)");
+        log.d(TAG, "updateDbFromServer setServerHadSchemaChanges(true)");
         tableResult.setServerHadSchemaChanges(true);
 
         // fetch the table definition
@@ -553,7 +557,7 @@ public class SyncProcessor implements SynchronizerStatus {
         try {
           definitionResource = synchronizer.getTableDefinition(resource.getDefinitionUri());
         } catch (Exception e) {
-          e.printStackTrace();
+          log.printStackTrace(e);
           String msg = e.getMessage();
           if (msg == null)
             msg = e.toString();
@@ -570,18 +574,18 @@ public class SyncProcessor implements SynchronizerStatus {
           // this also updates the data rows so they will sync
           orderedDefns = addTableFromDefinitionResource(db, definitionResource, false);
 
-          Log.w(TAG,
+          log.w(TAG,
               "database schema has changed. Structural modifications, if any, were successful.");
         } catch (SchemaMismatchException e) {
-          e.printStackTrace();
-          Log.w(TAG, "database properties have changed. "
+          log.printStackTrace(e);
+          log.w(TAG, "database properties have changed. "
               + "structural modifications were not successful. You must delete the table"
               + " and download it to receive the updates.");
           tableResult.setMessage(e.toString());
           tableResult.setStatus(Status.FAILURE);
           return;
         } catch (JsonParseException e) {
-          e.printStackTrace();
+          log.printStackTrace(e);
           String msg = e.getMessage();
           if (msg == null)
             msg = e.toString();
@@ -589,7 +593,7 @@ public class SyncProcessor implements SynchronizerStatus {
           tableResult.setStatus(Status.EXCEPTION);
           return;
         } catch (JsonMappingException e) {
-          e.printStackTrace();
+          log.printStackTrace(e);
           String msg = e.getMessage();
           if (msg == null)
             msg = e.toString();
@@ -597,7 +601,7 @@ public class SyncProcessor implements SynchronizerStatus {
           tableResult.setStatus(Status.EXCEPTION);
           return;
         } catch (IOException e) {
-          e.printStackTrace();
+          log.printStackTrace(e);
           String msg = e.getMessage();
           if (msg == null)
             msg = e.toString();
@@ -633,7 +637,7 @@ public class SyncProcessor implements SynchronizerStatus {
           try {
             utils.updateTablePropertiesFromCsv(null, tableId);
           } catch (IOException e) {
-            e.printStackTrace();
+            log.printStackTrace(e);
             String msg = e.getMessage();
             if (msg == null)
               msg = e.toString();
@@ -650,7 +654,7 @@ public class SyncProcessor implements SynchronizerStatus {
       success = true;
     } finally {
       if (success && tableResult.getStatus() != Status.WORKING) {
-        Log.e(TAG, "tableResult status for table: " + tableId + " was "
+        log.e(TAG, "tableResult status for table: " + tableId + " was "
             + tableResult.getStatus().name()
             + ", and yet success returned true. This shouldn't be possible.");
       }
@@ -695,11 +699,11 @@ public class SyncProcessor implements SynchronizerStatus {
    * </p>
    */
   public void synchronizeDataRowsAndAttachments() {
-    Log.i(TAG, "entered synchronize()");
+    log.i(TAG, "entered synchronize()");
     ODKFileUtils.assertDirectoryStructure(appName);
 
     if (mUserResult.getAppLevelStatus() != Status.SUCCESS) {
-      Log.e(TAG, "Abandoning data row update -- app-level sync was not successful!");
+      log.e(TAG, "Abandoning data row update -- app-level sync was not successful!");
       return;
     }
 
@@ -776,7 +780,7 @@ public class SyncProcessor implements SynchronizerStatus {
     tableResult.setTableDisplayName(displayName);
     if (tableResult.getStatus() != Status.WORKING) {
       // there was some sort of error...
-      Log.e(TAG, "Skipping data sync - error in table schema or file verification step " + tableId);
+      log.e(TAG, "Skipping data sync - error in table schema or file verification step " + tableId);
       return;
     }
 
@@ -792,7 +796,7 @@ public class SyncProcessor implements SynchronizerStatus {
 
     try {
       {
-        Log.i(TAG, "REST " + tableId);
+        log.i(TAG, "REST " + tableId);
 
         boolean once = true;
         while (once) {
@@ -865,7 +869,7 @@ public class SyncProcessor implements SynchronizerStatus {
             /**************************
              * PART 2: UPDATE THE DATA
              **************************/
-            Log.d(TAG, "updateDbFromServer setServerHadDataChanges(true)");
+            log.d(TAG, "updateDbFromServer setServerHadDataChanges(true)");
             tableResult.setServerHadDataChanges(modification.hasTableDataChanged());
 
             Map<String, SyncRow> changedServerRows = modification.getRows();
@@ -1036,38 +1040,38 @@ public class SyncProcessor implements SynchronizerStatus {
                 if (state == SyncState.changed) {
                   // SyncState.changed and new change on server
                   localRowConflictType = ConflictType.LOCAL_UPDATED_UPDATED_VALUES;
-                  Log.i(TAG, "local row was in sync state CHANGED, changing to "
+                  log.i(TAG, "local row was in sync state CHANGED, changing to "
                       + "IN_CONFLICT and setting conflict type to: " + localRowConflictType);
                 } else if (state == SyncState.new_row) {
                   // SyncState.new_row and record exists on server
                   // The 'new_row' case occurs if an insert is never ACKed but
                   // completes successfully on the server.
                   localRowConflictType = ConflictType.LOCAL_UPDATED_UPDATED_VALUES;
-                  Log.i(TAG, "local row was in sync state NEW_ROW, changing to "
+                  log.i(TAG, "local row was in sync state NEW_ROW, changing to "
                       + "IN_CONFLICT and setting conflict type to: " + localRowConflictType);
                 } else if (state == SyncState.deleted) {
                   // SyncState.deleted and server is not deleting
                   localRowConflictType = ConflictType.LOCAL_DELETED_OLD_VALUES;
-                  Log.i(TAG, "local row was in sync state DELETED, changing to "
+                  log.i(TAG, "local row was in sync state DELETED, changing to "
                       + "IN_CONFLICT and updating conflict type to: " + localRowConflictType);
                 } else if (state == SyncState.in_conflict) {
                   // SyncState.in_conflict and new change on server
                   // leave the local conflict type unchanged (retrieve it and
                   // use it).
                   localRowConflictType = localRowConflictTypeBeforeSync;
-                  Log.i(TAG, "local row was in sync state IN_CONFLICT, leaving as "
+                  log.i(TAG, "local row was in sync state IN_CONFLICT, leaving as "
                       + "IN_CONFLICT and leaving conflict type unchanged as: "
                       + localRowConflictTypeBeforeSync);
                 } else {
                   throw new IllegalStateException("Unexpected state encountered");
                 }
-                FileSyncRow syncRow = new FileSyncRow(serverRow, convertToSyncRow(
-                    orderedColumns, localRow), false, localRowConflictType);
-                
-                if ( !syncRow.identicalValues() ) {
+                FileSyncRow syncRow = new FileSyncRow(serverRow, convertToSyncRow(orderedColumns,
+                    localRow), false, localRowConflictType);
+
+                if (!syncRow.identicalValues()) {
                   rowsToMoveToInConflictLocally.add(syncRow);
                 } else {
-                  Log.w(TAG, "identical rows returned from server -- SHOULDN'T THESE NOT HAPPEN?");
+                  log.w(TAG, "identical rows returned from server -- SHOULDN'T THESE NOT HAPPEN?");
                 }
               }
             }
@@ -1149,8 +1153,8 @@ public class SyncProcessor implements SynchronizerStatus {
                 if (success) {
                   // TODO: need to handle larger sets of results
                   // TODO: This is INCORRECT if we have a cursor continuation!!!
-                  ODKDatabaseUtils.get().updateDBTableETags(db, tableId,
-                      resource.getSchemaETag(), resource.getDataETag());
+                  ODKDatabaseUtils.get().updateDBTableETags(db, tableId, resource.getSchemaETag(),
+                      resource.getDataETag());
                   te.setSchemaETag(resource.getSchemaETag());
                   te.setLastDataETag(resource.getDataETag());
                 }
@@ -1175,7 +1179,7 @@ public class SyncProcessor implements SynchronizerStatus {
             if (rowsToInsertOnServer.size() != 0 || rowsToUpdateOnServer.size() != 0
                 || rowsToDeleteOnServer.size() != 0) {
               if (tableResult.hadLocalDataChanges()) {
-                Log.e(TAG, "synchronizeTableSynced hadLocalDataChanges() returned "
+                log.e(TAG, "synchronizeTableSynced hadLocalDataChanges() returned "
                     + "true, and we're about to set it to true again. Odd.");
               }
               tableResult.setHadLocalDataChanges(true);
@@ -1322,10 +1326,11 @@ public class SyncProcessor implements SynchronizerStatus {
                   db = DatabaseFactory.get().getDatabase(context, appName);
                   // move the local record into the 'new_row' sync state
                   // so it can be physically deleted.
-                  ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, rm.getRowId(), 
-                                                                   null, SyncState.new_row);
+                  ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, rm.getRowId(),
+                      null, SyncState.new_row);
                   // and physically delete it.
-                  ODKDatabaseUtils.get().deleteDataInExistingDBTableWithId(db, appName, tableId, rm.getRowId());
+                  ODKDatabaseUtils.get().deleteDataInExistingDBTableWithId(db, appName, tableId,
+                      rm.getRowId());
                   tableResult.incServerDeletes();
                   if (success) {
                     ODKDatabaseUtils.get().updateDBTableETags(db, tableId, rm.getTableSchemaETag(),
@@ -1409,11 +1414,11 @@ public class SyncProcessor implements SynchronizerStatus {
 
           } catch (ResourceAccessException e) {
             resourceAccessException("synchronizeTableRest--nonMediaFiles", tableId, e, tableResult);
-            Log.e(TAG, "[synchronizeTableRest] error synchronizing table files");
+            log.e(TAG, "[synchronizeTableRest] error synchronizing table files");
             success = false;
           } catch (Exception e) {
             exception("synchronizeTableRest--nonMediaFiles", tableId, e, tableResult);
-            Log.e(TAG, "[synchronizeTableRest] error synchronizing table files");
+            log.e(TAG, "[synchronizeTableRest] error synchronizing table files");
             success = false;
           }
         }
@@ -1441,7 +1446,7 @@ public class SyncProcessor implements SynchronizerStatus {
         // Then we should have updated the db and shouldn't have set the
         // TableResult to be exception.
         if (tableResult.getStatus() != Status.WORKING) {
-          Log.e(TAG, "tableResult status for table: " + tableId + " was "
+          log.e(TAG, "tableResult status for table: " + tableId + " was "
               + tableResult.getStatus().name()
               + ", and yet success returned true. This shouldn't be possible.");
         } else {
@@ -1533,19 +1538,26 @@ public class SyncProcessor implements SynchronizerStatus {
 
   private void resourceAccessException(String method, String tableId, ResourceAccessException e,
       TableResult tableResult) {
-    Log.e(TAG, String.format("ResourceAccessException in %s for table: %s", method, tableId), e);
+    log.e(TAG, String.format("ResourceAccessException in %s for table: %s exception: %s", method,
+        tableId, e.toString()));
     tableResult.setStatus(Status.AUTH_EXCEPTION);
     tableResult.setMessage(e.getMessage());
   }
 
   private void ioException(String method, String tableId, IOException e, TableResult tableResult) {
-    Log.e(TAG, String.format("IOException in %s for table: %s", method, tableId), e);
+    log.e(
+        TAG,
+        String.format("IOException in %s for table: %s exception: %s", method, tableId,
+            e.toString()));
     tableResult.setStatus(Status.EXCEPTION);
     tableResult.setMessage(e.getMessage());
   }
 
   private void exception(String method, String tableId, Exception e, TableResult tableResult) {
-    Log.e(TAG, String.format("Unexpected exception in %s on table: %s", method, tableId), e);
+    log.e(
+        TAG,
+        String.format("Unexpected exception in %s on table: %s exception: %s", method, tableId,
+            e.toString()));
     tableResult.setStatus(Status.EXCEPTION);
     tableResult.setMessage(e.getMessage());
   }
@@ -1558,7 +1570,7 @@ public class SyncProcessor implements SynchronizerStatus {
     int count = 0;
     for (FileSyncRow change : changes) {
       SyncRow serverRow = change.serverRow;
-      Log.i(TAG,
+      log.i(TAG,
           "conflicting row, id=" + serverRow.getRowId() + " rowETag=" + serverRow.getRowETag());
       ContentValues values = new ContentValues();
 
@@ -1581,15 +1593,17 @@ public class SyncProcessor implements SynchronizerStatus {
       if (serverRowConflictType == ConflictType.SERVER_DELETED_OLD_VALUES
           && localRowConflictType == ConflictType.LOCAL_DELETED_OLD_VALUES) {
 
-        // special case -- the server and local rows are both being deleted -- just delete them!
+        // special case -- the server and local rows are both being deleted --
+        // just delete them!
 
         // move the local record into the 'new_row' sync state
         // so it can be physically deleted.
-        ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, serverRow.getRowId(), 
-                                                         null, SyncState.new_row);
+        ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, serverRow.getRowId(), null,
+            SyncState.new_row);
         // and physically delete it.
-        ODKDatabaseUtils.get().deleteDataInExistingDBTableWithId(db, appName, tableId, serverRow.getRowId());
-        
+        ODKDatabaseUtils.get().deleteDataInExistingDBTableWithId(db, appName, tableId,
+            serverRow.getRowId());
+
         tableResult.incLocalDeletes();
       } else {
         // update the localRow to be in_conflict
@@ -1623,11 +1637,11 @@ public class SyncProcessor implements SynchronizerStatus {
         // trouble.
         if (localRowConflictType == ConflictType.LOCAL_DELETED_OLD_VALUES
             && serverRowConflictType != ConflictType.SERVER_UPDATED_UPDATED_VALUES) {
-          Log.e(TAG, "local row conflict type is local_deleted, but server "
+          log.e(TAG, "local row conflict type is local_deleted, but server "
               + "row conflict_type is not server_udpated. These states must"
               + " go together, something went wrong.");
         } else if (localRowConflictType != ConflictType.LOCAL_UPDATED_UPDATED_VALUES) {
-          Log.e(TAG, "localRowConflictType was not local_deleted or "
+          log.e(TAG, "localRowConflictType was not local_deleted or "
               + "local_updated! this is an error. local conflict type: " + localRowConflictType
               + ", server conflict type: " + serverRowConflictType);
         }
@@ -1643,7 +1657,7 @@ public class SyncProcessor implements SynchronizerStatus {
           // we don't do anything on failure -- just log a warning.
           // we need to leave the sync state as in_conflict.
           fileSuccess = false;
-          Log.w(TAG, "Unable to fetch file attachments from in_conflict row on server");
+          log.w(TAG, "Unable to fetch file attachments from in_conflict row on server");
         }
       }
       ++count;
@@ -1788,10 +1802,11 @@ public class SyncProcessor implements SynchronizerStatus {
         if (outcome) {
           // move the local record into the 'new_row' sync state
           // so it can be physically deleted.
-          ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, change.serverRow.getRowId(), 
-                                                           null, SyncState.new_row);
+          ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId,
+              change.serverRow.getRowId(), null, SyncState.new_row);
           // and physically delete it.
-          ODKDatabaseUtils.get().deleteDataInExistingDBTableWithId(db, appName, tableId, change.serverRow.getRowId());
+          ODKDatabaseUtils.get().deleteDataInExistingDBTableWithId(db, appName, tableId,
+              change.serverRow.getRowId());
 
           tableResult.incLocalDeletes();
         } else {
@@ -1854,8 +1869,8 @@ public class SyncProcessor implements SynchronizerStatus {
       try {
         ArrayList<ColumnDefinition> orderedDefns;
         db.beginTransaction();
-        orderedDefns = ODKDatabaseUtils.get().createOrOpenDBTableWithColumns(db,
-            appName, definitionResource.getTableId(), definitionResource.getColumns());
+        orderedDefns = ODKDatabaseUtils.get().createOrOpenDBTableWithColumns(db, appName,
+            definitionResource.getTableId(), definitionResource.getColumns());
         ODKDatabaseUtils.get().updateDBTableETags(db, definitionResource.getTableId(),
             definitionResource.getSchemaETag(), null);
         db.setTransactionSuccessful();
@@ -1899,7 +1914,8 @@ public class SyncProcessor implements SynchronizerStatus {
           db.endTransaction();
         }
       }
-      return ColumnDefinition.buildColumnDefinitions(appName, definitionResource.getTableId(), localColumns);
+      return ColumnDefinition.buildColumnDefinitions(appName, definitionResource.getTableId(),
+          localColumns);
     }
   }
 }

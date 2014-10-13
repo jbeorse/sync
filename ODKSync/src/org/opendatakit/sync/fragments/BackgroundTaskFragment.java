@@ -135,7 +135,8 @@ public class BackgroundTaskFragment extends Fragment implements LicenseReaderLis
     mLicenseReaderListener = listener;
     if (mBackgroundTasks.mLicenseReaderTask != null
         && mBackgroundTasks.mLicenseReaderTask.getStatus() != AsyncTask.Status.FINISHED) {
-      Toast.makeText(this.getActivity(), getString(R.string.still_reading_license_file), Toast.LENGTH_LONG).show();
+      Toast.makeText(this.getActivity(), getString(R.string.still_reading_license_file),
+          Toast.LENGTH_LONG).show();
     } else {
       LicenseReaderTask lrt = new LicenseReaderTask();
       lrt.setApplication(getActivity().getApplication());
@@ -146,7 +147,6 @@ public class BackgroundTaskFragment extends Fragment implements LicenseReaderLis
     }
   }
 
-
   // /////////////////////////////////////////////////////////////////////////
   // clearing tasks
   //
@@ -154,13 +154,11 @@ public class BackgroundTaskFragment extends Fragment implements LicenseReaderLis
   // up to the task itself to eventually shutdown. i.e., we don't quite
   // know when they actually stop.
 
-
   // /////////////////////////////////////////////////////////////////////////
   // cancel requests
   //
   // These maintain communications paths, so that we get a failure
   // completion callback eventually.
-
 
   // /////////////////////////////////////////////////////////////////////////
   // callbacks
