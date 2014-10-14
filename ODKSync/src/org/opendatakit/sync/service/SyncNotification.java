@@ -55,7 +55,7 @@ public final class SyncNotification {
     Notification syncNotif = builder.getNotification();
 
     notificationManager.notify(appName, messageNum, syncNotif);
-    WebLogger.getLogger(appName).e(
+    WebLogger.getLogger(appName).i(
         LOGTAG,
         messageNum + " Update SYNC Notification -" + appName + " TEXT:" + text + " PROG:"
             + progress);
