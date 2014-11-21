@@ -150,9 +150,10 @@ public class AppSynchronizer {
         // NOTE: server limits this string to 10 characters
         // For now, assume all APKs are sync'd to the same API version.
         String versionCode = SyncApp.getInstance().getVersionCodeString();
+        // android.os.Debug.waitForDebugger();
         String odkClientVersion = versionCode.substring(0, versionCode.length() - 2);
 
-        Synchronizer synchronizer = new AggregateSynchronizer(appName, odkClientVersion,
+        Synchronizer synchronizer = new AggregateSynchronizer(cntxt, appName, odkClientVersion,
             prefs.getServerUri(), prefs.getAuthToken());
         SyncProcessor processor = new SyncProcessor(cntxt, appName, synchronizer, syncProgress);
 

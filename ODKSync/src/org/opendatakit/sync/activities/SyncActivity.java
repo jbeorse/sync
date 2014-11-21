@@ -16,10 +16,14 @@
 package org.opendatakit.sync.activities;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.opendatakit.common.android.database.DatabaseFactory;
+import org.opendatakit.common.android.utilities.SyncETagsUtils;
 import org.opendatakit.common.android.utilities.WebLogger;
 import org.opendatakit.sync.OdkSyncServiceProxy;
 import org.opendatakit.sync.R;
@@ -38,6 +42,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.DialogInterface.OnClickListener;
 import android.content.Intent;
+import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
 import android.os.RemoteException;
 import android.view.Menu;
@@ -216,8 +221,34 @@ public class SyncActivity extends Activity {
             uri = null;
           String accountName = (String) accountListSpinner.getSelectedItem();
 
+          URI verifiedUri = null;
+          if ( uri != null ) {
+            try {
+              verifiedUri = new URI(uri);
+            } catch (URISyntaxException e) {
+              WebLogger.getLogger(appName).d(LOGTAG,
+                  "[onClickSaveSettings][onClick] invalid server URI: " + uri);
+              Toast.makeText(getApplicationContext(), "Invalid server URI: " + uri, 
+                    Toast.LENGTH_LONG).show();
+              return;
+            }
+          }
+          
           prefs.setServerUri(uri);
           prefs.setAccount(accountName);
+          
+          // and remove any settings for a URL other than this...
+          SyncETagsUtils seu = new SyncETagsUtils();
+          SQLiteDatabase db = null;
+          try {
+            db = DatabaseFactory.get().getDatabase(getApplicationContext(), appName);
+            seu.deleteAllSyncETagsExceptForServer(db, verifiedUri);
+          } finally {
+            if ( db != null ) {
+              db.close();
+            }
+          }
+          
           // SS Oct 15: clear the auth token here.
           // TODO if you change a user you can switch to their privileges
           // without this.

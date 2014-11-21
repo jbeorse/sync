@@ -15,16 +15,16 @@
  */
 package org.opendatakit.sync;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.wink.client.ClientWebException;
 import org.opendatakit.aggregate.odktables.rest.entity.Column;
 import org.opendatakit.aggregate.odktables.rest.entity.RowOutcomeList;
 import org.opendatakit.aggregate.odktables.rest.entity.TableDefinitionResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResource;
+import org.opendatakit.common.android.data.ColumnDefinition;
 import org.opendatakit.sync.service.SyncProgressState;
-import org.springframework.web.client.ResourceAccessException;
 
 /**
  * Synchronizer abstracts synchronization of tables to an external cloud/server.
@@ -57,8 +57,9 @@ public interface Synchronizer {
    * Get a list of all tables in the server.
    *
    * @return a list of the table resources on the server
+   * @throws ClientWebException
    */
-  public List<TableResource> getTables() throws ResourceAccessException;
+  public List<TableResource> getTables() throws ClientWebException;
 
   /**
    * Discover the current sync state of a given tableId. This may throw an
@@ -66,9 +67,9 @@ public interface Synchronizer {
    *
    * @param tableId
    * @return
-   * @throws IOException
+   * @throws ClientWebException
    */
-  public TableResource getTable(String tableId) throws IOException;
+  public TableResource getTable(String tableId) throws ClientWebException;
 
   /**
    * Returns the given tableId resource or null if the resource does not exist
@@ -76,17 +77,19 @@ public interface Synchronizer {
    *
    * @param tableId
    * @return
-   * @throws IOException
+   * @throws ClientWebException
    */
-  public TableResource getTableOrNull(String tableId) throws IOException;
+  public TableResource getTableOrNull(String tableId) throws ClientWebException;
 
   /**
    * Discover the schema for a table resource.
    *
    * @param tableDefinitionUri
-   * @return
+   * @return the table definition
+   * @throws ClientWebException
    */
-  public TableDefinitionResource getTableDefinition(String tableDefinitionUri);
+  public TableDefinitionResource getTableDefinition(String tableDefinitionUri) 
+      throws ClientWebException;
 
   /**
    * Assert that a table with the given id and schema exists on the server.
@@ -99,17 +102,19 @@ public interface Synchronizer {
    *          a map from column names to column types, see {@link ColumnType}
    * @return the TableResource for the table (the server may return different
    *         SyncTag values)
+   * @throws ClientWebException
    */
   public TableResource createTable(String tableId, String schemaETag, ArrayList<Column> columns)
-      throws IOException;
+      throws ClientWebException;
 
   /**
    * Delete the table with the given id from the server.
    *
    * @param tableId
    *          the unique identifier of the table
+   * @throws ClientWebException
    */
-  public void deleteTable(String tableId) throws IOException;
+  public void deleteTable(String tableId) throws ClientWebException;
 
   /**
    * Retrieve changes in the server state since the last synchronization.
@@ -124,10 +129,10 @@ public interface Synchronizer {
    * @return an IncomingModification representing the latest state of the table
    *         on server since the last sync or null if the table does not exist
    *         on the server.
-   *
+   * @throws ClientWebException
    */
   public IncomingRowModifications getUpdates(String tableId, String schemaETag, String dataETag)
-      throws IOException;
+      throws ClientWebException;
 
   /**
    * Apply updates in a collection up to the server.
@@ -137,10 +142,10 @@ public interface Synchronizer {
    * @param dataETag
    * @param rowsToInsertOrUpdate
    * @return
-   * @throws ResourceAccessException
+   * @throws ClientWebException
    */
   public RowOutcomeList insertOrUpdateRows(String tableId, String schemaETag, String dataETag,
-      List<SyncRow> rowsToInsertOrUpdate) throws ResourceAccessException;
+      List<SyncRow> rowsToInsertOrUpdate) throws ClientWebException;
 
   /**
    * Insert or update the given row in the table on the server.
@@ -156,9 +161,10 @@ public interface Synchronizer {
    *          the row to insert or update
    * @return a RowModification containing the (rowId, rowETag, table dataETag)
    *         after the modification
+   * @throws ClientWebException
    */
   public RowModification insertOrUpdateRow(String tableId, String schemaETag, String dataETag,
-      SyncRow rowToInsertOrUpdate) throws IOException;
+      SyncRow rowToInsertOrUpdate) throws ClientWebException;
 
   /**
    * Delete the given row ids from the server.
@@ -174,9 +180,10 @@ public interface Synchronizer {
    *          the row to delete
    * @return a RowModification containing the (rowId, null, table dataETag)
    *         after the modification
+   * @throws ClientWebException
    */
   public RowModification deleteRow(String tableId, String schemaETag, String dataETag,
-      SyncRow rowToDelete) throws IOException;
+      SyncRow rowToDelete) throws ClientWebException;
 
   /**
    * Synchronizes the app level files. This includes any files that are not
@@ -189,10 +196,10 @@ public interface Synchronizer {
    * @param SynchronizerStatus
    *          for reporting detailed progress of app-level file sync
    * @return true if successful
-   * @throws ResourceAccessException
+   * @throws ClientWebException
    */
   public boolean syncAppLevelFiles(boolean pushLocalFiles, SynchronizerStatus syncStatus)
-      throws ResourceAccessException;
+      throws ClientWebException;
 
   /**
    * Sync only the files associated with the specified table. This does NOT sync
@@ -203,10 +210,10 @@ public interface Synchronizer {
    *          callback if the assets/csv/tableId.properties.csv file changes
    * @param pushLocal
    *          true if the local files should be pushed
-   * @throws ResourceAccessException
+   * @throws ClientWebException
    */
   public void syncTableLevelFiles(String tableId, OnTablePropertiesChanged onChange,
-      boolean pushLocal, SynchronizerStatus syncStatus) throws ResourceAccessException;
+      boolean pushLocal, SynchronizerStatus syncStatus) throws ClientWebException;
 
   /**
    * Ensure that the file attachments for the indicated row values are pulled
@@ -219,10 +226,10 @@ public interface Synchronizer {
    *          - true if all other files in the local instance folder should be
    *          removed.
    * @return true if successful
-   * @throws ResourceAccessException
+   * @throws ClientWebException
    */
   public boolean getFileAttachments(String instanceFileUri, String tableId, SyncRow serverRow,
-      boolean shouldDeleteLocal) throws ResourceAccessException;
+      ArrayList<ColumnDefinition> fileAttachmentColumns, boolean shouldDeleteLocal) throws ClientWebException;
 
   /**
    * Ensure that the file attachments for the indicated row values exist on the
@@ -233,8 +240,9 @@ public interface Synchronizer {
    * @param tableId
    * @param localRow
    * @return true if successful
-   * @throws ResourceAccessException
+   * @throws ClientWebException
    */
-  public boolean putFileAttachments(String instanceFileUri, String tableId, SyncRow localRow)
-      throws ResourceAccessException;
+  public boolean putFileAttachments(String instanceFileUri, String tableId, SyncRow localRow,
+      ArrayList<ColumnDefinition> fileAttachmentColumns)
+      throws ClientWebException;
 }

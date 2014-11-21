@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.wink.client.ClientWebException;
 import org.opendatakit.aggregate.odktables.rest.ConflictType;
 import org.opendatakit.aggregate.odktables.rest.SyncState;
 import org.opendatakit.aggregate.odktables.rest.entity.Column;
@@ -33,6 +34,7 @@ import org.opendatakit.aggregate.odktables.rest.entity.Scope;
 import org.opendatakit.aggregate.odktables.rest.entity.TableDefinitionResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResource;
 import org.opendatakit.common.android.data.ColumnDefinition;
+import org.opendatakit.common.android.data.ElementDataType;
 import org.opendatakit.common.android.data.TableDefinitionEntry;
 import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
@@ -49,7 +51,6 @@ import org.opendatakit.sync.Synchronizer.SynchronizerStatus;
 import org.opendatakit.sync.exceptions.SchemaMismatchException;
 import org.opendatakit.sync.service.SyncNotification;
 import org.opendatakit.sync.service.SyncProgressState;
-import org.springframework.web.client.ResourceAccessException;
 
 import android.content.ContentValues;
 import android.content.Context;
@@ -147,7 +148,7 @@ public class SyncProcessor implements SynchronizerStatus {
   public void synchronizeConfigurationAndContent(boolean pushToServer) {
     log.i(TAG, "entered synchronizeConfigurationAndContent()");
     ODKFileUtils.assertDirectoryStructure(appName);
-    // android.os.Debug.waitForDebugger();
+    android.os.Debug.waitForDebugger();
 
     syncProgress.updateNotification(SyncProgressState.STARTING,
         context.getString(R.string.retrieving_tables_list_from_server),
@@ -160,7 +161,7 @@ public class SyncProcessor implements SynchronizerStatus {
       if (tables == null) {
         tables = new ArrayList<TableResource>();
       }
-    } catch (ResourceAccessException e) {
+    } catch (ClientWebException e) {
       mUserResult.setAppLevelStatus(Status.AUTH_EXCEPTION);
       log.i(TAG,
           "[synchronizeConfigurationAndContent] Could not retrieve server table list exception: "
@@ -177,7 +178,7 @@ public class SyncProcessor implements SynchronizerStatus {
     // TODO: do the database updates with a few database transactions...
 
     // get the tables on the local device
-    List<String> localTableIds = new ArrayList<String>();
+    List<String> localTableIds;
     SQLiteDatabase db = null;
     try {
       db = DatabaseFactory.get().getDatabase(context, appName);
@@ -244,7 +245,7 @@ public class SyncProcessor implements SynchronizerStatus {
     try {
       boolean success = synchronizer.syncAppLevelFiles(pushToServer, this);
       mUserResult.setAppLevelStatus(success ? Status.SUCCESS : Status.FAILURE);
-    } catch (ResourceAccessException e) {
+    } catch (ClientWebException e) {
       // TODO: update a synchronization result to report back to them as well.
       mUserResult.setAppLevelStatus(Status.AUTH_EXCEPTION);
       log.e(TAG,
@@ -274,9 +275,11 @@ public class SyncProcessor implements SynchronizerStatus {
         log.i(TAG, "[synchronizeConfigurationAndContent] synchronizing table " + localTableId);
 
         if (!localTableId.equals("framework")) {
+          TableDefinitionEntry entry;
           ArrayList<ColumnDefinition> orderedDefns;
           try {
             db = DatabaseFactory.get().getDatabase(context, appName);
+            entry = ODKDatabaseUtils.get().getTableDefinitionEntry(db, localTableId);
             orderedDefns = TableUtil.get().getColumnDefinitions(db, appName, localTableId);
           } finally {
             if (db != null) {
@@ -286,9 +289,9 @@ public class SyncProcessor implements SynchronizerStatus {
           }
 
           // do not sync the framework table
-          synchronizeTableConfigurationAndContent(localTableId, orderedDefns, matchingResource,
-              true);
+          synchronizeTableConfigurationAndContent(entry, orderedDefns, matchingResource, true);
         }
+        
         this.updateNotification(SyncProgressState.TABLE_FILES,
             R.string.table_level_file_sync_complete, new Object[] { localTableId }, 100.0, false);
         ++iMajorSyncStep;
@@ -316,9 +319,34 @@ public class SyncProcessor implements SynchronizerStatus {
         String serverTableId = table.getTableId();
 
         boolean doesNotExistLocally = true;
+        boolean isLocalMatch = false;
+        TableDefinitionEntry entry = null;
+        
         if (localTableIds.contains(serverTableId)) {
           localTableIdsToDelete.remove(serverTableId);
           doesNotExistLocally = false;
+
+          // see if the schemaETag matches. If so, we can skip a lot of steps...
+          // no need to verify schema match -- just sync files...
+          try {
+            db = DatabaseFactory.get().getDatabase(context, appName);
+            entry = ODKDatabaseUtils.get().getTableDefinitionEntry(db, serverTableId);
+            orderedDefns = TableUtil.get().getColumnDefinitions(db, appName, serverTableId);
+            if ( table.getSchemaETag().equals(entry.getSchemaETag()) ) {
+              isLocalMatch = true;
+            }
+          } catch (SQLiteException e) {
+            mUserResult.setAppLevelStatus(Status.EXCEPTION);
+            log.e(TAG,
+                "[synchronizeConfigurationAndContent] Unexpected exception getting columns of tableId: " + serverTableId + " exception: "
+                    + e.toString());
+            return;
+          } finally {
+            if (db != null) {
+              db.close();
+              db = null;
+            }
+          }
         }
 
         TableResult tableResult = mUserResult.getTableResult(serverTableId);
@@ -328,54 +356,57 @@ public class SyncProcessor implements SynchronizerStatus {
                 : R.string.verifying_table_schema_on_server), new Object[] { serverTableId }, 0.0,
             false);
 
-        try {
-          TableDefinitionResource definitionResource = synchronizer.getTableDefinition(table
-              .getDefinitionUri());
-
+        if ( !isLocalMatch ) {
           try {
-            db = DatabaseFactory.get().getDatabase(context, appName);
-            orderedDefns = addTableFromDefinitionResource(db, definitionResource,
-                doesNotExistLocally);
-          } finally {
-            if (db != null) {
-              db.close();
-              db = null;
+            TableDefinitionResource definitionResource = synchronizer.getTableDefinition(table
+                .getDefinitionUri());
+  
+            try {
+              db = DatabaseFactory.get().getDatabase(context, appName);
+              orderedDefns = addTableFromDefinitionResource(db, definitionResource,
+                  doesNotExistLocally);
+              entry = ODKDatabaseUtils.get().getTableDefinitionEntry(db, serverTableId);
+            } finally {
+              if (db != null) {
+                db.close();
+                db = null;
+              }
             }
+          } catch (JsonParseException e) {
+            log.printStackTrace(e);
+            tableResult.setStatus(Status.EXCEPTION);
+            log.e(TAG,
+                "[synchronizeConfigurationAndContent] Unexpected exception parsing table definition exception: "
+                    + e.toString());
+            continue;
+          } catch (JsonMappingException e) {
+            log.printStackTrace(e);
+            tableResult.setStatus(Status.EXCEPTION);
+            log.e(TAG,
+                "[synchronizeConfigurationAndContent] Unexpected exception parsing table definition exception: "
+                    + e.toString());
+            continue;
+          } catch (IOException e) {
+            log.printStackTrace(e);
+            tableResult.setStatus(Status.EXCEPTION);
+            log.e(TAG,
+                "[synchronizeConfigurationAndContent] Unexpected exception accessing table definition exception: "
+                    + e.toString());
+            continue;
+          } catch (SchemaMismatchException e) {
+            log.printStackTrace(e);
+            tableResult.setStatus(Status.EXCEPTION);
+            log.e(TAG,
+                "[synchronizeConfigurationAndContent] The schema for this table does not match that on the server"
+                    + e.toString());
+            continue;
           }
-        } catch (JsonParseException e) {
-          log.printStackTrace(e);
-          tableResult.setStatus(Status.EXCEPTION);
-          log.e(TAG,
-              "[synchronizeConfigurationAndContent] Unexpected exception parsing table definition exception: "
-                  + e.toString());
-          continue;
-        } catch (JsonMappingException e) {
-          log.printStackTrace(e);
-          tableResult.setStatus(Status.EXCEPTION);
-          log.e(TAG,
-              "[synchronizeConfigurationAndContent] Unexpected exception parsing table definition exception: "
-                  + e.toString());
-          continue;
-        } catch (IOException e) {
-          log.printStackTrace(e);
-          tableResult.setStatus(Status.EXCEPTION);
-          log.e(TAG,
-              "[synchronizeConfigurationAndContent] Unexpected exception accessing table definition exception: "
-                  + e.toString());
-          continue;
-        } catch (SchemaMismatchException e) {
-          log.printStackTrace(e);
-          tableResult.setStatus(Status.EXCEPTION);
-          log.e(TAG,
-              "[synchronizeConfigurationAndContent] The schema for this table does not match that on the server"
-                  + e.toString());
-          continue;
         }
 
         // Sync the local media files with the server if the table
         // existed locally before we attempted downloading it.
 
-        synchronizeTableConfigurationAndContent(serverTableId, orderedDefns, table, false);
+        synchronizeTableConfigurationAndContent(entry, orderedDefns, table, false);
         this.updateNotification(SyncProgressState.TABLE_FILES,
             R.string.table_level_file_sync_complete, new Object[] { serverTableId }, 100.0, false);
       }
@@ -435,7 +466,7 @@ public class SyncProcessor implements SynchronizerStatus {
    *          to the server. The data files on the server are always pulled
    *          down.
    */
-  private void synchronizeTableConfigurationAndContent(String tableId,
+  private void synchronizeTableConfigurationAndContent(TableDefinitionEntry te,
       ArrayList<ColumnDefinition> orderedDefns, TableResource resource,
       boolean pushLocalTableLevelFiles) {
 
@@ -447,34 +478,35 @@ public class SyncProcessor implements SynchronizerStatus {
     // Prepare the tableResult. We'll start it as failure, and only update it
     // if we're successful at the end.
 
+    String tableId = te.getTableId();
+    
     this.updateNotification(SyncProgressState.TABLE_FILES,
         R.string.verifying_table_schema_on_server, new Object[] { tableId }, 0.0, false);
     final TableResult tableResult = mUserResult.getTableResult(tableId);
     String displayName;
-    TableDefinitionEntry te;
     SQLiteDatabase db = null;
     try {
       db = DatabaseFactory.get().getDatabase(context, appName);
       displayName = TableUtil.get().getLocalizedDisplayName(db, tableId);
       tableResult.setTableDisplayName(displayName);
-      te = ODKDatabaseUtils.get().getTableDefinitionEntry(db, tableId);
     } finally {
       if (db != null) {
         db.close();
         db = null;
       }
     }
+    
     try {
       String dataETag = te.getLastDataETag();
       String schemaETag = te.getSchemaETag();
       boolean serverUpdated = false;
 
-      // Confirm that the local schema matches that on the server...
-      // If we are pushing to the server, create it on the server.
       if (resource == null) {
+        // exists locally but not on server...
 
         if (!pushLocalTableLevelFiles) {
           // the table on the server is missing. Need to ask user what to do...
+          // we should never really get in this state (should be caught up in caller)
           tableResult.setServerHadSchemaChanges(true);
           tableResult
               .setMessage("Server no longer has table! Deleting it locally. Reset App Server to upload.");
@@ -543,12 +575,17 @@ public class SyncProcessor implements SynchronizerStatus {
       // local table to be ready for any data merge with the server's table.
 
       /**************************
-       * PART 1A: UPDATE THE TABLE SCHEMA. We only do this if necessary. Do this
-       * before updating data in case columns have changed or something specific
-       * applies. These updates come in two parts: the table definition, and the
-       * table properties (i.e. the key value store).
+       * PART 1A: UPDATE THE TABLE SCHEMA. This should generally not happen.
+       * But we allow a server wipe and re-install by another user with the
+       * same physical schema to match ours even when our schemaETag differs.
+       * IN this case, we need to mark our data as needing a full re-sync.
        **************************/
-      if (serverUpdated || !resource.getSchemaETag().equals(schemaETag)) {
+      if (!resource.getSchemaETag().equals(schemaETag)) {
+        // the server was re-installed by a different device.
+        // verify that our table definition is identical to the 
+        // server, and, if it is, update our schemaETag to match
+        // the server's.
+        
         log.d(TAG, "updateDbFromServer setServerHadSchemaChanges(true)");
         tableResult.setServerHadSchemaChanges(true);
 
@@ -773,6 +810,14 @@ public class SyncProcessor implements SynchronizerStatus {
       ArrayList<ColumnDefinition> orderedColumns, String displayName) {
     boolean success = true;
     boolean instanceFileSuccess = true;
+    
+    ArrayList<ColumnDefinition> fileAttachmentColumns = new ArrayList<ColumnDefinition>();
+    for ( ColumnDefinition cd : orderedColumns ) {
+      if ( cd.getType().getDataType() == ElementDataType.rowpath ) {
+        fileAttachmentColumns.add(cd);
+      }
+    }
+    
     // Prepare the tableResult. We'll start it as failure, and only update it
     // if we're successful at the end.
     String tableId = te.getTableId();
@@ -1118,14 +1163,14 @@ public class SyncProcessor implements SynchronizerStatus {
               try {
                 db = DatabaseFactory.get().getDatabase(context, appName);
                 db.beginTransaction();
-                success = deleteRowsInDb(db, resource, tableId, rowsToDeleteLocally, tableResult);
+                success = deleteRowsInDb(db, resource, tableId, rowsToDeleteLocally, fileAttachmentColumns, tableResult);
 
-                if (!insertRowsInDb(db, resource, tableId, orderedColumns, rowsToInsertLocally,
+                if (!insertRowsInDb(db, resource, tableId, orderedColumns, rowsToInsertLocally, fileAttachmentColumns,
                     tableResult)) {
                   instanceFileSuccess = false;
                 }
                 boolean[] results = updateRowsInDb(db, resource, tableId, orderedColumns,
-                    rowsToUpdateLocally, tableResult);
+                    rowsToUpdateLocally, fileAttachmentColumns, tableResult);
                 if (!results[0]) {
                   success = false;
                 }
@@ -1133,7 +1178,7 @@ public class SyncProcessor implements SynchronizerStatus {
                   instanceFileSuccess = false;
                 }
                 if (!conflictRowsInDb(db, resource, tableId, orderedColumns,
-                    rowsToMoveToInConflictLocally, tableResult)) {
+                    rowsToMoveToInConflictLocally, fileAttachmentColumns, tableResult)) {
                   instanceFileSuccess = false;
                 }
 
@@ -1240,7 +1285,7 @@ public class SyncProcessor implements SynchronizerStatus {
                     tableResult.incServerUpserts();
 
                     boolean outcome = synchronizer.putFileAttachments(
-                        resource.getInstanceFilesUri(), tableId, syncRow);
+                        resource.getInstanceFilesUri(), tableId, syncRow, fileAttachmentColumns);
                     if (outcome) {
                       // move to synced state
                       try {
@@ -1357,10 +1402,10 @@ public class SyncProcessor implements SynchronizerStatus {
               count = 0;
               for (SyncRow syncRow : rowsToPushFileAttachments) {
                 boolean outcome = synchronizer.putFileAttachments(resource.getInstanceFilesUri(),
-                    tableId, syncRow);
+                    tableId, syncRow, fileAttachmentColumns);
                 if (outcome) {
                   outcome = synchronizer.getFileAttachments(resource.getInstanceFilesUri(),
-                      tableId, syncRow, true);
+                      tableId, syncRow, fileAttachmentColumns, true);
                   if (outcome) {
                     SQLiteDatabase db = null;
 
@@ -1393,8 +1438,8 @@ public class SyncProcessor implements SynchronizerStatus {
               // And now update that we've pushed our changes to the server.
               tableResult.setPushedLocalData(true);
               serverSuccess = true;
-            } catch (IOException e) {
-              ioException("synchronizeTableRest", tableId, e, tableResult);
+            } catch (ClientWebException e) {
+              clientWebException("synchronizeTableRest", tableId, e, tableResult);
               serverSuccess = false;
             } catch (Exception e) {
               exception("synchronizeTableRest", tableId, e, tableResult);
@@ -1412,8 +1457,8 @@ public class SyncProcessor implements SynchronizerStatus {
 
             success = success && serverSuccess;
 
-          } catch (ResourceAccessException e) {
-            resourceAccessException("synchronizeTableRest--nonMediaFiles", tableId, e, tableResult);
+          } catch (ClientWebException e) {
+            clientWebException("synchronizeTableRest--nonMediaFiles", tableId, e, tableResult);
             log.e(TAG, "[synchronizeTableRest] error synchronizing table files");
             success = false;
           } catch (Exception e) {
@@ -1536,7 +1581,7 @@ public class SyncProcessor implements SynchronizerStatus {
     }
   };
 
-  private void resourceAccessException(String method, String tableId, ResourceAccessException e,
+  private void clientWebException(String method, String tableId, ClientWebException e,
       TableResult tableResult) {
     log.e(TAG, String.format("ResourceAccessException in %s for table: %s exception: %s", method,
         tableId, e.toString()));
@@ -1563,8 +1608,8 @@ public class SyncProcessor implements SynchronizerStatus {
   }
 
   private boolean conflictRowsInDb(SQLiteDatabase db, TableResource resource, String tableId,
-      ArrayList<ColumnDefinition> orderedColumns, List<FileSyncRow> changes, TableResult tableResult)
-      throws ResourceAccessException {
+      ArrayList<ColumnDefinition> orderedColumns, List<FileSyncRow> changes, ArrayList<ColumnDefinition> fileAttachmentColumns, TableResult tableResult)
+      throws ClientWebException {
 
     boolean fileSuccess = true;
     int count = 0;
@@ -1652,7 +1697,7 @@ public class SyncProcessor implements SynchronizerStatus {
         // it is OK if we can't get them, but they may be useful for
         // reconciliation
         boolean outcome = synchronizer.getFileAttachments(resource.getInstanceFilesUri(), tableId,
-            serverRow, false);
+            serverRow, fileAttachmentColumns, false);
         if (!outcome) {
           // we don't do anything on failure -- just log a warning.
           // we need to leave the sync state as in_conflict.
@@ -1672,8 +1717,8 @@ public class SyncProcessor implements SynchronizerStatus {
   }
 
   private boolean insertRowsInDb(SQLiteDatabase db, TableResource resource, String tableId,
-      ArrayList<ColumnDefinition> orderedColumns, List<FileSyncRow> changes, TableResult tableResult)
-      throws ResourceAccessException {
+      ArrayList<ColumnDefinition> orderedColumns, List<FileSyncRow> changes, ArrayList<ColumnDefinition> fileAttachmentColumns, TableResult tableResult)
+      throws ClientWebException {
     boolean fileSuccess = true;
     int count = 0;
     for (FileSyncRow change : changes) {
@@ -1699,7 +1744,7 @@ public class SyncProcessor implements SynchronizerStatus {
 
       // ensure we have the file attachments for the inserted row
       boolean outcome = synchronizer.getFileAttachments(resource.getInstanceFilesUri(), tableId,
-          serverRow, true);
+          serverRow, fileAttachmentColumns, true);
       if (outcome) {
         // move to synced state
         ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, serverRow.getRowId(),
@@ -1719,8 +1764,8 @@ public class SyncProcessor implements SynchronizerStatus {
   }
 
   private boolean[] updateRowsInDb(SQLiteDatabase db, TableResource resource, String tableId,
-      ArrayList<ColumnDefinition> orderedColumns, List<FileSyncRow> changes, TableResult tableResult)
-      throws ResourceAccessException {
+      ArrayList<ColumnDefinition> orderedColumns, List<FileSyncRow> changes, ArrayList<ColumnDefinition> fileAttachmentColumns, TableResult tableResult)
+      throws ClientWebException {
     boolean success = true;
     boolean fileSuccess = true;
 
@@ -1734,7 +1779,7 @@ public class SyncProcessor implements SynchronizerStatus {
       if (change.isRestPendingFiles) {
         // we need to push our changes to the server first...
         outcome = synchronizer.putFileAttachments(resource.getInstanceFilesUri(), tableId,
-            change.localRow);
+            change.localRow, fileAttachmentColumns);
       }
 
       if (!outcome) {
@@ -1770,7 +1815,7 @@ public class SyncProcessor implements SynchronizerStatus {
 
         // and try to get the file attachments for the row
         outcome = synchronizer.getFileAttachments(resource.getInstanceFilesUri(), tableId,
-            serverRow, true);
+            serverRow, fileAttachmentColumns, true);
         if (outcome) {
           // move to synced state
           ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, serverRow.getRowId(),
@@ -1792,13 +1837,13 @@ public class SyncProcessor implements SynchronizerStatus {
   }
 
   private boolean deleteRowsInDb(SQLiteDatabase db, TableResource resource, String tableId,
-      List<FileSyncRow> changes, TableResult tableResult) throws IOException {
+      List<FileSyncRow> changes, ArrayList<ColumnDefinition> fileAttachmentColumns, TableResult tableResult) throws IOException {
     int count = 0;
     boolean deletesAllSuccessful = true;
     for (FileSyncRow change : changes) {
       if (change.isRestPendingFiles) {
         boolean outcome = synchronizer.putFileAttachments(resource.getInstanceFilesUri(), tableId,
-            change.localRow);
+            change.localRow, fileAttachmentColumns);
         if (outcome) {
           // move the local record into the 'new_row' sync state
           // so it can be physically deleted.
