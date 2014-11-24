@@ -622,47 +622,34 @@ public class AggregateSynchronizer implements Synchronizer {
     return outcomes;
   }
 
-  /**
-   * Insert or update the given row in the table on the server.
-   *
-   * @param tableId
-   *          the unique identifier of the table
-   * @param tableSchemaETag
-   *          tracks the current table instance
-   * @param tableDataETag
-   *          tracks the dataETagAtModification for this table instance.
-   * @param rowToInsertOrUpdate
-   *          the row to insert or update
-   * @return a RowModification containing the (rowId, rowETag, table dataETag)
-   *         after the modification
-   */
-  public RowModification insertOrUpdateRow(String tableId, String tableSchemaETag,
-      String tableDataETag, SyncRow rowToInsertOrUpdate) throws ClientWebException {
+  public RowOutcomeList alterRows(String tableId, String schemaETag, String dataETag,
+      List<SyncRow> rowsToInsertUpdateOrDelete) throws ClientWebException {
+
     TableResource resource = getTable(tableId);
 
-    Row row = Row.forUpdate(rowToInsertOrUpdate.getRowId(), rowToInsertOrUpdate.getRowETag(),
-        rowToInsertOrUpdate.getFormId(), rowToInsertOrUpdate.getLocale(),
-        rowToInsertOrUpdate.getSavepointType(), rowToInsertOrUpdate.getSavepointTimestamp(),
-        rowToInsertOrUpdate.getSavepointCreator(), rowToInsertOrUpdate.getFilterScope(),
-        rowToInsertOrUpdate.getValues());
+    ArrayList<Row> rows = new ArrayList<Row>();
+    for (SyncRow rowToAlter : rowsToInsertUpdateOrDelete) {
+      Row row = Row.forUpdate(rowToAlter.getRowId(), rowToAlter.getRowETag(),
+          rowToAlter.getFormId(), rowToAlter.getLocale(),
+          rowToAlter.getSavepointType(), rowToAlter.getSavepointTimestamp(),
+          rowToAlter.getSavepointCreator(), rowToAlter.getFilterScope(),
+          rowToAlter.getValues());
+      row.setDeleted(rowToAlter.isDeleted());
+      rows.add(row);
+    }
+    RowList rlist = new RowList(rows);
 
-    URI url = normalizeUri(resource.getDataUri(), escapeSegment(row.getRowId()));
-    RowResource inserted;
+    URI uri = URI.create(resource.getDataUri());
+    RowOutcomeList outcomes;
     try {
-      inserted = buildResource(url).put(new EntityType<RowResource>() {
-      }, row);
+      outcomes = buildResource(uri).put(new EntityType<RowOutcomeList>() {
+      }, rlist);
     } catch (ClientWebException e) {
-      log.e(LOGTAG, "Exception while updating row on server: " + tableId + " rowId: "
-          + rowToInsertOrUpdate.getRowId() + " exception: " + e.toString());
+      log.e(LOGTAG,
+          "Exception while updating rows on server: " + tableId + " exception: " + e.toString());
       throw e;
     }
-    log.i(LOGTAG, "[insertOrUpdateRows] setting data etag to row's last "
-        + "known dataetag at modification: " + inserted.getDataETagAtModification());
-
-    updateResource(tableId, tableSchemaETag, inserted.getDataETagAtModification());
-
-    return new RowModification(inserted.getRowId(), inserted.getRowETag(), tableSchemaETag,
-        inserted.getDataETagAtModification());
+    return outcomes;
   }
 
   /*

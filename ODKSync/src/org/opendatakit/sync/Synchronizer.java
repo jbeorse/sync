@@ -148,23 +148,17 @@ public interface Synchronizer {
       List<SyncRow> rowsToInsertOrUpdate) throws ClientWebException;
 
   /**
-   * Insert or update the given row in the table on the server.
-   *
+   * Apply inserts, updates and deletes in a collection up to the server.
+   * 
    * @param tableId
-   *          the unique identifier of the table
    * @param schemaETag
-   *          tracks the schema instance that this id has
    * @param dataETag
-   *          tracks the last dataETag for the last successfully downloaded row
-   *          in the table.
-   * @param rowToInsertOrUpdate
-   *          the row to insert or update
-   * @return a RowModification containing the (rowId, rowETag, table dataETag)
-   *         after the modification
+   * @param rowsToInsertOrUpdate
+   * @return
    * @throws ClientWebException
    */
-  public RowModification insertOrUpdateRow(String tableId, String schemaETag, String dataETag,
-      SyncRow rowToInsertOrUpdate) throws ClientWebException;
+  public RowOutcomeList alterRows(String tableId, String schemaETag, String dataETag,
+      List<SyncRow> rowsToInsertUpdateOrDelete) throws ClientWebException;
 
   /**
    * Delete the given row ids from the server.

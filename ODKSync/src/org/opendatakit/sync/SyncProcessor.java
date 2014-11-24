@@ -1313,6 +1313,9 @@ public class SyncProcessor implements SynchronizerStatus {
                         db = null;
                       }
                     }
+                  } else {
+                    // one of DENIED, FAILED, IN_CONFLICT
+                    serverSuccess = false;
                   }
                   ++count;
                   ++rowsProcessed;
