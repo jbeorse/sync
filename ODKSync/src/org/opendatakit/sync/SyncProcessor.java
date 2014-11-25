@@ -1415,7 +1415,9 @@ public class SyncProcessor implements SynchronizerStatus {
             // so it can be physically deleted.
             ODKDatabaseUtils.get().updateRowETagAndSyncState(db, resource.getTableId(), r.getRowId(),
                 null, SyncState.new_row);
-            // and physically delete it.
+            // !!Important!! update the rowETag in our copy of this row.
+            syncRow.setRowETag(r.getRowETag());
+            // and physically delete row and attachments from database.
             ODKDatabaseUtils.get().deleteDataInExistingDBTableWithId(db, appName, resource.getTableId(), r.getRowId());
             tableResult.incServerDeletes();
           } finally {
@@ -1431,6 +1433,8 @@ public class SyncProcessor implements SynchronizerStatus {
             db = DatabaseFactory.get().getDatabase(context, appName);
             ODKDatabaseUtils.get().updateRowETagAndSyncState(db, resource.getTableId(), r.getRowId(),
                 r.getRowETag(), SyncState.synced_pending_files);
+            // !!Important!! update the rowETag in our copy of this row.
+            syncRow.setRowETag(r.getRowETag());
           } finally {
             if (db != null) {
               db.close();
@@ -1521,6 +1525,9 @@ public class SyncProcessor implements SynchronizerStatus {
         if (conflictRowsInDb(db, resource, resource.getTableId(), orderedColumns,
             rowsToMoveToInConflictLocally, fileAttachmentColumns, tableResult)) {
           if ( lastDataETag != null ) {
+            // TODO: timing window here!!!!
+            // another updater could have interleaved a dataETagAtModification value. 
+            // so updating the lastDataETag here could cause us to miss those updates!!!
 
             ODKDatabaseUtils.get().updateDBTableETags(db, resource.getTableId(), te.getSchemaETag(),
                 lastDataETag);
