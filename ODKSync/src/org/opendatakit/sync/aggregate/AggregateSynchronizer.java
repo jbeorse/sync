@@ -1404,12 +1404,12 @@ public class AggregateSynchronizer implements Synchronizer {
         }
         
         if (!response.containsHeader(ApiConstants.OPEN_DATA_KIT_VERSION_HEADER)) {
+          discardEntityBytes(response);
           log.w(LOGTAG, "downloading " + downloadUrl.toString() + " appears to have been redirected.");
           return 302;
         }
         
         File tmp = new File(destFile.getParentFile(), destFile.getName() + ".tmp");
-        // write connection to file
         BufferedInputStream is = null;
         BufferedOutputStream os = null;
         try {
@@ -1423,6 +1423,8 @@ public class AggregateSynchronizer implements Synchronizer {
               }
             }
           }
+          
+          // open the InputStream of the (uncompressed) entity body...
           InputStream isRaw;
           if (isCompressed) {
             isRaw = new GZIPInputStream(response.getEntity().getContent());
@@ -1430,6 +1432,7 @@ public class AggregateSynchronizer implements Synchronizer {
             isRaw = response.getEntity().getContent();
           }
 
+          // write connection to file
           is = new BufferedInputStream(isRaw);
           os = new BufferedOutputStream(new FileOutputStream(tmp));
           byte buf[] = new byte[8096];
@@ -1448,6 +1451,7 @@ public class AggregateSynchronizer implements Synchronizer {
             try {
               os.close();
             } catch (Exception e) {
+              // no-op
             }
           }
           if (is != null) {
@@ -1462,6 +1466,7 @@ public class AggregateSynchronizer implements Synchronizer {
             try {
               is.close();
             } catch (Exception e) {
+              // no-op
             }
           }
           if (tmp.exists()) {
@@ -1471,6 +1476,9 @@ public class AggregateSynchronizer implements Synchronizer {
 
       } catch (Exception e) {
         log.printStackTrace(e);
+        if ( response != null ) {
+          WebUtils.get().discardEntityBytes(response);
+        }
         if (attemptCount != 1) {
           throw e;
         }
@@ -1552,13 +1560,27 @@ public class AggregateSynchronizer implements Synchronizer {
           }
 
           if (dkv.value != null) {
-            File localFile = new File(instanceFolder, dkv.value);
+            String relativePath = dkv.value;
+            // clean up the value...
+            if ( relativePath.startsWith("/") ) {
+              relativePath = relativePath.substring(1);
+            }
             // remove it from the local files list
-            String relativePath = ODKFileUtils.asRelativePath(appName, localFile);
             relativePathsToAppFolderOnDevice.remove(relativePath);
-
+            
+            File localFile = ODKFileUtils.getAsFile(appName, relativePath);
+            String baseInstanceFolder = instanceFolder.getAbsolutePath();
+            String baseLocalAttachment = localFile.getAbsolutePath();
+            if ( !baseLocalAttachment.startsWith(baseInstanceFolder) ) {
+              throw new IllegalStateException("instance data file is not within the instances tree!");
+            }
+            String partialValue = baseLocalAttachment.substring(baseInstanceFolder.length());
+            if (partialValue.startsWith("/") ) {
+              partialValue = partialValue.substring(1);
+            }
+            
             URI instanceFileDownloadUri = normalizeUri(instanceFileUri, instanceId + "/file/"
-                + dkv.value);
+                + partialValue);
 
             if (!localFile.exists()) {
               int statusCode = downloadFile(localFile, instanceFileDownloadUri);
@@ -1760,11 +1782,25 @@ public class AggregateSynchronizer implements Synchronizer {
           }
 
           if (dkv.value != null) {
-            File localFile = new File(instanceFolder, dkv.value);
-            String relativePath = ODKFileUtils.asRelativePath(appName, localFile);
+            String relativePath = dkv.value;
+            // clean up the value...
+            if ( relativePath.startsWith("/") ) {
+              relativePath = relativePath.substring(1);
+            }
+
+            File localFile = ODKFileUtils.asAppFile(appName, relativePath);
+            String baseInstanceFolder = instanceFolder.getAbsolutePath();
+            String baseLocalAttachment = localFile.getAbsolutePath();
+            if ( !baseLocalAttachment.startsWith(baseInstanceFolder) ) {
+              throw new IllegalStateException("instance data file is not within the instances tree!");
+            }
+            String partialValue = baseLocalAttachment.substring(baseInstanceFolder.length());
+            if (partialValue.startsWith("/") ) {
+              partialValue = partialValue.substring(1);
+            }
 
             URI instanceFileDownloadUri = normalizeUri(instanceFileUri, instanceId + "/file/"
-                + dkv.value);
+                + partialValue);
 
             if (localFile.exists()) {
               // issue a GET. If the return is NOT_MODIFIED, then we don't need to POST it.

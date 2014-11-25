@@ -61,6 +61,7 @@
 	<string name="inserting_local_row">Inserting %1$s local dataset row %2$d of %3$d.</string>
 	<string name="marking_conflicting_local_row">Mark conflicting %1$s local dataset row %2$d of %3$d.</string>
 	<string name="upserting_server_row">Sending %1$s dataset row %2$d of %3$d to server.</string>
+	<string name="altering_server_row">Sending %1$s dataset row %2$d of %3$d to server.</string>
 	<string name="deleting_server_row">Deleting %1$s dataset row %2$d of %3$d on server.</string>
 	<string name="uploading_attachments_server_row">Uploading %1$s dataset attachment %2$d of %3$d to server.</string>
 	<string name="table_data_sync_complete">Completed sync of %1$s dataset with server.</string>
