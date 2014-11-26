@@ -28,11 +28,12 @@ import java.math.BigInteger;
 import java.nio.charset.Charset;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 
 import javax.ws.rs.Consumes;
 import javax.ws.rs.Produces;
 import javax.ws.rs.WebApplicationException;
-import javax.ws.rs.core.Context;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedMap;
@@ -52,11 +53,6 @@ public class SimpleJSONMessageReaderWriter<T> implements MessageBodyReader<T>,
 
   private static final ObjectMapper mapper = new ObjectMapper();
   private static final String DEFAULT_ENCODING = "utf-8";
-
-//  @Context
-//  ServletContext context;
-  @Context
-  HttpHeaders headers;
 
   @Override
   public boolean isReadable(Class<?> type, Type genericType, Annotation annotations[],
@@ -81,17 +77,8 @@ public class SimpleJSONMessageReaderWriter<T> implements MessageBodyReader<T>,
       if (!encoding.equalsIgnoreCase(DEFAULT_ENCODING)) {
         throw new IllegalArgumentException("charset for the request is not utf-8");
       }
-      InputStream instr = stream;
 
-//      String tmp = (String) context.getAttribute(GZIPRequestHandler.noUnGZIPContentEncodingKey);
-//      boolean noUnGZIPContentEncodingKey = tmp == null ? false : Boolean.valueOf(tmp);
-//
-//      if ( !noUnGZIPContentEncodingKey ) {
-//        instr = new GZIPInputStream(stream);
-//      }
-
-      InputStreamReader r = new InputStreamReader(instr,
-          Charset.forName(ApiConstants.UTF8_ENCODE));
+      InputStreamReader r = new InputStreamReader(stream);
       return mapper.readValue(r, aClass);
     } catch (Exception e) {
       throw new IOException(e);
@@ -131,15 +118,8 @@ public class SimpleJSONMessageReaderWriter<T> implements MessageBodyReader<T>,
       }
       map.putSingle(HttpHeaders.ETAG, eTag);
 
-//      String tmp = (String) context.getAttribute(GZIPRequestHandler.emitGZIPContentEncodingKey);
-//      boolean emitGZIPContentEncodingKey = (tmp == null) ? false : Boolean.valueOf(tmp);
-        OutputStream rawStr = rawStream;
-//        if ( emitGZIPContentEncodingKey ) {
-//          map.add(ApiConstants.CONTENT_ENCODING_HEADER, ApiConstants.GZIP_CONTENT_ENCODING);
-//          rawStr = new GZIPOutputStream(rawStream);
-//        }
-
-        rawStr.write(bytes);
+      rawStream.write(bytes);
+      rawStream.flush();
 
     } catch (Exception e) {
       throw new IOException(e);

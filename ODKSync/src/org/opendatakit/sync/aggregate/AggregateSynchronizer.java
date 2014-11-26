@@ -54,6 +54,7 @@ import org.apache.wink.client.ClientWebException;
 import org.apache.wink.client.EntityType;
 import org.apache.wink.client.Resource;
 import org.apache.wink.client.RestClient;
+import org.apache.wink.client.internal.handlers.GzipHandler;
 import org.opendatakit.aggregate.odktables.rest.ApiConstants;
 import org.opendatakit.aggregate.odktables.rest.entity.Column;
 import org.opendatakit.aggregate.odktables.rest.entity.DataKeyValue;
@@ -339,6 +340,7 @@ public class AggregateSynchronizer implements Synchronizer {
     cc = new ClientConfig();
     cc.setLoadWinkApplications(false);
     cc.applications(new ODKClientApplication());
+    cc.handlers(new GzipHandler());
     cc.connectTimeout(WebUtils.CONNECTION_TIMEOUT);
     cc.readTimeout(2 * WebUtils.CONNECTION_TIMEOUT);
     cc.followRedirects(true);

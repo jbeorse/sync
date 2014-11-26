@@ -148,7 +148,7 @@ public class SyncProcessor implements SynchronizerStatus {
   public void synchronizeConfigurationAndContent(boolean pushToServer) {
     log.i(TAG, "entered synchronizeConfigurationAndContent()");
     ODKFileUtils.assertDirectoryStructure(appName);
-    // android.os.Debug.waitForDebugger();
+    android.os.Debug.waitForDebugger();
 
     syncProgress.updateNotification(SyncProgressState.STARTING,
         context.getString(R.string.retrieving_tables_list_from_server),
@@ -1113,8 +1113,14 @@ public class SyncProcessor implements SynchronizerStatus {
                 FileSyncRow syncRow = new FileSyncRow(serverRow, convertToSyncRow(orderedColumns,
                     localRow), false, localRowConflictType);
 
-                if (!syncRow.identicalValues()) {
-                  rowsToMoveToInConflictLocally.add(syncRow);
+                if (!syncRow.identicalValues(orderedColumns)) {
+                  if ( syncRow.identicalValuesExceptRowETagAndFilterScope(orderedColumns)) {
+                    // just apply the server RowETag and filterScope to the local row
+                    rowsToUpdateLocally.add(new FileSyncRow(serverRow, convertToSyncRow(
+                        orderedColumns, localRow), true));
+                  } else {
+                    rowsToMoveToInConflictLocally.add(syncRow);
+                  }
                 } else {
                   log.w(TAG, "identical rows returned from server -- SHOULDN'T THESE NOT HAPPEN?");
                 }
@@ -1569,7 +1575,7 @@ public class SyncProcessor implements SynchronizerStatus {
       this.localRowConflictType = localRowConflictType;
     }
 
-    boolean identicalValues() {
+    boolean identicalValuesExceptRowETagAndFilterScope(ArrayList<ColumnDefinition> orderedDefns) {
       if ((serverRow.getSavepointTimestamp() == null) ? (localRow.getSavepointTimestamp() != null)
           : !serverRow.getSavepointTimestamp().equals(localRow.getSavepointTimestamp())) {
         return false;
@@ -1578,20 +1584,12 @@ public class SyncProcessor implements SynchronizerStatus {
           : !serverRow.getSavepointCreator().equals(localRow.getSavepointCreator())) {
         return false;
       }
-      if ((serverRow.getFilterScope() == null) ? (localRow.getFilterScope() != null) : !serverRow
-          .getFilterScope().equals(localRow.getFilterScope())) {
-        return false;
-      }
       if ((serverRow.getFormId() == null) ? (localRow.getFormId() != null) : !serverRow.getFormId()
           .equals(localRow.getFormId())) {
         return false;
       }
       if ((serverRow.getLocale() == null) ? (localRow.getLocale() != null) : !serverRow.getLocale()
           .equals(localRow.getLocale())) {
-        return false;
-      }
-      if ((serverRow.getRowETag() == null) ? (localRow.getRowETag() != null) : !serverRow
-          .getRowETag().equals(localRow.getRowETag())) {
         return false;
       }
       if ((serverRow.getRowId() == null) ? (localRow.getRowId() != null) : !serverRow.getRowId()
@@ -1605,13 +1603,100 @@ public class SyncProcessor implements SynchronizerStatus {
       ArrayList<DataKeyValue> localValues = localRow.getValues();
       ArrayList<DataKeyValue> serverValues = serverRow.getValues();
 
+      if ( localValues == null && serverValues == null ) {
+        return true;
+      } else if ( localValues == null || serverValues == null ) {
+        return false;
+      }
+      
       if (localValues.size() != serverValues.size()) {
         return false;
+      }
+      
+      for (int i = 0 ; i < localValues.size() ; ++i ) {
+        DataKeyValue local = localValues.get(i);
+        DataKeyValue server = serverValues.get(i);
+        if ( !local.column.equals(server.column) ) {
+          return false;
+        }
+        if ( local.value == null && server.value == null ) {
+          continue;
+        } else if ( local.value == null || server.value == null ) {
+          return false;
+        } else if ( local.value.equals(server.value) ) {
+          continue;
+        }
+        
+        // NOT textually identical.
+        // 
+        // Everything must be textually identical except possibly number fields
+        // which may have rounding due to different database implementations,
+        // data representations, and marshaling libraries.
+        // 
+        ColumnDefinition cd = ColumnDefinition.find(orderedDefns, local.column);
+        if ( cd.getType().getDataType() == ElementDataType.number ) {
+          // !!Important!! Double.valueOf(str) handles NaN and +/-Infinity
+          Double localNumber = Double.valueOf(local.value);
+          Double serverNumber = Double.valueOf(server.value);
+          
+          if ( localNumber.equals(serverNumber) ) {
+            // simple case -- trailing zeros or string representation mix-up
+            // 
+            continue;
+          } else if ( localNumber.isInfinite() && serverNumber.isInfinite() ) {
+            // if they are both plus or both minus infinity, we have a match 
+            if ( Math.signum(localNumber) == Math.signum(serverNumber) ) {
+              continue;
+            } else {
+              return false;
+            }
+          } else if ( localNumber.isNaN() || localNumber.isInfinite() ||
+              serverNumber.isNaN() || serverNumber.isInfinite() ) {
+            // one or the other is special1
+            return false;
+          } else {
+            double localDbl = localNumber;
+            double serverDbl = serverNumber;
+            if ( localDbl == serverDbl ) {
+              continue;
+            }
+            // OK. We have two values like 9.80 and 9.8
+            // consider them equal if they are adjacent to each other.
+            double localNear = localDbl;
+            int idist = 0;
+            int idistMax = 128;
+            for ( idist = 0 ; idist < idistMax ; ++idist ) {
+              localNear = Math.nextAfter(localNear, serverDbl);
+              if ( localNear == serverDbl ) {
+                break;
+              }
+            }
+            if ( idist < idistMax ) {
+              continue;
+            }
+            return false;
+          }
+        } else {
+          // textual identity is required!
+          return false;
+        }
       }
       if (!localValues.containsAll(serverValues)) {
         return false;
       }
       return true;
+    }
+    
+    boolean identicalValues(ArrayList<ColumnDefinition> orderedDefns) {
+      if ((serverRow.getFilterScope() == null) ? (localRow.getFilterScope() != null) : !serverRow
+          .getFilterScope().equals(localRow.getFilterScope())) {
+        return false;
+      }
+      if ((serverRow.getRowETag() == null) ? (localRow.getRowETag() != null) : !serverRow
+          .getRowETag().equals(localRow.getRowETag())) {
+        return false;
+      }
+      return identicalValuesExceptRowETagAndFilterScope(orderedDefns);
     }
   };
 
