@@ -22,6 +22,8 @@
 	<string name="sync_progress_message_label">Sync Progress Message</string>
 	<string name="save_settings">Save settings</string>
 	<string name="auth_account">Authorize account</string>
+	<string name="sync_instance_files">Sync Instance Attachments</string>
+	<string name="defer_instance_files">Defer Instance Attachments</string>
 	<string name="sync_now_pull">Sync now</string>
 	<string name="sync_now_push">Reset App Server</string>
 

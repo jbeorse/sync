@@ -735,7 +735,7 @@ public class SyncProcessor implements SynchronizerStatus {
    * what have you.
    * </p>
    */
-  public void synchronizeDataRowsAndAttachments() {
+  public void synchronizeDataRowsAndAttachments(boolean deferInstanceAttachments) {
     log.i(TAG, "entered synchronize()");
     ODKFileUtils.assertDirectoryStructure(appName);
 
@@ -778,7 +778,7 @@ public class SyncProcessor implements SynchronizerStatus {
         }
       }
 
-      synchronizeTableDataRowsAndAttachments(te, orderedDefns, displayName);
+      synchronizeTableDataRowsAndAttachments(te, orderedDefns, displayName, deferInstanceAttachments);
       ++iMajorSyncStep;
     }
   }
@@ -807,7 +807,7 @@ public class SyncProcessor implements SynchronizerStatus {
    *          down.
    */
   private void synchronizeTableDataRowsAndAttachments(TableDefinitionEntry te,
-      ArrayList<ColumnDefinition> orderedColumns, String displayName) {
+      ArrayList<ColumnDefinition> orderedColumns, String displayName, boolean deferInstanceAttachments) {
     boolean success = true;
     boolean instanceFileSuccess = true;
     

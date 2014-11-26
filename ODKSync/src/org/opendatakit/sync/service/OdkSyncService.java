@@ -61,12 +61,12 @@ public class OdkSyncService extends Service {
 
   public boolean push(String appName) {
     AppSynchronizer sync = getSync(appName);
-    return sync.synchronize(true);
+    return sync.synchronize(true, false);
   }
 
-  public boolean synchronize(String appName) {
+  public boolean synchronize(String appName, boolean deferInstanceAttachments) {
     AppSynchronizer sync = getSync(appName);
-    return sync.synchronize(false);
+    return sync.synchronize(false, deferInstanceAttachments);
   }
 
   public SyncStatus getStatus(String appName) {

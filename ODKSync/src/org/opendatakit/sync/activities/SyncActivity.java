@@ -53,6 +53,7 @@ import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.ToggleButton;
 
 /**
  * An activity for downloading from and uploading to an ODK Aggregate instance.
@@ -83,6 +84,8 @@ public class SyncActivity extends Activity {
   String appName;
   private AccountManager accountManager;
 
+  private ToggleButton syncInstanceAttachments;
+  
   private TextView progressState;
   private TextView progressMessage;
 
@@ -101,6 +104,7 @@ public class SyncActivity extends Activity {
     setTitle("ODK SYNC");
     setContentView(R.layout.aggregate_activity);
     findViewComponents();
+    syncInstanceAttachments.setChecked(true);
     disableButtons();
     try {
       SyncPreferences prefs = new SyncPreferences(this, appName);
@@ -161,6 +165,7 @@ public class SyncActivity extends Activity {
   private void findViewComponents() {
     uriField = (EditText) findViewById(R.id.aggregate_activity_uri_field);
     accountListSpinner = (Spinner) findViewById(R.id.aggregate_activity_account_list_spinner);
+    syncInstanceAttachments = (ToggleButton) findViewById(R.id.aggregate_activity_sync_instance_attachments);
     progressState = (TextView) findViewById(R.id.aggregate_activity_progress_state);
     progressMessage = (TextView) findViewById(R.id.aggregate_activity_progress_message);
   }
@@ -345,7 +350,8 @@ public class SyncActivity extends Activity {
       } else {
         try {
           disableButtons();
-          SyncApp.getInstance().getOdkSyncServiceProxy().synchronizeFromServer(appName);
+          boolean syncFiles = syncInstanceAttachments.isChecked();
+          SyncApp.getInstance().getOdkSyncServiceProxy().synchronizeFromServer(appName, !syncFiles);
         } catch (RemoteException e) {
           WebLogger.getLogger(appName).e(LOGTAG, "Problem with pull command");
         }

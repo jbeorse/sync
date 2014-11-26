@@ -56,9 +56,9 @@ public class AppSynchronizer {
     this.syncProgress = new SyncNotification(srvc, appName);
   }
 
-  public boolean synchronize(boolean push) {
+  public boolean synchronize(boolean push, boolean deferInstanceAttachments) {
     if (curThread == null || (!curThread.isAlive() || curThread.isInterrupted())) {
-      curTask = new SyncTask(service, push);
+      curTask = new SyncTask(service, push, deferInstanceAttachments);
       curThread = new Thread(curTask);
       status = SyncStatus.SYNCING;
       curThread.start();
@@ -83,10 +83,12 @@ public class AppSynchronizer {
 
     private Context cntxt;
     private boolean push;
+    private boolean deferInstanceAttachments;
 
-    public SyncTask(Context context, boolean push) {
+    public SyncTask(Context context, boolean push, boolean deferInstanceAttachments) {
       this.cntxt = context;
       this.push = push;
+      this.deferInstanceAttachments = deferInstanceAttachments;
     }
 
     @Override
@@ -166,7 +168,7 @@ public class AppSynchronizer {
         // was an app-level sync failure or if the particular tableId
         // experienced a table-level sync failure in the preceeding step.
 
-        processor.synchronizeDataRowsAndAttachments();
+        processor.synchronizeDataRowsAndAttachments(deferInstanceAttachments);
 
         boolean authProblems = false;
 
