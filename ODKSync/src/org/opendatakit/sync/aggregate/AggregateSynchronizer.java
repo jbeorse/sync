@@ -1518,14 +1518,15 @@ public class AggregateSynchronizer implements Synchronizer {
 
   @Override
   public boolean getFileAttachments(String instanceFileUri, String tableId, SyncRow serverRow,
-      ArrayList<ColumnDefinition> fileAttachmentColumns, boolean shouldDeleteLocal)
+      ArrayList<ColumnDefinition> fileAttachmentColumns, boolean deferInstanceAttachments, 
+      boolean shouldDeleteLocal)
       throws ClientWebException {
 
     if (fileAttachmentColumns.isEmpty()) {
       // no-op -- there are no file attachments in the dataset!
       return true;
     }
-
+    
     SyncETagsUtils seu = new SyncETagsUtils();
 
     if (newMechanism) {
@@ -1585,6 +1586,11 @@ public class AggregateSynchronizer implements Synchronizer {
                 + partialValue);
 
             if (!localFile.exists()) {
+
+              if (deferInstanceAttachments) {
+                return false;
+              }
+
               int statusCode = downloadFile(localFile, instanceFileDownloadUri);
               if (statusCode != HttpStatus.SC_OK) {
                 success = false;
@@ -1741,13 +1747,13 @@ public class AggregateSynchronizer implements Synchronizer {
 
   @Override
   public boolean putFileAttachments(String instanceFileUri, String tableId, SyncRow localRow,
-      ArrayList<ColumnDefinition> fileAttachmentColumns) throws ClientWebException {
+      ArrayList<ColumnDefinition> fileAttachmentColumns, boolean deferInstanceAttachments) throws ClientWebException {
 
     if (fileAttachmentColumns.isEmpty()) {
       // no-op -- there are no file attachments in the dataset!
       return true;
     }
-
+    
     SyncETagsUtils seu = new SyncETagsUtils();
 
     if (newMechanism) {
@@ -1805,15 +1811,21 @@ public class AggregateSynchronizer implements Synchronizer {
                 + partialValue);
 
             if (localFile.exists()) {
+
               // issue a GET. If the return is NOT_MODIFIED, then we don't need to POST it.
               int statusCode = downloadFile(localFile, instanceFileDownloadUri);
               if (statusCode == HttpStatus.SC_NOT_MODIFIED) {
                 // no-op... what is on server matches local.
               } else if (statusCode == HttpStatus.SC_OK) {
-                // TODO: do we need to worry about net login sites corrupting things?
+                // The test for ODK header ensures we detect wifi login overlays
                 // this should not happen -- indicates something is corrupted.
                 log.e(LOGTAG, "Unexpectedly overwriting attachment: " + instanceFileDownloadUri.toString());
               } else if (statusCode == HttpStatus.SC_NOT_FOUND || statusCode == HttpStatus.SC_NO_CONTENT) {
+
+                if ( deferInstanceAttachments ) {
+                  return false;
+                }
+
                 // upload it...
                 boolean outcome = uploadInstanceFile(localFile, instanceFileUri,
                     instanceId, dkv.value);
