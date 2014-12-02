@@ -148,7 +148,7 @@ public class SyncProcessor implements SynchronizerStatus {
   public void synchronizeConfigurationAndContent(boolean pushToServer) {
     log.i(TAG, "entered synchronizeConfigurationAndContent()");
     ODKFileUtils.assertDirectoryStructure(appName);
-    android.os.Debug.waitForDebugger();
+    // android.os.Debug.waitForDebugger();
 
     syncProgress.updateNotification(SyncProgressState.STARTING,
         context.getString(R.string.retrieving_tables_list_from_server),
