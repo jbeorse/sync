@@ -91,7 +91,6 @@ import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
 import org.opendatakit.sync.service.SyncProgressState;
 
 import android.content.Context;
-import android.net.Uri;
 
 /**
  * Implementation of {@link Synchronizer} for ODK Aggregate.
@@ -1222,14 +1221,11 @@ public class AggregateSynchronizer implements Synchronizer {
     return true;
   }
 
-  private boolean uploadInstanceFile(File file, String instanceFileUri,
-      String instanceId, String pathRelativeToInstanceIdFolder) {
-    URI filesUri = normalizeUri(instanceFileUri, instanceId + "/file/"
-        + pathRelativeToInstanceIdFolder);
-    log.i(LOGTAG, "[uploadFile] filePostUri: " + filesUri.toString());
+  private boolean uploadInstanceFile(File file, URI instanceFileUri) {
+    log.i(LOGTAG, "[uploadFile] filePostUri: " + instanceFileUri.toString());
     String ct = determineContentType(file.getName());
     MediaType contentType = MediaType.valueOf(ct);
-    ClientResponse response = buildResource(filesUri, contentType).post(file);
+    ClientResponse response = buildResource(instanceFileUri, contentType).post(file);
     if (response.getStatusCode() < 200 || response.getStatusCode() >= 300) {
       return false;
     }
@@ -1514,8 +1510,6 @@ public class AggregateSynchronizer implements Synchronizer {
     }
   }
 
-  static boolean newMechanism = true;
-
   @Override
   public boolean getFileAttachments(String instanceFileUri, String tableId, SyncRow serverRow,
       ArrayList<ColumnDefinition> fileAttachmentColumns, boolean deferInstanceAttachments, 
@@ -1529,220 +1523,119 @@ public class AggregateSynchronizer implements Synchronizer {
     
     SyncETagsUtils seu = new SyncETagsUtils();
 
-    if (newMechanism) {
-      /**********************************************
-       * 
-       * 
-       * 
-       * 
-       * With the new mechanism, we can directly fetch any file from the server
-       * in the fileAttachmentColumns. And we can include any md5Hash we might
-       * have of the local file. This would enable the server to say
-       * "yes, it is identical".
-       */
-      boolean success = true;
-      try {
-        // 1) Get the folder holding the instance attachments
-        String instancesFolderFullPath = ODKFileUtils.getInstanceFolder(appName, tableId,
-            serverRow.getRowId());
-        File instanceFolder = new File(instancesFolderFullPath);
+    /**********************************************
+     * 
+     * 
+     * 
+     * 
+     * With the new mechanism, we can directly fetch any file from the server
+     * in the fileAttachmentColumns. And we can include any md5Hash we might
+     * have of the local file. This would enable the server to say
+     * "yes, it is identical".
+     */
+    boolean success = true;
+    try {
+      // 1) Get the folder holding the instance attachments
+      String instancesFolderFullPath = ODKFileUtils.getInstanceFolder(appName, tableId,
+          serverRow.getRowId());
+      File instanceFolder = new File(instancesFolderFullPath);
 
-        // 2) get all the files in that folder...
-        List<String> relativePathsToAppFolderOnDevice = getAllFilesUnderFolder(
-            instancesFolderFullPath, null);
+      // 2) get all the files in that folder...
+      List<String> relativePathsToAppFolderOnDevice = getAllFilesUnderFolder(
+          instancesFolderFullPath, null);
 
-        // 1) Get the manifest of all files under this row's instanceId (rowId)
-        String instanceId = serverRow.getRowId();
-        for (DataKeyValue dkv : serverRow.getValues()) {
-          ColumnDefinition cd;
-          try {
-            cd = ColumnDefinition.find(fileAttachmentColumns, dkv.column);
-          } catch (IllegalArgumentException e) {
-            // expected...
-            continue;
-          }
-
-          if (dkv.value != null) {
-            String relativePath = dkv.value;
-            // clean up the value...
-            if ( relativePath.startsWith("/") ) {
-              relativePath = relativePath.substring(1);
-            }
-            // remove it from the local files list
-            relativePathsToAppFolderOnDevice.remove(relativePath);
-            
-            File localFile = ODKFileUtils.getAsFile(appName, relativePath);
-            String baseInstanceFolder = instanceFolder.getAbsolutePath();
-            String baseLocalAttachment = localFile.getAbsolutePath();
-            if ( !baseLocalAttachment.startsWith(baseInstanceFolder) ) {
-              throw new IllegalStateException("instance data file is not within the instances tree!");
-            }
-            String partialValue = baseLocalAttachment.substring(baseInstanceFolder.length());
-            if (partialValue.startsWith("/") ) {
-              partialValue = partialValue.substring(1);
-            }
-            
-            URI instanceFileDownloadUri = normalizeUri(instanceFileUri, instanceId + "/file/"
-                + partialValue);
-
-            if (!localFile.exists()) {
-
-              if (deferInstanceAttachments) {
-                return false;
-              }
-
-              int statusCode = downloadFile(localFile, instanceFileDownloadUri);
-              if (statusCode != HttpStatus.SC_OK) {
-                success = false;
-              } else {
-                String md5Hash = ODKFileUtils.getMd5Hash(appName, localFile);
-                seu.updateFileSyncETag(context, appName, instanceFileDownloadUri, tableId,
-                    localFile.lastModified(), md5Hash);
-              }
-            } else {
-              // assume that if the local file exists, it matches exactly the
-              // content on the server.
-              // this could be inaccurate if there are buggy programs on the
-              // device!
-              String md5hash = seu.getFileSyncETag(context, appName, instanceFileDownloadUri,
-                  tableId, localFile.lastModified());
-              if (md5hash == null) {
-                md5hash = ODKFileUtils.getMd5Hash(appName, localFile);
-                seu.updateFileSyncETag(context, appName, instanceFileDownloadUri, tableId,
-                    localFile.lastModified(), md5hash);
-              }
-            }
-          }
+      // 1) Get the manifest of all files under this row's instanceId (rowId)
+      String instanceId = serverRow.getRowId();
+      for (DataKeyValue dkv : serverRow.getValues()) {
+        ColumnDefinition cd;
+        try {
+          cd = ColumnDefinition.find(fileAttachmentColumns, dkv.column);
+        } catch (IllegalArgumentException e) {
+          // expected...
+          continue;
         }
 
-        // we usually do this, but, when we have a conflict row, we pull the
-        // server files down, and leave the local files. Upon the next sync,
-        // we will resolve what to do and clean up.
-        if (shouldDeleteLocal) {
-          for (String relativePath : relativePathsToAppFolderOnDevice) {
-            // remove local files that are not on server...
-            File localFile = ODKFileUtils.asAppFile(appName, relativePath);
-            if (!localFile.delete()) {
-              success = false;
-            }
+        if (dkv.value != null) {
+          String relativePath = dkv.value;
+          // clean up the value...
+          if ( relativePath.startsWith("/") ) {
+            relativePath = relativePath.substring(1);
           }
-        }
-        return success;
-      } catch (ClientWebException e) {
-        log.e(LOGTAG, "Exception while getting attachment: " + e.toString());
-        throw e;
-      } catch (Exception e) {
-        log.printStackTrace(e);
-        return false;
-      }
-      /******************************************************
-       * End of the new file attachment mechanism...
-       *
-       * 
-       * 
-       * 
-       * 
-       */
-    } else {
-      boolean success = true;
-      try {
-        // 1) Get the manifest of all files under this row's instanceId (rowId)
-        String instanceId = serverRow.getRowId();
-        URI instanceFileManifestUri = normalizeUri(instanceFileUri, instanceId + "/manifest");
-        Uri.Builder uriBuilder = Uri.parse(instanceFileManifestUri.toString()).buildUpon();
-        String url = uriBuilder.build().toString();
-        OdkTablesFileManifest manifest;
-        manifest = buildResource(instanceFileManifestUri).get(OdkTablesFileManifest.class);
-        List<OdkTablesFileManifestEntry> theList = null;
-        if (manifest != null) {
-          theList = manifest.getFiles();
-        }
-        if (theList == null) {
-          theList = Collections.emptyList();
-        }
-
-        // TODO: scan the row and pick apart the elements that specify a file.
-
-        // 2) Get the local files
-        String instancesFolderFullPath = ODKFileUtils.getInstanceFolder(appName, tableId,
-            serverRow.getRowId());
-        File instanceFolder = new File(instancesFolderFullPath);
-
-        List<String> relativePathsToAppFolderOnDevice = getAllFilesUnderFolder(
-            instancesFolderFullPath, null);
-
-        // we are getting files. So iterate over the remote files...
-        for (OdkTablesFileManifestEntry entry : theList) {
-          File localFile = new File(instanceFolder, entry.filename);
-
-          // if the file on the server is a placeholder, don't do anything
-          if (entry.contentLength == 0) {
-            // TODO: should we upload the file if we have it?
-            continue;
+          // remove it from the local files list
+          relativePathsToAppFolderOnDevice.remove(relativePath);
+          
+          File localFile = ODKFileUtils.getAsFile(appName, relativePath);
+          String baseInstanceFolder = instanceFolder.getAbsolutePath();
+          String baseLocalAttachment = localFile.getAbsolutePath();
+          if ( !baseLocalAttachment.startsWith(baseInstanceFolder) ) {
+            throw new IllegalStateException("instance data file is not within the instances tree!");
           }
-
-          URI uri = null;
-          URL urlFile = null;
-          try {
-            log.i(LOGTAG, "[downloadFile] downloading at url: " + entry.downloadUrl);
-            urlFile = new URL(entry.downloadUrl);
-            uri = urlFile.toURI();
-          } catch (MalformedURLException e) {
-            log.printStackTrace(e);
-            throw e;
-          } catch (URISyntaxException e) {
-            log.printStackTrace(e);
-            throw e;
+          String partialValue = baseLocalAttachment.substring(baseInstanceFolder.length());
+          if (partialValue.startsWith("/") ) {
+            partialValue = partialValue.substring(1);
           }
+          
+          URI instanceFileDownloadUri = normalizeUri(instanceFileUri, instanceId + "/file/"
+              + partialValue);
 
           if (!localFile.exists()) {
-            int statusCode = downloadFile(localFile, uri);
+
+            if (deferInstanceAttachments) {
+              return false;
+            }
+
+            int statusCode = downloadFile(localFile, instanceFileDownloadUri);
             if (statusCode != HttpStatus.SC_OK) {
               success = false;
             } else {
-              seu.updateFileSyncETag(context, appName, uri, tableId, localFile.lastModified(),
-                  entry.md5hash);
+              String md5Hash = ODKFileUtils.getMd5Hash(appName, localFile);
+              seu.updateFileSyncETag(context, appName, instanceFileDownloadUri, tableId,
+                  localFile.lastModified(), md5Hash);
             }
           } else {
-            String md5hash = seu.getFileSyncETag(context, appName, uri, tableId,
-                localFile.lastModified());
+            // assume that if the local file exists, it matches exactly the
+            // content on the server.
+            // this could be inaccurate if there are buggy programs on the
+            // device!
+            String md5hash = seu.getFileSyncETag(context, appName, instanceFileDownloadUri,
+                tableId, localFile.lastModified());
             if (md5hash == null) {
               md5hash = ODKFileUtils.getMd5Hash(appName, localFile);
-              seu.updateFileSyncETag(context, appName, uri, tableId, localFile.lastModified(),
-                  md5hash);
-            }
-            if (!entry.md5hash.equals(md5hash)) {
-              log.e(LOGTAG, "File " + localFile.getAbsolutePath()
-                  + " MD5Hash has changed from that on server -- this is not supposed to happen!");
-              success = false;
-            }
-          }
-          // remove it from the local files list
-          String relativePath = ODKFileUtils.asRelativePath(appName, localFile);
-          relativePathsToAppFolderOnDevice.remove(relativePath);
-        }
-
-        // we usually do this, but, when we have a conflict row, we pull the
-        // server files down, and leave the local files. Upon the next sync,
-        // we will resolve what to do and clean up.
-        if (shouldDeleteLocal) {
-          for (String relativePath : relativePathsToAppFolderOnDevice) {
-            // remove local files that are not on server...
-            File localFile = ODKFileUtils.asAppFile(appName, relativePath);
-            if (!localFile.delete()) {
-              success = false;
+              seu.updateFileSyncETag(context, appName, instanceFileDownloadUri, tableId,
+                  localFile.lastModified(), md5hash);
             }
           }
         }
-        return success;
-      } catch (ClientWebException e) {
-        log.e(LOGTAG, "Exception while getting attachment: " + e.toString());
-        throw e;
-      } catch (Exception e) {
-        log.printStackTrace(e);
-        return false;
       }
+
+      // we usually do this, but, when we have a conflict row, we pull the
+      // server files down, and leave the local files. Upon the next sync,
+      // we will resolve what to do and clean up.
+      if (shouldDeleteLocal) {
+        for (String relativePath : relativePathsToAppFolderOnDevice) {
+          // remove local files that are not on server...
+          File localFile = ODKFileUtils.asAppFile(appName, relativePath);
+          if (!localFile.delete()) {
+            success = false;
+          }
+        }
+      }
+      return success;
+    } catch (ClientWebException e) {
+      log.e(LOGTAG, "Exception while getting attachment: " + e.toString());
+      throw e;
+    } catch (Exception e) {
+      log.printStackTrace(e);
+      return false;
     }
+    /******************************************************
+     * End of the new file attachment mechanism...
+     *
+     * 
+     * 
+     * 
+     * 
+     */
   }
 
   @Override
@@ -1753,170 +1646,104 @@ public class AggregateSynchronizer implements Synchronizer {
       // no-op -- there are no file attachments in the dataset!
       return true;
     }
-    
-    SyncETagsUtils seu = new SyncETagsUtils();
 
-    if (newMechanism) {
-      /**********************************************
-       * 
-       * 
-       * 
-       * 
-       * With the new mechanism, we can directly fetch any file from the server
-       * in the fileAttachmentColumns. For PUT, we don't know if the local file
-       * exists on the server, so we need to PUT every attachment. This can be 
-       * done by retrieving the manifest, and comparing that against the local 
-       * directory, or we can issue an if-none-match GET request for each file 
-       * we need. If we do not get a NOT_MODIFIED return, then we upload it. 
-       */
-      boolean success = true;
-      try {
-        // 1) Get the folder holding the instance attachments
-        String instancesFolderFullPath = ODKFileUtils.getInstanceFolder(appName, tableId,
-            localRow.getRowId());
-        File instanceFolder = new File(instancesFolderFullPath);
+    /**********************************************
+     * 
+     * 
+     * 
+     * 
+     * With the new mechanism, we can directly fetch any file from the server
+     * in the fileAttachmentColumns. For PUT, we don't know if the local file
+     * exists on the server, so we need to PUT every attachment. This can be 
+     * done by retrieving the manifest, and comparing that against the local 
+     * directory, or we can issue an if-none-match GET request for each file 
+     * we need. If we do not get a NOT_MODIFIED return, then we upload it. 
+     */
+    boolean success = true;
+    try {
+      // 1) Get the folder holding the instance attachments
+      String instancesFolderFullPath = ODKFileUtils.getInstanceFolder(appName, tableId,
+          localRow.getRowId());
+      File instanceFolder = new File(instancesFolderFullPath);
 
-        // 2) iterate over all file attachment columns
-        //    try to GET that file. If the GET fails with NOT_MODIFIED,
-        //    then do nothing. Otherwise, POST the file to the server.
-        String instanceId = localRow.getRowId();
-        for (DataKeyValue dkv : localRow.getValues()) {
-          ColumnDefinition cd;
-          try {
-            cd = ColumnDefinition.find(fileAttachmentColumns, dkv.column);
-          } catch (IllegalArgumentException e) {
-            // expected...
-            continue;
+      // 2) iterate over all file attachment columns
+      //    try to GET that file. If the GET fails with NOT_MODIFIED,
+      //    then do nothing. Otherwise, POST the file to the server.
+      String instanceId = localRow.getRowId();
+      for (DataKeyValue dkv : localRow.getValues()) {
+        ColumnDefinition cd;
+        try {
+          cd = ColumnDefinition.find(fileAttachmentColumns, dkv.column);
+        } catch (IllegalArgumentException e) {
+          // expected...
+          continue;
+        }
+
+        if (dkv.value != null) {
+          String relativePath = dkv.value;
+          // clean up the value...
+          if ( relativePath.startsWith("/") ) {
+            relativePath = relativePath.substring(1);
           }
 
-          if (dkv.value != null) {
-            String relativePath = dkv.value;
-            // clean up the value...
-            if ( relativePath.startsWith("/") ) {
-              relativePath = relativePath.substring(1);
-            }
+          File localFile = ODKFileUtils.asAppFile(appName, relativePath);
+          String baseInstanceFolder = instanceFolder.getAbsolutePath();
+          String baseLocalAttachment = localFile.getAbsolutePath();
+          if ( !baseLocalAttachment.startsWith(baseInstanceFolder) ) {
+            throw new IllegalStateException("instance data file is not within the instances tree!");
+          }
+          String partialValue = baseLocalAttachment.substring(baseInstanceFolder.length());
+          if (partialValue.startsWith("/") ) {
+            partialValue = partialValue.substring(1);
+          }
 
-            File localFile = ODKFileUtils.asAppFile(appName, relativePath);
-            String baseInstanceFolder = instanceFolder.getAbsolutePath();
-            String baseLocalAttachment = localFile.getAbsolutePath();
-            if ( !baseLocalAttachment.startsWith(baseInstanceFolder) ) {
-              throw new IllegalStateException("instance data file is not within the instances tree!");
-            }
-            String partialValue = baseLocalAttachment.substring(baseInstanceFolder.length());
-            if (partialValue.startsWith("/") ) {
-              partialValue = partialValue.substring(1);
-            }
+          URI instanceFileDownloadUri = normalizeUri(instanceFileUri, instanceId + "/file/"
+              + partialValue);
 
-            URI instanceFileDownloadUri = normalizeUri(instanceFileUri, instanceId + "/file/"
-                + partialValue);
+          if (localFile.exists()) {
 
-            if (localFile.exists()) {
+            // issue a GET. If the return is NOT_MODIFIED, then we don't need to POST it.
+            int statusCode = downloadFile(localFile, instanceFileDownloadUri);
+            if (statusCode == HttpStatus.SC_NOT_MODIFIED) {
+              // no-op... what is on server matches local.
+            } else if (statusCode == HttpStatus.SC_OK) {
+              // The test for ODK header ensures we detect wifi login overlays
+              // this should not happen -- indicates something is corrupted.
+              log.e(LOGTAG, "Unexpectedly overwriting attachment: " + instanceFileDownloadUri.toString());
+            } else if (statusCode == HttpStatus.SC_NOT_FOUND || statusCode == HttpStatus.SC_NO_CONTENT) {
 
-              // issue a GET. If the return is NOT_MODIFIED, then we don't need to POST it.
-              int statusCode = downloadFile(localFile, instanceFileDownloadUri);
-              if (statusCode == HttpStatus.SC_NOT_MODIFIED) {
-                // no-op... what is on server matches local.
-              } else if (statusCode == HttpStatus.SC_OK) {
-                // The test for ODK header ensures we detect wifi login overlays
-                // this should not happen -- indicates something is corrupted.
-                log.e(LOGTAG, "Unexpectedly overwriting attachment: " + instanceFileDownloadUri.toString());
-              } else if (statusCode == HttpStatus.SC_NOT_FOUND || statusCode == HttpStatus.SC_NO_CONTENT) {
+              if ( deferInstanceAttachments ) {
+                return false;
+              }
 
-                if ( deferInstanceAttachments ) {
-                  return false;
-                }
-
-                // upload it...
-                boolean outcome = uploadInstanceFile(localFile, instanceFileUri,
-                    instanceId, dkv.value);
-                if (!outcome) {
-                  success = false;
-                }
-              } else {
+              // upload it...
+              boolean outcome = uploadInstanceFile(localFile, instanceFileDownloadUri);
+              if (!outcome) {
                 success = false;
               }
             } else {
-              // we will pull these files later during a getFileAttachments() call, if needed...
-            }
-          }
-        }
-        return success;
-      } catch (ClientWebException e) {
-        log.e(LOGTAG, "Exception while putting attachment: " + e.toString());
-        throw e;
-      } catch (Exception e) {
-        log.e(LOGTAG, "Exception during sync: " + e.toString());
-        return false;
-      }
-      /******************************************************
-       * End of the new file attachment mechanism...
-       *
-       * 
-       * 
-       * 
-       * 
-       */
-    } else {
-      boolean success = true;
-      try {
-        // 1) Get the manifest of all files under this row's instanceId (rowId)
-        String instanceId = localRow.getRowId();
-        URI instanceFileManifestUri = normalizeUri(instanceFileUri, instanceId + "/manifest");
-        OdkTablesFileManifest manifest;
-        manifest = buildResource(instanceFileManifestUri).get(OdkTablesFileManifest.class);
-        List<OdkTablesFileManifestEntry> theList = null;
-        if (manifest != null) {
-          theList = manifest.getFiles();
-        }
-        if (theList == null) {
-          theList = Collections.emptyList();
-        }
-
-        // TODO: scan the row and pick apart the elements that specify a file.
-
-        // 2) Get the local files
-        String instancesFolderFullPath = ODKFileUtils.getInstanceFolder(appName, tableId,
-            instanceId);
-        File instanceFolder = new File(instancesFolderFullPath);
-        String pathPrefix = ODKFileUtils.asRelativePath(appName, instanceFolder);
-
-        List<String> relativePathsToAppFolderOnDevice = getAllFilesUnderFolder(
-            instancesFolderFullPath, null);
-
-        // we are putting files. So iterate over the local files...
-        for (String relativePath : relativePathsToAppFolderOnDevice) {
-          File localFile = ODKFileUtils.asAppFile(appName, relativePath);
-
-          // strip off the instance folder and slash.
-          String partialPath = relativePath.substring(pathPrefix.length() + 1);
-          OdkTablesFileManifestEntry entry = null;
-          for (OdkTablesFileManifestEntry e : theList) {
-            if (e.filename.equals(partialPath)) {
-              entry = e;
-              break;
-            }
-          }
-          if (entry == null) {
-            // upload the file
-            boolean outcome = uploadInstanceFile(localFile, instanceFileUri,
-                instanceId, partialPath);
-            if (!outcome) {
               success = false;
             }
-          } else if (!entry.md5hash.equals(ODKFileUtils.getMd5Hash(appName, localFile))) {
-            success = false;
-            log.e(LOGTAG, "File " + localFile.getAbsolutePath()
-                + " MD5Hash has changed from that on server -- this is not supposed to happen!");
+          } else {
+            // we will pull these files later during a getFileAttachments() call, if needed...
           }
         }
-        return success;
-      } catch (ClientWebException e) {
-        log.e(LOGTAG, "Exception while putting attachment: " + e.toString());
-        throw e;
-      } catch (Exception e) {
-        log.e(LOGTAG, "Exception during sync: " + e.toString());
-        return false;
       }
+      return success;
+    } catch (ClientWebException e) {
+      log.e(LOGTAG, "Exception while putting attachment: " + e.toString());
+      throw e;
+    } catch (Exception e) {
+      log.e(LOGTAG, "Exception during sync: " + e.toString());
+      return false;
     }
+    /******************************************************
+     * End of the new file attachment mechanism...
+     *
+     * 
+     * 
+     * 
+     * 
+     */
   }
 }
