@@ -524,10 +524,10 @@ public class AggregateSynchronizer implements Synchronizer {
    * .String)
    */
   @Override
-  public void deleteTable(String tableId) throws ClientWebException {
-    URI uri = normalizeUri(aggregateUri, getTablesUriFragment() + tableId);
+  public void deleteTable(TableResource table) throws ClientWebException {
+    URI uri = URI.create(table.getDefinitionUri()).normalize();
     buildResource(uri).delete();
-    this.resources.remove(tableId);
+    this.resources.remove(table.getTableId());
   }
 
   /*

@@ -110,11 +110,11 @@ public interface Synchronizer {
   /**
    * Delete the table with the given id from the server.
    *
-   * @param tableId
-   *          the unique identifier of the table
+   * @param table
+   *          the realizedTable resource to delete
    * @throws ClientWebException
    */
-  public void deleteTable(String tableId) throws ClientWebException;
+  public void deleteTable(TableResource table) throws ClientWebException;
 
   /**
    * Retrieve changes in the server state since the last synchronization.

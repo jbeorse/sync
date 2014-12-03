@@ -258,6 +258,8 @@ public class SyncProcessor implements SynchronizerStatus {
     ++iMajorSyncStep;
 
     if (pushToServer) {
+      Set<TableResource> serverTablesToDelete = new HashSet<TableResource>();
+      serverTablesToDelete.addAll(tables);
       // ///////////////////////////////////////////
       // / UPDATE SERVER CONTENT
       // / UPDATE SERVER CONTENT
@@ -288,14 +290,24 @@ public class SyncProcessor implements SynchronizerStatus {
             }
           }
 
+          if ( matchingResource != null ) {
+            serverTablesToDelete.remove(matchingResource);
+          }
           // do not sync the framework table
           synchronizeTableConfigurationAndContent(entry, orderedDefns, matchingResource, true);
         }
-        
+
         this.updateNotification(SyncProgressState.TABLE_FILES,
             R.string.table_level_file_sync_complete, new Object[] { localTableId }, 100.0, false);
         ++iMajorSyncStep;
       }
+      
+      // TODO: make this configurable?
+      // Generally should not allow this, as it is very dangerous
+      // delete any other tables 
+//      for ( TableResource tableToDelete : serverTablesToDelete ) {
+//        synchronizer.deleteTable(tableToDelete);
+//      }
     } else {
       // //////////////////////////////////////////
       // MIMIC SERVER CONTENT
@@ -321,7 +333,7 @@ public class SyncProcessor implements SynchronizerStatus {
         boolean doesNotExistLocally = true;
         boolean isLocalMatch = false;
         TableDefinitionEntry entry = null;
-        
+
         if (localTableIds.contains(serverTableId)) {
           localTableIdsToDelete.remove(serverTableId);
           doesNotExistLocally = false;
@@ -332,14 +344,14 @@ public class SyncProcessor implements SynchronizerStatus {
             db = DatabaseFactory.get().getDatabase(context, appName);
             entry = ODKDatabaseUtils.get().getTableDefinitionEntry(db, serverTableId);
             orderedDefns = TableUtil.get().getColumnDefinitions(db, appName, serverTableId);
-            if ( table.getSchemaETag().equals(entry.getSchemaETag()) ) {
+            if (table.getSchemaETag().equals(entry.getSchemaETag())) {
               isLocalMatch = true;
             }
           } catch (SQLiteException e) {
             mUserResult.setAppLevelStatus(Status.EXCEPTION);
             log.e(TAG,
-                "[synchronizeConfigurationAndContent] Unexpected exception getting columns of tableId: " + serverTableId + " exception: "
-                    + e.toString());
+                "[synchronizeConfigurationAndContent] Unexpected exception getting columns of tableId: "
+                    + serverTableId + " exception: " + e.toString());
             return;
           } finally {
             if (db != null) {
@@ -356,11 +368,11 @@ public class SyncProcessor implements SynchronizerStatus {
                 : R.string.verifying_table_schema_on_server), new Object[] { serverTableId }, 0.0,
             false);
 
-        if ( !isLocalMatch ) {
+        if (!isLocalMatch) {
           try {
             TableDefinitionResource definitionResource = synchronizer.getTableDefinition(table
                 .getDefinitionUri());
-  
+
             try {
               db = DatabaseFactory.get().getDatabase(context, appName);
               orderedDefns = addTableFromDefinitionResource(db, definitionResource,
@@ -479,7 +491,7 @@ public class SyncProcessor implements SynchronizerStatus {
     // if we're successful at the end.
 
     String tableId = te.getTableId();
-    
+
     this.updateNotification(SyncProgressState.TABLE_FILES,
         R.string.verifying_table_schema_on_server, new Object[] { tableId }, 0.0, false);
     final TableResult tableResult = mUserResult.getTableResult(tableId);
@@ -495,7 +507,7 @@ public class SyncProcessor implements SynchronizerStatus {
         db = null;
       }
     }
-    
+
     try {
       String dataETag = te.getLastDataETag();
       String schemaETag = te.getSchemaETag();
@@ -506,7 +518,8 @@ public class SyncProcessor implements SynchronizerStatus {
 
         if (!pushLocalTableLevelFiles) {
           // the table on the server is missing. Need to ask user what to do...
-          // we should never really get in this state (should be caught up in caller)
+          // we should never really get in this state (should be caught up in
+          // caller)
           tableResult.setServerHadSchemaChanges(true);
           tableResult
               .setMessage("Server no longer has table! Deleting it locally. Reset App Server to upload.");
@@ -575,17 +588,17 @@ public class SyncProcessor implements SynchronizerStatus {
       // local table to be ready for any data merge with the server's table.
 
       /**************************
-       * PART 1A: UPDATE THE TABLE SCHEMA. This should generally not happen.
-       * But we allow a server wipe and re-install by another user with the
-       * same physical schema to match ours even when our schemaETag differs.
-       * IN this case, we need to mark our data as needing a full re-sync.
+       * PART 1A: UPDATE THE TABLE SCHEMA. This should generally not happen. But
+       * we allow a server wipe and re-install by another user with the same
+       * physical schema to match ours even when our schemaETag differs. IN this
+       * case, we need to mark our data as needing a full re-sync.
        **************************/
       if (!resource.getSchemaETag().equals(schemaETag)) {
         // the server was re-installed by a different device.
-        // verify that our table definition is identical to the 
+        // verify that our table definition is identical to the
         // server, and, if it is, update our schemaETag to match
         // the server's.
-        
+
         log.d(TAG, "updateDbFromServer setServerHadSchemaChanges(true)");
         tableResult.setServerHadSchemaChanges(true);
 
@@ -778,13 +791,28 @@ public class SyncProcessor implements SynchronizerStatus {
         }
       }
 
-      synchronizeTableDataRowsAndAttachments(te, orderedDefns, displayName, deferInstanceAttachments);
+      synchronizeTableDataRowsAndAttachments(te, orderedDefns, displayName,
+          deferInstanceAttachments);
       ++iMajorSyncStep;
     }
   }
 
   private Double perRowIncrement;
   private int rowsProcessed;
+
+  private static class SyncRowPending {
+    final SyncRow syncRow;
+    final boolean getOnly;
+    final boolean shouldDeleteFiles;
+    final boolean updateState;
+
+    SyncRowPending(SyncRow syncRow, boolean getOnly, boolean shouldDeleteFiles, boolean updateState) {
+      this.syncRow = syncRow;
+      this.getOnly = getOnly;
+      this.shouldDeleteFiles = shouldDeleteFiles;
+      this.updateState = updateState;
+    }
+  }
 
   /**
    * Synchronize the table data rows.
@@ -807,17 +835,18 @@ public class SyncProcessor implements SynchronizerStatus {
    *          down.
    */
   private void synchronizeTableDataRowsAndAttachments(TableDefinitionEntry te,
-      ArrayList<ColumnDefinition> orderedColumns, String displayName, boolean deferInstanceAttachments) {
+      ArrayList<ColumnDefinition> orderedColumns, String displayName,
+      boolean deferInstanceAttachments) {
     boolean success = true;
     boolean instanceFileSuccess = true;
-    
+
     ArrayList<ColumnDefinition> fileAttachmentColumns = new ArrayList<ColumnDefinition>();
-    for ( ColumnDefinition cd : orderedColumns ) {
-      if ( cd.getType().getDataType() == ElementDataType.rowpath ) {
+    for (ColumnDefinition cd : orderedColumns) {
+      if (cd.getType().getDataType() == ElementDataType.rowpath) {
         fileAttachmentColumns.add(cd);
       }
     }
-    
+
     // Prepare the tableResult. We'll start it as failure, and only update it
     // if we're successful at the end.
     String tableId = te.getTableId();
@@ -972,7 +1001,7 @@ public class SyncProcessor implements SynchronizerStatus {
 
             // localRow SyncState.synced_pending_files no changes pulled from
             // server
-            List<SyncRow> rowsToPushFileAttachments = new ArrayList<SyncRow>();
+            List<SyncRowPending> rowsToPushFileAttachments = new ArrayList<SyncRowPending>();
 
             // loop through the localRow table
             for (int i = 0; i < localDataTable.getNumberOfRows(); i++) {
@@ -997,7 +1026,8 @@ public class SyncProcessor implements SynchronizerStatus {
                 } else if (state == SyncState.deleted) {
                   rowsToDeleteOnServer.add(convertToSyncRow(orderedColumns, localRow));
                 } else if (state == SyncState.synced_pending_files) {
-                  rowsToPushFileAttachments.add(convertToSyncRow(orderedColumns, localRow));
+                  rowsToPushFileAttachments.add(new SyncRowPending(convertToSyncRow(orderedColumns,
+                      localRow), false, true, true));
                 }
                 // otherwise, it is in the synced state or in_conflict state
                 // and nothing should be done with it...
@@ -1114,8 +1144,9 @@ public class SyncProcessor implements SynchronizerStatus {
                     localRow), false, localRowConflictType);
 
                 if (!syncRow.identicalValues(orderedColumns)) {
-                  if ( syncRow.identicalValuesExceptRowETagAndFilterScope(orderedColumns)) {
-                    // just apply the server RowETag and filterScope to the local row
+                  if (syncRow.identicalValuesExceptRowETagAndFilterScope(orderedColumns)) {
+                    // just apply the server RowETag and filterScope to the
+                    // local row
                     rowsToUpdateLocally.add(new FileSyncRow(serverRow, convertToSyncRow(
                         orderedColumns, localRow), true));
                   } else {
@@ -1169,24 +1200,17 @@ public class SyncProcessor implements SynchronizerStatus {
               try {
                 db = DatabaseFactory.get().getDatabase(context, appName);
                 db.beginTransaction();
-                success = deleteRowsInDb(db, resource, tableId, rowsToDeleteLocally, fileAttachmentColumns, deferInstanceAttachments, tableResult);
+                success = deleteRowsInDb(db, resource, tableId, rowsToDeleteLocally,
+                    fileAttachmentColumns, deferInstanceAttachments, tableResult);
 
-                if (!insertRowsInDb(db, resource, tableId, orderedColumns, rowsToInsertLocally, fileAttachmentColumns,
-                    deferInstanceAttachments, tableResult)) {
-                  instanceFileSuccess = false;
-                }
-                boolean[] results = updateRowsInDb(db, resource, tableId, orderedColumns,
-                    rowsToUpdateLocally, fileAttachmentColumns, deferInstanceAttachments, tableResult);
-                if (!results[0]) {
-                  success = false;
-                }
-                if (!results[1]) {
-                  instanceFileSuccess = false;
-                }
-                if (!conflictRowsInDb(db, resource, tableId, orderedColumns,
-                    rowsToMoveToInConflictLocally, fileAttachmentColumns, deferInstanceAttachments, tableResult)) {
-                  instanceFileSuccess = false;
-                }
+                insertRowsInDb(db, resource, tableId, orderedColumns, rowsToInsertLocally,
+                    rowsToPushFileAttachments, tableResult);
+
+                updateRowsInDb(db, resource, tableId, orderedColumns, rowsToUpdateLocally,
+                    rowsToPushFileAttachments, tableResult);
+
+                conflictRowsInDb(db, resource, tableId, orderedColumns,
+                    rowsToMoveToInConflictLocally, rowsToPushFileAttachments, tableResult);
 
                 // If we made it here and there was data, then we successfully
                 // updated the data from the server.
@@ -1249,7 +1273,7 @@ public class SyncProcessor implements SynchronizerStatus {
               allAlteredRows.addAll(rowsToDeleteOnServer);
 
               ArrayList<RowOutcome> specialCases = new ArrayList<RowOutcome>();
-              
+
               if (!allAlteredRows.isEmpty()) {
                 int offset = 0;
                 while (offset < allAlteredRows.size()) {
@@ -1259,51 +1283,62 @@ public class SyncProcessor implements SynchronizerStatus {
                     max = allAlteredRows.size();
                   }
                   List<SyncRow> segmentAlter = allAlteredRows.subList(offset, max);
-                  RowOutcomeList outcomes = synchronizer.alterRows(tableId,
-                      te.getSchemaETag(), te.getLastDataETag(), segmentAlter);
-                  
-                  
+                  RowOutcomeList outcomes = synchronizer.alterRows(tableId, te.getSchemaETag(),
+                      te.getLastDataETag(), segmentAlter);
+
                   if (outcomes.getRows().size() != segmentAlter.size()) {
                     throw new IllegalStateException("Unexpected partial return?");
                   }
 
                   // process outcomes...
-                  count = processRowOutcomes( te, resource, tableResult, 
-                      orderedColumns, fileAttachmentColumns, deferInstanceAttachments, count, allAlteredRows.size(),
-                      segmentAlter, outcomes.getRows(), specialCases);
+                  count = processRowOutcomes(te, resource, tableResult, orderedColumns,
+                      rowsToPushFileAttachments, count, allAlteredRows.size(), segmentAlter,
+                      outcomes.getRows(), specialCases);
 
                   // process next segment...
                   offset = max;
                 }
               }
-              
+
               serverSuccess = specialCases.isEmpty();
 
               // And try to push the file attachments...
               count = 0;
-              for (SyncRow syncRow : rowsToPushFileAttachments) {
-                boolean outcome = synchronizer.putFileAttachments(resource.getInstanceFilesUri(),
-                    tableId, syncRow, fileAttachmentColumns, deferInstanceAttachments);
+              for (SyncRowPending syncRowPending : rowsToPushFileAttachments) {
+                boolean outcome = true;
+                if (!syncRowPending.getOnly) {
+                  outcome = synchronizer.putFileAttachments(resource.getInstanceFilesUri(),
+                      tableId, syncRowPending.syncRow, fileAttachmentColumns,
+                      deferInstanceAttachments);
+                }
                 if (outcome) {
                   outcome = synchronizer.getFileAttachments(resource.getInstanceFilesUri(),
-                      tableId, syncRow, fileAttachmentColumns, deferInstanceAttachments, true);
-                  if (outcome) {
-                    SQLiteDatabase db = null;
+                      tableId, syncRowPending.syncRow, fileAttachmentColumns,
+                      deferInstanceAttachments, syncRowPending.shouldDeleteFiles);
+                  
+                  if (syncRowPending.updateState) {
+                    if (outcome) {
+                      // OK -- we succeeded in putting/getting all attachments
+                      // update our state to the synced state. 
+                      SQLiteDatabase db = null;
 
-                    try {
-                      db = DatabaseFactory.get().getDatabase(context, appName);
-                      ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId,
-                          syncRow.getRowId(), syncRow.getRowETag(), SyncState.synced);
-                    } finally {
-                      if (db != null) {
-                        db.close();
-                        db = null;
+                      try {
+                        db = DatabaseFactory.get().getDatabase(context, appName);
+                        ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId,
+                            syncRowPending.syncRow.getRowId(), syncRowPending.syncRow.getRowETag(),
+                            SyncState.synced);
+                      } finally {
+                        if (db != null) {
+                          db.close();
+                          db = null;
+                        }
                       }
+                    } else {
+                      // only care about instance file status if we are trying
+                      // to update state
+                      instanceFileSuccess = false;
                     }
                   }
-                }
-                if (!outcome) {
-                  instanceFileSuccess = false;
                 }
                 tableResult.incLocalAttachmentRetries();
                 ++count;
@@ -1395,14 +1430,14 @@ public class SyncProcessor implements SynchronizerStatus {
     }
   }
 
-  private int processRowOutcomes(TableDefinitionEntry te, TableResource resource, TableResult tableResult, 
-      ArrayList<ColumnDefinition> orderedColumns, ArrayList<ColumnDefinition> fileAttachmentColumns, boolean deferInstanceAttachments, 
-      int countSoFar, int totalOutcomesSize,
-      List<SyncRow> segmentAlter, ArrayList<RowOutcome> outcomes, ArrayList<RowOutcome> specialCases ) {
+  private int processRowOutcomes(TableDefinitionEntry te, TableResource resource,
+      TableResult tableResult, ArrayList<ColumnDefinition> orderedColumns,
+      List<SyncRowPending> rowsToPushFileAttachments, int countSoFar, int totalOutcomesSize,
+      List<SyncRow> segmentAlter, ArrayList<RowOutcome> outcomes, ArrayList<RowOutcome> specialCases) {
 
     ArrayList<FileSyncRow> rowsToMoveToInConflictLocally = new ArrayList<FileSyncRow>();
     String lastDataETag = null;
-    
+
     for (int i = 0; i < segmentAlter.size(); ++i) {
       RowOutcome r = outcomes.get(i);
       SyncRow syncRow = segmentAlter.get(i);
@@ -1413,19 +1448,20 @@ public class SyncProcessor implements SynchronizerStatus {
 
         lastDataETag = r.getDataETagAtModification();
 
-        if ( r.isDeleted() ) {
+        if (r.isDeleted()) {
           // DELETE
           SQLiteDatabase db = null;
           try {
             db = DatabaseFactory.get().getDatabase(context, appName);
             // move the local record into the 'new_row' sync state
             // so it can be physically deleted.
-            ODKDatabaseUtils.get().updateRowETagAndSyncState(db, resource.getTableId(), r.getRowId(),
-                null, SyncState.new_row);
+            ODKDatabaseUtils.get().updateRowETagAndSyncState(db, resource.getTableId(),
+                r.getRowId(), null, SyncState.new_row);
             // !!Important!! update the rowETag in our copy of this row.
             syncRow.setRowETag(r.getRowETag());
             // and physically delete row and attachments from database.
-            ODKDatabaseUtils.get().deleteDataInExistingDBTableWithId(db, appName, resource.getTableId(), r.getRowId());
+            ODKDatabaseUtils.get().deleteDataInExistingDBTableWithId(db, appName,
+                resource.getTableId(), r.getRowId());
             tableResult.incServerDeletes();
           } finally {
             if (db != null) {
@@ -1438,10 +1474,11 @@ public class SyncProcessor implements SynchronizerStatus {
 
           try {
             db = DatabaseFactory.get().getDatabase(context, appName);
-            ODKDatabaseUtils.get().updateRowETagAndSyncState(db, resource.getTableId(), r.getRowId(),
-                r.getRowETag(), SyncState.synced_pending_files);
+            ODKDatabaseUtils.get().updateRowETagAndSyncState(db, resource.getTableId(),
+                r.getRowId(), r.getRowETag(), SyncState.synced_pending_files);
             // !!Important!! update the rowETag in our copy of this row.
             syncRow.setRowETag(r.getRowETag());
+            rowsToPushFileAttachments.add(new SyncRowPending(syncRow, false, true, true));
           } finally {
             if (db != null) {
               db.close();
@@ -1450,37 +1487,20 @@ public class SyncProcessor implements SynchronizerStatus {
           }
           // UPDATE or INSERT
           tableResult.incServerUpserts();
-  
-          boolean outcome = synchronizer.putFileAttachments(
-              resource.getInstanceFilesUri(), resource.getTableId(), syncRow, fileAttachmentColumns, deferInstanceAttachments);
-          if (outcome) {
-            // move to synced state
-            try {
-              db = DatabaseFactory.get().getDatabase(context, appName);
-              ODKDatabaseUtils.get().updateRowETagAndSyncState(db, resource.getTableId(),
-                  syncRow.getRowId(), syncRow.getRowETag(), SyncState.synced);
-            } finally {
-              if (db != null) {
-                db.close();
-                db = null;
-              }
-            }
-          } else {
-            // the fact that this is SUCCESS will indicate that the attachments are the issue
-            specialCases.add(r);
-          }
         }
-      } else if ( r.getOutcome() == OutcomeType.FAILED ) {
-        if ( r.getRowId() == null || !r.isDeleted() ) {
+      } else if (r.getOutcome() == OutcomeType.FAILED) {
+        if (r.getRowId() == null || !r.isDeleted()) {
           // should never occur!!!
-          throw new IllegalStateException("Unexpected null rowId or OutcomeType.FAILED when not deleting row");
+          throw new IllegalStateException(
+              "Unexpected null rowId or OutcomeType.FAILED when not deleting row");
         } else {
           // special case of a delete where server has no record of the row.
           // server should add row and mark it as deleted.
         }
-      } else if ( r.getOutcome() == OutcomeType.IN_CONFLICT ) {
-        // another device updated this record between the time we fetched changes 
-        // and the time we tried to update this record.  Transition the record
+      } else if (r.getOutcome() == OutcomeType.IN_CONFLICT) {
+        // another device updated this record between the time we fetched
+        // changes
+        // and the time we tried to update this record. Transition the record
         // locally into the conflicting state.
         // SyncState.deleted and server is not deleting
         // SyncState.new_row and record exists on server
@@ -1490,60 +1510,60 @@ public class SyncProcessor implements SynchronizerStatus {
         // no need to worry about server in_conflict records.
         // any server in_conflict rows will be cleaned up during the
         // update of the in_conflict state.
-        Integer localRowConflictType = syncRow.isDeleted() ? ConflictType.LOCAL_DELETED_OLD_VALUES 
+        Integer localRowConflictType = syncRow.isDeleted() ? ConflictType.LOCAL_DELETED_OLD_VALUES
             : ConflictType.LOCAL_UPDATED_UPDATED_VALUES;
 
-        Integer serverRowConflictType = r.isDeleted() ? ConflictType.SERVER_DELETED_OLD_VALUES 
+        Integer serverRowConflictType = r.isDeleted() ? ConflictType.SERVER_DELETED_OLD_VALUES
             : ConflictType.SERVER_UPDATED_UPDATED_VALUES;
 
         // figure out what the localRow conflict type sh
-        SyncRow serverRow = new SyncRow(r.getRowId(), r.getRowETag(), r.isDeleted(),
-            r.getFormId(), r.getLocale(), r.getSavepointType(),
-            r.getSavepointTimestamp(), r.getSavepointCreator(), r.getFilterScope(),
-            r.getValues()); 
-        FileSyncRow conflictRow = new FileSyncRow(serverRow,
-            syncRow, false, localRowConflictType);
+        SyncRow serverRow = new SyncRow(r.getRowId(), r.getRowETag(), r.isDeleted(), r.getFormId(),
+            r.getLocale(), r.getSavepointType(), r.getSavepointTimestamp(),
+            r.getSavepointCreator(), r.getFilterScope(), r.getValues());
+        FileSyncRow conflictRow = new FileSyncRow(serverRow, syncRow, false, localRowConflictType);
 
         rowsToMoveToInConflictLocally.add(conflictRow);
         // we transition all of these later, outside this processing loop...
-      } else if ( r.getOutcome() == OutcomeType.DENIED ) {
+      } else if (r.getOutcome() == OutcomeType.DENIED) {
         // user does not have privileges...
         specialCases.add(r);
       } else {
         // a new OutcomeType state was added!
         throw new IllegalStateException("Unexpected OutcomeType! " + r.getOutcome().name());
       }
-      
+
       ++countSoFar;
       ++rowsProcessed;
       if (rowsProcessed % ROWS_BETWEEN_PROGRESS_UPDATES == 0) {
-        this.updateNotification(SyncProgressState.ROWS, R.string.altering_server_row,
-            new Object[] { resource.getTableId(), countSoFar, totalOutcomesSize }, 10.0 + rowsProcessed
-                * perRowIncrement, false);
+        this.updateNotification(SyncProgressState.ROWS, R.string.altering_server_row, new Object[] {
+            resource.getTableId(), countSoFar, totalOutcomesSize }, 10.0 + rowsProcessed
+            * perRowIncrement, false);
       }
     }
-    
+
     {
       SQLiteDatabase db = null;
 
       try {
         db = DatabaseFactory.get().getDatabase(context, appName);
 
-        if (conflictRowsInDb(db, resource, resource.getTableId(), orderedColumns,
-            rowsToMoveToInConflictLocally, fileAttachmentColumns, deferInstanceAttachments, tableResult)) {
-          if ( lastDataETag != null ) {
-            // TODO: timing window here!!!!
-            // another updater could have interleaved a dataETagAtModification value. 
-            // so updating the lastDataETag here could cause us to miss those updates!!!
+        conflictRowsInDb(db, resource, resource.getTableId(), orderedColumns,
+            rowsToMoveToInConflictLocally, rowsToPushFileAttachments, tableResult);
 
-            ODKDatabaseUtils.get().updateDBTableETags(db, resource.getTableId(), te.getSchemaETag(),
-                lastDataETag);
+        if (lastDataETag != null) {
+          // TODO: timing window here!!!!
+          // another updater could have interleaved a dataETagAtModification
+          // value.
+          // so updating the lastDataETag here could cause us to miss those
+          // updates!!!
 
-            resource.setDataETag(lastDataETag);
-            te.setLastDataETag(lastDataETag);
-          }
+          ODKDatabaseUtils.get().updateDBTableETags(db, resource.getTableId(), te.getSchemaETag(),
+              lastDataETag);
+
+          resource.setDataETag(lastDataETag);
+          te.setLastDataETag(lastDataETag);
         }
-        
+
       } finally {
         if (db != null) {
           db.close();
@@ -1554,7 +1574,7 @@ public class SyncProcessor implements SynchronizerStatus {
 
     return countSoFar;
   }
-  
+
   static final class FileSyncRow {
     final SyncRow serverRow;
     final SyncRow localRow;
@@ -1604,61 +1624,61 @@ public class SyncProcessor implements SynchronizerStatus {
       ArrayList<DataKeyValue> localValues = localRow.getValues();
       ArrayList<DataKeyValue> serverValues = serverRow.getValues();
 
-      if ( localValues == null && serverValues == null ) {
+      if (localValues == null && serverValues == null) {
         return true;
-      } else if ( localValues == null || serverValues == null ) {
+      } else if (localValues == null || serverValues == null) {
         return false;
       }
-      
+
       if (localValues.size() != serverValues.size()) {
         return false;
       }
-      
-      for (int i = 0 ; i < localValues.size() ; ++i ) {
+
+      for (int i = 0; i < localValues.size(); ++i) {
         DataKeyValue local = localValues.get(i);
         DataKeyValue server = serverValues.get(i);
-        if ( !local.column.equals(server.column) ) {
+        if (!local.column.equals(server.column)) {
           return false;
         }
-        if ( local.value == null && server.value == null ) {
+        if (local.value == null && server.value == null) {
           continue;
-        } else if ( local.value == null || server.value == null ) {
+        } else if (local.value == null || server.value == null) {
           return false;
-        } else if ( local.value.equals(server.value) ) {
+        } else if (local.value.equals(server.value)) {
           continue;
         }
-        
+
         // NOT textually identical.
-        // 
+        //
         // Everything must be textually identical except possibly number fields
         // which may have rounding due to different database implementations,
         // data representations, and marshaling libraries.
-        // 
+        //
         ColumnDefinition cd = ColumnDefinition.find(orderedDefns, local.column);
-        if ( cd.getType().getDataType() == ElementDataType.number ) {
+        if (cd.getType().getDataType() == ElementDataType.number) {
           // !!Important!! Double.valueOf(str) handles NaN and +/-Infinity
           Double localNumber = Double.valueOf(local.value);
           Double serverNumber = Double.valueOf(server.value);
-          
-          if ( localNumber.equals(serverNumber) ) {
+
+          if (localNumber.equals(serverNumber)) {
             // simple case -- trailing zeros or string representation mix-up
-            // 
+            //
             continue;
-          } else if ( localNumber.isInfinite() && serverNumber.isInfinite() ) {
-            // if they are both plus or both minus infinity, we have a match 
-            if ( Math.signum(localNumber) == Math.signum(serverNumber) ) {
+          } else if (localNumber.isInfinite() && serverNumber.isInfinite()) {
+            // if they are both plus or both minus infinity, we have a match
+            if (Math.signum(localNumber) == Math.signum(serverNumber)) {
               continue;
             } else {
               return false;
             }
-          } else if ( localNumber.isNaN() || localNumber.isInfinite() ||
-              serverNumber.isNaN() || serverNumber.isInfinite() ) {
+          } else if (localNumber.isNaN() || localNumber.isInfinite() || serverNumber.isNaN()
+              || serverNumber.isInfinite()) {
             // one or the other is special1
             return false;
           } else {
             double localDbl = localNumber;
             double serverDbl = serverNumber;
-            if ( localDbl == serverDbl ) {
+            if (localDbl == serverDbl) {
               continue;
             }
             // OK. We have two values like 9.80 and 9.8
@@ -1666,13 +1686,13 @@ public class SyncProcessor implements SynchronizerStatus {
             double localNear = localDbl;
             int idist = 0;
             int idistMax = 128;
-            for ( idist = 0 ; idist < idistMax ; ++idist ) {
+            for (idist = 0; idist < idistMax; ++idist) {
               localNear = Math.nextAfter(localNear, serverDbl);
-              if ( localNear == serverDbl ) {
+              if (localNear == serverDbl) {
                 break;
               }
             }
-            if ( idist < idistMax ) {
+            if (idist < idistMax) {
               continue;
             }
             return false;
@@ -1687,7 +1707,7 @@ public class SyncProcessor implements SynchronizerStatus {
       }
       return true;
     }
-    
+
     boolean identicalValues(ArrayList<ColumnDefinition> orderedDefns) {
       if ((serverRow.getFilterScope() == null) ? (localRow.getFilterScope() != null) : !serverRow
           .getFilterScope().equals(localRow.getFilterScope())) {
@@ -1727,12 +1747,11 @@ public class SyncProcessor implements SynchronizerStatus {
     tableResult.setMessage(e.getMessage());
   }
 
-  private boolean conflictRowsInDb(SQLiteDatabase db, TableResource resource, String tableId,
-      ArrayList<ColumnDefinition> orderedColumns, List<FileSyncRow> changes, 
-      ArrayList<ColumnDefinition> fileAttachmentColumns, boolean deferInstanceAttachments, TableResult tableResult)
+  private void conflictRowsInDb(SQLiteDatabase db, TableResource resource, String tableId,
+      ArrayList<ColumnDefinition> orderedColumns, List<FileSyncRow> changes,
+      List<SyncRowPending> rowsToPushFileAttachments, TableResult tableResult)
       throws ClientWebException {
 
-    boolean fileSuccess = true;
     int count = 0;
     for (FileSyncRow change : changes) {
       SyncRow serverRow = change.serverRow;
@@ -1814,17 +1833,11 @@ public class SyncProcessor implements SynchronizerStatus {
 
         tableResult.incLocalConflicts();
 
-        // ensure we have the file attachments for the in_conflict row
+        // try to pull the file attachments for the in_conflict rows
         // it is OK if we can't get them, but they may be useful for
         // reconciliation
-        boolean outcome = synchronizer.getFileAttachments(resource.getInstanceFilesUri(), tableId,
-            serverRow, fileAttachmentColumns, deferInstanceAttachments, false);
-        if (!outcome) {
-          // we don't do anything on failure -- just log a warning.
-          // we need to leave the sync state as in_conflict.
-          fileSuccess = false;
-          log.w(TAG, "Unable to fetch file attachments from in_conflict row on server");
-        }
+        rowsToPushFileAttachments.add(new SyncRowPending(change.localRow, true, false, false));
+        rowsToPushFileAttachments.add(new SyncRowPending(serverRow, true, false, false));
       }
       ++count;
       ++rowsProcessed;
@@ -1834,14 +1847,12 @@ public class SyncProcessor implements SynchronizerStatus {
             10.0 + rowsProcessed * perRowIncrement, false);
       }
     }
-    return fileSuccess;
   }
 
-  private boolean insertRowsInDb(SQLiteDatabase db, TableResource resource, String tableId,
-      ArrayList<ColumnDefinition> orderedColumns, List<FileSyncRow> changes, 
-      ArrayList<ColumnDefinition> fileAttachmentColumns, boolean deferInstanceAttachments, TableResult tableResult)
+  private void insertRowsInDb(SQLiteDatabase db, TableResource resource, String tableId,
+      ArrayList<ColumnDefinition> orderedColumns, List<FileSyncRow> changes,
+      List<SyncRowPending> rowsToPushFileAttachments, TableResult tableResult)
       throws ClientWebException {
-    boolean fileSuccess = true;
     int count = 0;
     for (FileSyncRow change : changes) {
       SyncRow serverRow = change.serverRow;
@@ -1864,17 +1875,7 @@ public class SyncProcessor implements SynchronizerStatus {
           values, serverRow.getRowId());
       tableResult.incLocalInserts();
 
-      // ensure we have the file attachments for the inserted row
-      boolean outcome = synchronizer.getFileAttachments(resource.getInstanceFilesUri(), tableId,
-          serverRow, fileAttachmentColumns, deferInstanceAttachments, true);
-      if (outcome) {
-        // move to synced state
-        ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, serverRow.getRowId(),
-            serverRow.getRowETag(), SyncState.synced);
-
-      } else {
-        fileSuccess = false;
-      }
+      rowsToPushFileAttachments.add(new SyncRowPending(serverRow, true, true, true));
       ++count;
       ++rowsProcessed;
       if (rowsProcessed % ROWS_BETWEEN_PROGRESS_UPDATES == 0) {
@@ -1882,72 +1883,49 @@ public class SyncProcessor implements SynchronizerStatus {
             tableId, count, changes.size() }, 10.0 + rowsProcessed * perRowIncrement, false);
       }
     }
-    return fileSuccess;
   }
 
-  private boolean[] updateRowsInDb(SQLiteDatabase db, TableResource resource, String tableId,
-      ArrayList<ColumnDefinition> orderedColumns, List<FileSyncRow> changes, 
-      ArrayList<ColumnDefinition> fileAttachmentColumns, boolean deferInstanceAttachments, TableResult tableResult)
+  private void updateRowsInDb(SQLiteDatabase db, TableResource resource, String tableId,
+      ArrayList<ColumnDefinition> orderedColumns, List<FileSyncRow> changes,
+      List<SyncRowPending> rowsToPushFileAttachments, TableResult tableResult)
       throws ClientWebException {
-    boolean success = true;
-    boolean fileSuccess = true;
-
     int count = 0;
     for (FileSyncRow change : changes) {
       // if the localRow sync state was synced_pending_files,
       // ensure that all those files are uploaded before
       // we update the row. This ensures that all attachments
       // are saved before we revise the local row value.
-      boolean outcome = true;
       if (change.isRestPendingFiles) {
-        // we need to push our changes to the server first...
-        outcome = synchronizer.putFileAttachments(resource.getInstanceFilesUri(), tableId,
-            change.localRow, fileAttachmentColumns, deferInstanceAttachments);
+        log.w(TAG,
+            "file attachment at risk -- updating from server while in synced_pending_files state. rowId: "
+                + change.localRow.getRowId() + " rowETag: " + change.localRow.getRowETag());
       }
 
-      if (!outcome) {
-        // leave this row stale because we haven't been able to
-        // finish the post of the older row's file.
-        success = false;
-        fileSuccess = false;
-      } else {
-        // OK we have the files sync'd (if we needed to do that).
+      // update the row from the changes on the server
+      SyncRow serverRow = change.serverRow;
+      ContentValues values = new ContentValues();
 
-        // update the row from the changes on the server
-        SyncRow serverRow = change.serverRow;
-        ContentValues values = new ContentValues();
+      values.put(DataTableColumns.ROW_ETAG, serverRow.getRowETag());
+      values.put(DataTableColumns.SYNC_STATE, SyncState.synced_pending_files.name());
+      values.put(DataTableColumns.FILTER_TYPE, serverRow.getFilterScope().getType().name());
+      values.put(DataTableColumns.FILTER_VALUE, serverRow.getFilterScope().getValue());
+      values.put(DataTableColumns.FORM_ID, serverRow.getFormId());
+      values.put(DataTableColumns.LOCALE, serverRow.getLocale());
+      values.put(DataTableColumns.SAVEPOINT_TYPE, serverRow.getSavepointType());
+      values.put(DataTableColumns.SAVEPOINT_TIMESTAMP, serverRow.getSavepointTimestamp());
+      values.put(DataTableColumns.SAVEPOINT_CREATOR, serverRow.getSavepointCreator());
 
-        values.put(DataTableColumns.ROW_ETAG, serverRow.getRowETag());
-        values.put(DataTableColumns.SYNC_STATE, SyncState.synced_pending_files.name());
-        values.put(DataTableColumns.FILTER_TYPE, serverRow.getFilterScope().getType().name());
-        values.put(DataTableColumns.FILTER_VALUE, serverRow.getFilterScope().getValue());
-        values.put(DataTableColumns.FORM_ID, serverRow.getFormId());
-        values.put(DataTableColumns.LOCALE, serverRow.getLocale());
-        values.put(DataTableColumns.SAVEPOINT_TYPE, serverRow.getSavepointType());
-        values.put(DataTableColumns.SAVEPOINT_TIMESTAMP, serverRow.getSavepointTimestamp());
-        values.put(DataTableColumns.SAVEPOINT_CREATOR, serverRow.getSavepointCreator());
-
-        for (DataKeyValue entry : serverRow.getValues()) {
-          String colName = entry.column;
-          values.put(colName, entry.value);
-        }
-
-        ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, tableId, orderedColumns,
-            values, serverRow.getRowId());
-        tableResult.incLocalUpdates();
-
-        // and try to get the file attachments for the row
-        outcome = synchronizer.getFileAttachments(resource.getInstanceFilesUri(), tableId,
-            serverRow, fileAttachmentColumns, deferInstanceAttachments, true);
-        if (outcome) {
-          // move to synced state
-          ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId, serverRow.getRowId(),
-              serverRow.getRowETag(), SyncState.synced);
-        } else {
-          fileSuccess = false;
-        }
-        // otherwise, leave in synced_pending_files state.
+      for (DataKeyValue entry : serverRow.getValues()) {
+        String colName = entry.column;
+        values.put(colName, entry.value);
       }
+
+      ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, tableId, orderedColumns, values,
+          serverRow.getRowId());
+      tableResult.incLocalUpdates();
+
+      rowsToPushFileAttachments.add(new SyncRowPending(serverRow, false, true, true));
+
       ++count;
       ++rowsProcessed;
       if (rowsProcessed % ROWS_BETWEEN_PROGRESS_UPDATES == 0) {
@@ -1955,12 +1933,10 @@ public class SyncProcessor implements SynchronizerStatus {
             tableId, count, changes.size() }, 10.0 + rowsProcessed * perRowIncrement, false);
       }
     }
-    boolean[] results = { success, fileSuccess };
-    return results;
   }
 
   private boolean deleteRowsInDb(SQLiteDatabase db, TableResource resource, String tableId,
-      List<FileSyncRow> changes, ArrayList<ColumnDefinition> fileAttachmentColumns, 
+      List<FileSyncRow> changes, ArrayList<ColumnDefinition> fileAttachmentColumns,
       boolean deferInstanceAttachments, TableResult tableResult) throws IOException {
     int count = 0;
     boolean deletesAllSuccessful = true;
