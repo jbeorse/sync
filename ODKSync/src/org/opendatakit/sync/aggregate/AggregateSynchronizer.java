@@ -87,6 +87,7 @@ import org.opendatakit.sync.RowModification;
 import org.opendatakit.sync.SyncApp;
 import org.opendatakit.sync.SyncPreferences;
 import org.opendatakit.sync.SyncRow;
+import org.opendatakit.sync.SyncRowPending;
 import org.opendatakit.sync.Synchronizer;
 import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
 import org.opendatakit.sync.service.SyncProgressState;
@@ -1535,7 +1536,7 @@ public class AggregateSynchronizer implements Synchronizer {
     URI instanceFileDownloadUri;
   }
 
-  private CommonFileAttachmentTerms computeCommonFileAttachmentTerms(String realizedTableUri, String instanceId, File instanceFolder, String relativePath) {
+  private CommonFileAttachmentTerms computeCommonFileAttachmentTerms(String instanceFileUri, String instanceId, File instanceFolder, String relativePath) {
     // clean up the value...
     if ( relativePath.startsWith("/") ) {
       relativePath = relativePath.substring(1);
@@ -1552,7 +1553,7 @@ public class AggregateSynchronizer implements Synchronizer {
       partialValue = partialValue.substring(1);
     }
     
-    URI instanceFileDownloadUri = normalizeUri(realizedTableUri, instanceId + "/file/"
+    URI instanceFileDownloadUri = normalizeUri(instanceFileUri, instanceId + "/file/"
         + partialValue);
 
   
@@ -1564,14 +1565,11 @@ public class AggregateSynchronizer implements Synchronizer {
   }
   
   @Override
-  public boolean getFileAttachments(String instanceFileUri, String tableId, SyncRow serverRow,
-      ArrayList<ColumnDefinition> fileAttachmentColumns, boolean deferInstanceAttachments, 
-      boolean shouldDeleteLocal)
-      throws ClientWebException {
+  public boolean getFileAttachments(String instanceFileUri, String tableId, SyncRowPending serverRow,
+      boolean deferInstanceAttachments) throws ClientWebException {
 
-    if (fileAttachmentColumns.isEmpty()) {
-      // no-op -- there are no file attachments in the dataset!
-      return true;
+    if (serverRow.getUriFragments().isEmpty()) {
+      throw new IllegalStateException("should never get here!");
     }
     
     SyncETagsUtils seu = new SyncETagsUtils();
@@ -1642,7 +1640,7 @@ public class AggregateSynchronizer implements Synchronizer {
       // we usually do this, but, when we have a conflict row, we pull the
       // server files down, and leave the local files. Upon the next sync,
       // we will resolve what to do and clean up.
-      if (shouldDeleteLocal) {
+      if (serverRow.shouldDeleteExtraneousLocalFiles()) {
         for (String relativePath : relativePathsToAppFolderOnDevice) {
           // remove local files that are not on server...
           File localFile = ODKFileUtils.asAppFile(appName, relativePath);
@@ -1670,12 +1668,11 @@ public class AggregateSynchronizer implements Synchronizer {
   }
 
   @Override
-  public boolean putFileAttachments(String instanceFileUri, String tableId, SyncRow localRow,
-      ArrayList<ColumnDefinition> fileAttachmentColumns, boolean deferInstanceAttachments) throws ClientWebException {
+  public boolean putFileAttachments(String instanceFileUri, String tableId, SyncRowPending localRow,
+      boolean deferInstanceAttachments) throws ClientWebException {
 
-    if (fileAttachmentColumns.isEmpty()) {
-      // no-op -- there are no file attachments in the dataset!
-      return true;
+    if (localRow.getUriFragments().isEmpty()) {
+      throw new IllegalStateException("should never get here!");
     }
 
     /**********************************************

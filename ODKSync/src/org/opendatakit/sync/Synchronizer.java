@@ -216,16 +216,12 @@ public interface Synchronizer {
    * @param instanceFileUri
    * @param tableId
    * @param serverRow
-   * @param fileAttachmentColumns -- the columns that hold file attachments
    * @param deferInstanceAttachments -- do not transfer the attachments
-   * @param shouldDeleteLocal
-   *          - true if all other files in the local instance folder should be
-   *          removed.
    * @return true if successful
    * @throws ClientWebException
    */
-  public boolean getFileAttachments(String instanceFileUri, String tableId, SyncRow serverRow,
-      ArrayList<ColumnDefinition> fileAttachmentColumns, boolean deferInstanceAttachments, boolean shouldDeleteLocal) throws ClientWebException;
+  public boolean getFileAttachments(String instanceFileUri, String tableId, SyncRowPending serverRow,
+      boolean deferInstanceAttachments) throws ClientWebException;
 
   /**
    * Ensure that the file attachments for the indicated row values exist on the
@@ -235,12 +231,11 @@ public interface Synchronizer {
    * @param instanceFileUri
    * @param tableId
    * @param localRow
-   * @param fileAttachmentColumns -- the columns that hold file attachments
    * @param deferInstanceAttachments -- do not transfer the attachments
    * @return true if successful
    * @throws ClientWebException
    */
-  public boolean putFileAttachments(String instanceFileUri, String tableId, SyncRow localRow,
-      ArrayList<ColumnDefinition> fileAttachmentColumns, boolean deferInstanceAttachments)
+  public boolean putFileAttachments(String instanceFileUri, String tableId, SyncRowPending localRow,
+      boolean deferInstanceAttachments)
       throws ClientWebException;
 }

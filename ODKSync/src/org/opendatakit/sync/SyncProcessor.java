@@ -806,20 +806,6 @@ public class SyncProcessor implements SynchronizerStatus {
   private Double perRowIncrement;
   private int rowsProcessed;
 
-  private static class SyncRowPending {
-    final SyncRow syncRow;
-    final boolean getOnly;
-    final boolean shouldDeleteFiles;
-    final boolean updateState;
-
-    SyncRowPending(SyncRow syncRow, boolean getOnly, boolean shouldDeleteFiles, boolean updateState) {
-      this.syncRow = syncRow;
-      this.getOnly = getOnly;
-      this.shouldDeleteFiles = shouldDeleteFiles;
-      this.updateState = updateState;
-    }
-  }
-
   /**
    * Synchronize the table data rows.
    * <p>
@@ -1208,8 +1194,13 @@ public class SyncProcessor implements SynchronizerStatus {
               SQLiteDatabase db = null;
               try {
                 db = DatabaseFactory.get().getDatabase(context, appName);
+
+                success = pushLocalAttachmentsBeforeDeleteRowsInDb(db, resource, tableId, rowsToDeleteLocally,
+                    fileAttachmentColumns, deferInstanceAttachments, tableResult);
+
                 db.beginTransaction();
-                success = deleteRowsInDb(db, resource, tableId, rowsToDeleteLocally,
+                
+                deleteRowsInDb(db, resource, tableId, rowsToDeleteLocally,
                     fileAttachmentColumns, deferInstanceAttachments, tableResult);
 
                 insertRowsInDb(db, resource, tableId, orderedColumns, rowsToInsertLocally,
@@ -1316,17 +1307,15 @@ public class SyncProcessor implements SynchronizerStatus {
               count = 0;
               for (SyncRowPending syncRowPending : rowsToPushFileAttachments) {
                 boolean outcome = true;
-                if (!syncRowPending.getOnly) {
+                if (!syncRowPending.onlyGetFiles()) {
                   outcome = synchronizer.putFileAttachments(resource.getInstanceFilesUri(),
-                      tableId, syncRowPending.syncRow, fileAttachmentColumns,
-                      deferInstanceAttachments);
+                      tableId, syncRowPending, deferInstanceAttachments);
                 }
                 if (outcome) {
                   outcome = synchronizer.getFileAttachments(resource.getInstanceFilesUri(),
-                      tableId, syncRowPending.syncRow, fileAttachmentColumns,
-                      deferInstanceAttachments, syncRowPending.shouldDeleteFiles);
+                      tableId, syncRowPending, deferInstanceAttachments);
                   
-                  if (syncRowPending.updateState) {
+                  if (syncRowPending.updateSyncState()) {
                     if (outcome) {
                       // OK -- we succeeded in putting/getting all attachments
                       // update our state to the synced state. 
@@ -1335,7 +1324,7 @@ public class SyncProcessor implements SynchronizerStatus {
                       try {
                         db = DatabaseFactory.get().getDatabase(context, appName);
                         ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId,
-                            syncRowPending.syncRow.getRowId(), syncRowPending.syncRow.getRowETag(),
+                            syncRowPending.getRowId(), syncRowPending.getRowETag(),
                             SyncState.synced);
                       } finally {
                         if (db != null) {
@@ -1593,7 +1582,7 @@ public class SyncProcessor implements SynchronizerStatus {
   static final class FileSyncRow {
     final SyncRow serverRow;
     final SyncRow localRow;
-    final boolean isRestPendingFiles;
+    boolean isRestPendingFiles;
     final int localRowConflictType;
 
     FileSyncRow(SyncRow serverRow, SyncRow localRow, boolean isRestPendingFiles) {
@@ -1964,28 +1953,84 @@ public class SyncProcessor implements SynchronizerStatus {
     }
   }
 
-  private boolean deleteRowsInDb(SQLiteDatabase db, TableResource resource, String tableId,
+  /**
+   * Attempt to push all the attachments of the local rows up to the server before
+   * the row is locally deleted. If the attachments were pushed to the server, 
+   * the 'isRestPendingFiles' flag is cleared. This makes the local row to be 
+   * deletable.
+   * 
+   * @param db
+   * @param resource
+   * @param tableId
+   * @param changes
+   * @param fileAttachmentColumns
+   * @param deferInstanceAttachments
+   * @param tableResult
+   * @return
+   * @throws IOException
+   */
+  private boolean pushLocalAttachmentsBeforeDeleteRowsInDb(SQLiteDatabase db, TableResource resource, String tableId,
+      List<FileSyncRow> changes, ArrayList<ColumnDefinition> fileAttachmentColumns,
+      boolean deferInstanceAttachments, TableResult tableResult) throws IOException {
+
+    boolean deletesAllSuccessful = true;
+    
+    // try first to push any attachments of the soon-to-be-deleted
+    // local row up to the server
+    for (FileSyncRow change : changes) {
+      if (change.isRestPendingFiles) {
+        if ( change.localRow.getUriFragments().isEmpty()) {
+          // nothing to push
+          change.isRestPendingFiles = false;
+        } else {
+          // since we are directly calling putFileAttachments, the flags in this 
+          // constructor are never accessed. Use false for their values.
+          SyncRowPending srp = new SyncRowPending(change.localRow, false, false, false);
+          boolean outcome = synchronizer.putFileAttachments(resource.getInstanceFilesUri(), tableId,
+                                srp, deferInstanceAttachments);
+          if (outcome) {
+            // successful
+            change.isRestPendingFiles = false;
+          } else {
+            // there are files that should be pushed that weren't.
+            deletesAllSuccessful = false;
+          }
+        }
+      }
+    }
+    return deletesAllSuccessful;
+  }
+
+  /**
+   * Delete the rows that have had all of their (locally-available) attachments pushed to the server.
+   * I.e., those with 'isRestPendingFiles' false.
+   * 
+   * @param db
+   * @param resource
+   * @param tableId
+   * @param changes
+   * @param fileAttachmentColumns
+   * @param deferInstanceAttachments
+   * @param tableResult
+   * @throws IOException
+   */
+  private void deleteRowsInDb(SQLiteDatabase db, TableResource resource, String tableId,
       List<FileSyncRow> changes, ArrayList<ColumnDefinition> fileAttachmentColumns,
       boolean deferInstanceAttachments, TableResult tableResult) throws IOException {
     int count = 0;
-    boolean deletesAllSuccessful = true;
+    
+    // now delete the rows we can delete...
     for (FileSyncRow change : changes) {
-      if (change.isRestPendingFiles) {
-        boolean outcome = synchronizer.putFileAttachments(resource.getInstanceFilesUri(), tableId,
-            change.localRow, fileAttachmentColumns, deferInstanceAttachments);
-        if (outcome) {
-          // move the local record into the 'new_row' sync state
-          // so it can be physically deleted.
-          ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId,
-              change.serverRow.getRowId(), null, SyncState.new_row);
-          // and physically delete it.
-          ODKDatabaseUtils.get().deleteDataInExistingDBTableWithId(db, appName, tableId,
-              change.serverRow.getRowId());
-
-          tableResult.incLocalDeletes();
-        } else {
-          deletesAllSuccessful = false;
-        }
+      if (!change.isRestPendingFiles) {
+        // DELETE
+        // move the local record into the 'new_row' sync state
+        // so it can be physically deleted.
+        ODKDatabaseUtils.get().updateRowETagAndSyncState(db, resource.getTableId(),
+            change.serverRow.getRowId(), null, SyncState.new_row);
+        // and physically delete row and attachments from database.
+        ODKDatabaseUtils.get().deleteDataInExistingDBTableWithId(db, appName,
+            resource.getTableId(), change.serverRow.getRowId());
+        tableResult.incLocalDeletes();
       }
       ++count;
       ++rowsProcessed;
@@ -1994,7 +2039,6 @@ public class SyncProcessor implements SynchronizerStatus {
             tableId, count, changes.size() }, 10.0 + rowsProcessed * perRowIncrement, false);
       }
     }
-    return deletesAllSuccessful;
   }
 
   private SyncRow convertToSyncRow(ArrayList<ColumnDefinition> orderedColumns, ArrayList<ColumnDefinition> fileAttachmentColumns, Row localRow) {
