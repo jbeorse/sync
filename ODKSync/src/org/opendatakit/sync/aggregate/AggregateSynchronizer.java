@@ -86,11 +86,16 @@ import org.opendatakit.sync.IncomingRowModifications;
 import org.opendatakit.sync.R;
 import org.opendatakit.sync.RowModification;
 import org.opendatakit.sync.SyncApp;
+import org.opendatakit.sync.SyncPreferences;
 import org.opendatakit.sync.SyncRow;
 import org.opendatakit.sync.Synchronizer;
 import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
 import org.opendatakit.sync.service.SyncProgressState;
 
+import android.accounts.Account;
+import android.accounts.AccountManager;
+import android.accounts.AuthenticatorException;
+import android.accounts.OperationCanceledException;
 import android.content.Context;
 
 /**
@@ -163,7 +168,7 @@ public class AggregateSynchronizer implements Synchronizer {
   private final String appName;
   private final String odkClientApiVersion;
   private final String aggregateUri;
-  private final String accessToken;
+  private String accessToken;
   private final RestClient tokenRt;
   private final RestClient rt;
   private final Map<String, TableResource> resources;
@@ -309,6 +314,7 @@ public class AggregateSynchronizer implements Synchronizer {
         rsc.header("Authorization", "Bearer " + accessToken);
       }
     }
+    
     return rsc;
   }
 
@@ -341,7 +347,7 @@ public class AggregateSynchronizer implements Synchronizer {
     cc = new ClientConfig();
     cc.setLoadWinkApplications(false);
     cc.applications(new ODKClientApplication());
-    cc.handlers(new GzipHandler());
+    cc.handlers(new GzipHandler(), new ReAuthSecurityHandler(this));
     cc.connectTimeout(WebUtils.CONNECTION_TIMEOUT);
     cc.readTimeout(2 * WebUtils.CONNECTION_TIMEOUT);
     cc.followRedirects(true);
@@ -364,6 +370,22 @@ public class AggregateSynchronizer implements Synchronizer {
 
   }
 
+  private static final String ACCOUNT_TYPE_G = "com.google";
+  private final static String authString = "oauth2:https://www.googleapis.com/auth/userinfo.email";
+
+  public String updateAccessToken() throws InvalidAuthTokenException {
+    AccountManager accountManager = AccountManager.get(context);
+    try {
+      SyncPreferences prefs = new SyncPreferences(context, appName);
+      Account account = new Account(prefs.getAccount(), ACCOUNT_TYPE_G);
+      this.accessToken = accountManager.blockingGetAuthToken(account, authString, true);
+      return accessToken;
+    } catch (Exception e) {
+      e.printStackTrace();
+      throw new InvalidAuthTokenException("unable to update access token -- please re-authorize");
+    }
+  }
+  
   private void checkAccessToken(String accessToken) throws InvalidAuthTokenException {
     try {
       @SuppressWarnings("unused")
