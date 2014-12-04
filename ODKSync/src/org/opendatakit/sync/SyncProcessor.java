@@ -1449,21 +1449,35 @@ public class SyncProcessor implements SynchronizerStatus {
     ArrayList<FileSyncRow> rowsToMoveToInConflictLocally = new ArrayList<FileSyncRow>();
     String lastDataETag = null;
 
-    for (int i = 0; i < segmentAlter.size(); ++i) {
-      RowOutcome r = outcomes.get(i);
-      SyncRow syncRow = segmentAlter.get(i);
-      if (!r.getRowId().equals(syncRow.getRowId())) {
-        throw new IllegalStateException("Unexpected reordering of return");
-      }
-      if (r.getOutcome() == OutcomeType.SUCCESS) {
+    //
+    // For speed, do this all within a transaction. Processing is 
+    // all in-memory except when we are deleting a client row. In that
+    // case, there may be SDCard access to delete the attachments for
+    // the client row. But that is local access, and the commit will
+    // be accessing the same device.
+    //
+    // i.e., no network access in this code, so we can place it all within
+    // a transaction and not lock up the database for very long.
+    //
+    
+    SQLiteDatabase db = null;
 
-        lastDataETag = r.getDataETagAtModification();
-
-        if (r.isDeleted()) {
-          // DELETE
-          SQLiteDatabase db = null;
-          try {
-            db = DatabaseFactory.get().getDatabase(context, appName);
+    try {
+      db = DatabaseFactory.get().getDatabase(context, appName);
+      db.beginTransaction();
+      
+      for (int i = 0; i < segmentAlter.size(); ++i) {
+        RowOutcome r = outcomes.get(i);
+        SyncRow syncRow = segmentAlter.get(i);
+        if (!r.getRowId().equals(syncRow.getRowId())) {
+          throw new IllegalStateException("Unexpected reordering of return");
+        }
+        if (r.getOutcome() == OutcomeType.SUCCESS) {
+  
+          lastDataETag = r.getDataETagAtModification();
+  
+          if (r.isDeleted()) {
+            // DELETE
             // move the local record into the 'new_row' sync state
             // so it can be physically deleted.
             ODKDatabaseUtils.get().updateRowETagAndSyncState(db, resource.getTableId(),
@@ -1474,17 +1488,7 @@ public class SyncProcessor implements SynchronizerStatus {
             ODKDatabaseUtils.get().deleteDataInExistingDBTableWithId(db, appName,
                 resource.getTableId(), r.getRowId());
             tableResult.incServerDeletes();
-          } finally {
-            if (db != null) {
-              db.close();
-              db = null;
-            }
-          }
-        } else {
-          SQLiteDatabase db = null;
-
-          try {
-            db = DatabaseFactory.get().getDatabase(context, appName);
+          } else {
             ODKDatabaseUtils.get().updateRowETagAndSyncState(db, resource.getTableId(),
                 r.getRowId(), r.getRowETag(), 
                 hasAttachments ? SyncState.synced_pending_files : SyncState.synced);
@@ -1493,99 +1497,94 @@ public class SyncProcessor implements SynchronizerStatus {
             if ( hasAttachments ) {
               rowsToPushFileAttachments.add(new SyncRowPending(syncRow, false, true, true));
             }
-          } finally {
-            if (db != null) {
-              db.close();
-              db = null;
-            }
+            // UPDATE or INSERT
+            tableResult.incServerUpserts();
           }
-          // UPDATE or INSERT
-          tableResult.incServerUpserts();
-        }
-      } else if (r.getOutcome() == OutcomeType.FAILED) {
-        if (r.getRowId() == null || !r.isDeleted()) {
-          // should never occur!!!
-          throw new IllegalStateException(
-              "Unexpected null rowId or OutcomeType.FAILED when not deleting row");
+        } else if (r.getOutcome() == OutcomeType.FAILED) {
+          if (r.getRowId() == null || !r.isDeleted()) {
+            // should never occur!!!
+            throw new IllegalStateException(
+                "Unexpected null rowId or OutcomeType.FAILED when not deleting row");
+          } else {
+            // special case of a delete where server has no record of the row.
+            // server should add row and mark it as deleted.
+          }
+        } else if (r.getOutcome() == OutcomeType.IN_CONFLICT) {
+          // another device updated this record between the time we fetched
+          // changes
+          // and the time we tried to update this record. Transition the record
+          // locally into the conflicting state.
+          // SyncState.deleted and server is not deleting
+          // SyncState.new_row and record exists on server
+          // SyncState.changed and new change on server
+          // SyncState.in_conflict and new change on server
+  
+          // no need to worry about server in_conflict records.
+          // any server in_conflict rows will be cleaned up during the
+          // update of the in_conflict state.
+          Integer localRowConflictType = syncRow.isDeleted() ? ConflictType.LOCAL_DELETED_OLD_VALUES
+              : ConflictType.LOCAL_UPDATED_UPDATED_VALUES;
+  
+          Integer serverRowConflictType = r.isDeleted() ? ConflictType.SERVER_DELETED_OLD_VALUES
+              : ConflictType.SERVER_UPDATED_UPDATED_VALUES;
+  
+          // figure out what the localRow conflict type sh
+          SyncRow serverRow = new SyncRow(r.getRowId(), r.getRowETag(), r.isDeleted(), r.getFormId(),
+              r.getLocale(), r.getSavepointType(), r.getSavepointTimestamp(),
+              r.getSavepointCreator(), r.getFilterScope(), r.getValues());
+          FileSyncRow conflictRow = new FileSyncRow(serverRow, syncRow, false, localRowConflictType);
+  
+          rowsToMoveToInConflictLocally.add(conflictRow);
+          // we transition all of these later, outside this processing loop...
+        } else if (r.getOutcome() == OutcomeType.DENIED) {
+          // user does not have privileges...
+          specialCases.add(r);
         } else {
-          // special case of a delete where server has no record of the row.
-          // server should add row and mark it as deleted.
+          // a new OutcomeType state was added!
+          throw new IllegalStateException("Unexpected OutcomeType! " + r.getOutcome().name());
         }
-      } else if (r.getOutcome() == OutcomeType.IN_CONFLICT) {
-        // another device updated this record between the time we fetched
-        // changes
-        // and the time we tried to update this record. Transition the record
-        // locally into the conflicting state.
-        // SyncState.deleted and server is not deleting
-        // SyncState.new_row and record exists on server
-        // SyncState.changed and new change on server
-        // SyncState.in_conflict and new change on server
 
-        // no need to worry about server in_conflict records.
-        // any server in_conflict rows will be cleaned up during the
-        // update of the in_conflict state.
-        Integer localRowConflictType = syncRow.isDeleted() ? ConflictType.LOCAL_DELETED_OLD_VALUES
-            : ConflictType.LOCAL_UPDATED_UPDATED_VALUES;
-
-        Integer serverRowConflictType = r.isDeleted() ? ConflictType.SERVER_DELETED_OLD_VALUES
-            : ConflictType.SERVER_UPDATED_UPDATED_VALUES;
-
-        // figure out what the localRow conflict type sh
-        SyncRow serverRow = new SyncRow(r.getRowId(), r.getRowETag(), r.isDeleted(), r.getFormId(),
-            r.getLocale(), r.getSavepointType(), r.getSavepointTimestamp(),
-            r.getSavepointCreator(), r.getFilterScope(), r.getValues());
-        FileSyncRow conflictRow = new FileSyncRow(serverRow, syncRow, false, localRowConflictType);
-
-        rowsToMoveToInConflictLocally.add(conflictRow);
-        // we transition all of these later, outside this processing loop...
-      } else if (r.getOutcome() == OutcomeType.DENIED) {
-        // user does not have privileges...
-        specialCases.add(r);
-      } else {
-        // a new OutcomeType state was added!
-        throw new IllegalStateException("Unexpected OutcomeType! " + r.getOutcome().name());
+        ++countSoFar;
+        ++rowsProcessed;
+        if (rowsProcessed % ROWS_BETWEEN_PROGRESS_UPDATES == 0) {
+          this.updateNotification(SyncProgressState.ROWS, R.string.altering_server_row, new Object[] {
+              resource.getTableId(), countSoFar, totalOutcomesSize }, 10.0 + rowsProcessed
+              * perRowIncrement, false);
+        }
       }
+      
+      // process the conflict rows, if any
+      conflictRowsInDb(db, resource, resource.getTableId(), orderedColumns,
+          rowsToMoveToInConflictLocally, rowsToPushFileAttachments, hasAttachments, tableResult);
 
-      ++countSoFar;
-      ++rowsProcessed;
-      if (rowsProcessed % ROWS_BETWEEN_PROGRESS_UPDATES == 0) {
-        this.updateNotification(SyncProgressState.ROWS, R.string.altering_server_row, new Object[] {
-            resource.getTableId(), countSoFar, totalOutcomesSize }, 10.0 + rowsProcessed
-            * perRowIncrement, false);
+      // and update the lastDataETag that we hold
+      // TODO: BUG BUG BUG BUG BUG
+      // TODO: BUG BUG BUG BUG BUG
+      // TODO: BUG BUG BUG BUG BUG
+      // TODO: BUG BUG BUG BUG BUG
+      // TODO: BUG BUG BUG BUG BUG
+      if (lastDataETag != null) {
+        // TODO: timing window here!!!!
+        // another updater could have interleaved a dataETagAtModification
+        // value.
+        // so updating the lastDataETag here could cause us to miss those
+        // updates!!!
+
+        ODKDatabaseUtils.get().updateDBTableETags(db, resource.getTableId(), te.getSchemaETag(),
+            lastDataETag);
+
+        resource.setDataETag(lastDataETag);
+        te.setLastDataETag(lastDataETag);
+      }
+      // and allow this to happen
+      db.setTransactionSuccessful();
+    } finally {
+      if (db != null) {
+        db.close();
+        db = null;
       }
     }
-
-    {
-      SQLiteDatabase db = null;
-
-      try {
-        db = DatabaseFactory.get().getDatabase(context, appName);
-
-        conflictRowsInDb(db, resource, resource.getTableId(), orderedColumns,
-            rowsToMoveToInConflictLocally, rowsToPushFileAttachments, hasAttachments, tableResult);
-
-        if (lastDataETag != null) {
-          // TODO: timing window here!!!!
-          // another updater could have interleaved a dataETagAtModification
-          // value.
-          // so updating the lastDataETag here could cause us to miss those
-          // updates!!!
-
-          ODKDatabaseUtils.get().updateDBTableETags(db, resource.getTableId(), te.getSchemaETag(),
-              lastDataETag);
-
-          resource.setDataETag(lastDataETag);
-          te.setLastDataETag(lastDataETag);
-        }
-
-      } finally {
-        if (db != null) {
-          db.close();
-          db = null;
-        }
-      }
-    }
-
+    
     return countSoFar;
   }
 
