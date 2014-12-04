@@ -148,7 +148,11 @@ public class SyncProcessor implements SynchronizerStatus {
   public void synchronizeConfigurationAndContent(boolean pushToServer) {
     log.i(TAG, "entered synchronizeConfigurationAndContent()");
     ODKFileUtils.assertDirectoryStructure(appName);
-    // android.os.Debug.waitForDebugger();
+    boolean issueDeletes = false;
+    if ( SyncApp.getInstance().shouldWaitForDebugger() ) {
+      issueDeletes = true;
+      android.os.Debug.waitForDebugger();
+    }
 
     syncProgress.updateNotification(SyncProgressState.STARTING,
         context.getString(R.string.retrieving_tables_list_from_server),
@@ -305,9 +309,11 @@ public class SyncProcessor implements SynchronizerStatus {
       // TODO: make this configurable?
       // Generally should not allow this, as it is very dangerous
       // delete any other tables 
-//      for ( TableResource tableToDelete : serverTablesToDelete ) {
-//        synchronizer.deleteTable(tableToDelete);
-//      }
+      if ( issueDeletes ) {
+        for ( TableResource tableToDelete : serverTablesToDelete ) {
+          synchronizer.deleteTable(tableToDelete);
+        }
+      }
     } else {
       // //////////////////////////////////////////
       // MIMIC SERVER CONTENT
@@ -1186,6 +1192,7 @@ public class SyncProcessor implements SynchronizerStatus {
 
             perRowIncrement = 90.0 / ((double) (totalChange + 1));
             rowsProcessed = 0;
+            boolean hasAttachments = !fileAttachmentColumns.isEmpty();
 
             // i.e., we have created entries in the various action lists
             // for all the actions we should take.
@@ -1206,13 +1213,13 @@ public class SyncProcessor implements SynchronizerStatus {
                     fileAttachmentColumns, deferInstanceAttachments, tableResult);
 
                 insertRowsInDb(db, resource, tableId, orderedColumns, rowsToInsertLocally,
-                    rowsToPushFileAttachments, tableResult);
+                    rowsToPushFileAttachments, hasAttachments, tableResult);
 
                 updateRowsInDb(db, resource, tableId, orderedColumns, rowsToUpdateLocally,
-                    rowsToPushFileAttachments, tableResult);
+                    rowsToPushFileAttachments, hasAttachments, tableResult);
 
                 conflictRowsInDb(db, resource, tableId, orderedColumns,
-                    rowsToMoveToInConflictLocally, rowsToPushFileAttachments, tableResult);
+                    rowsToMoveToInConflictLocally, rowsToPushFileAttachments, hasAttachments, tableResult);
 
                 // If we made it here and there was data, then we successfully
                 // updated the data from the server.
@@ -1294,7 +1301,8 @@ public class SyncProcessor implements SynchronizerStatus {
 
                   // process outcomes...
                   count = processRowOutcomes(te, resource, tableResult, orderedColumns,
-                      rowsToPushFileAttachments, count, allAlteredRows.size(), segmentAlter,
+                      rowsToPushFileAttachments, hasAttachments, 
+                      count, allAlteredRows.size(), segmentAlter,
                       outcomes.getRows(), specialCases);
 
                   // process next segment...
@@ -1434,7 +1442,8 @@ public class SyncProcessor implements SynchronizerStatus {
 
   private int processRowOutcomes(TableDefinitionEntry te, TableResource resource,
       TableResult tableResult, ArrayList<ColumnDefinition> orderedColumns,
-      List<SyncRowPending> rowsToPushFileAttachments, int countSoFar, int totalOutcomesSize,
+      List<SyncRowPending> rowsToPushFileAttachments, boolean hasAttachments, 
+      int countSoFar, int totalOutcomesSize,
       List<SyncRow> segmentAlter, ArrayList<RowOutcome> outcomes, ArrayList<RowOutcome> specialCases) {
 
     ArrayList<FileSyncRow> rowsToMoveToInConflictLocally = new ArrayList<FileSyncRow>();
@@ -1477,10 +1486,13 @@ public class SyncProcessor implements SynchronizerStatus {
           try {
             db = DatabaseFactory.get().getDatabase(context, appName);
             ODKDatabaseUtils.get().updateRowETagAndSyncState(db, resource.getTableId(),
-                r.getRowId(), r.getRowETag(), SyncState.synced_pending_files);
+                r.getRowId(), r.getRowETag(), 
+                hasAttachments ? SyncState.synced_pending_files : SyncState.synced);
             // !!Important!! update the rowETag in our copy of this row.
             syncRow.setRowETag(r.getRowETag());
-            rowsToPushFileAttachments.add(new SyncRowPending(syncRow, false, true, true));
+            if ( hasAttachments ) {
+              rowsToPushFileAttachments.add(new SyncRowPending(syncRow, false, true, true));
+            }
           } finally {
             if (db != null) {
               db.close();
@@ -1550,7 +1562,7 @@ public class SyncProcessor implements SynchronizerStatus {
         db = DatabaseFactory.get().getDatabase(context, appName);
 
         conflictRowsInDb(db, resource, resource.getTableId(), orderedColumns,
-            rowsToMoveToInConflictLocally, rowsToPushFileAttachments, tableResult);
+            rowsToMoveToInConflictLocally, rowsToPushFileAttachments, hasAttachments, tableResult);
 
         if (lastDataETag != null) {
           // TODO: timing window here!!!!
@@ -1751,7 +1763,7 @@ public class SyncProcessor implements SynchronizerStatus {
 
   private void conflictRowsInDb(SQLiteDatabase db, TableResource resource, String tableId,
       ArrayList<ColumnDefinition> orderedColumns, List<FileSyncRow> changes,
-      List<SyncRowPending> rowsToPushFileAttachments, TableResult tableResult)
+      List<SyncRowPending> rowsToPushFileAttachments, boolean hasAttachments, TableResult tableResult)
       throws ClientWebException {
 
     int count = 0;
@@ -1838,8 +1850,10 @@ public class SyncProcessor implements SynchronizerStatus {
         // try to pull the file attachments for the in_conflict rows
         // it is OK if we can't get them, but they may be useful for
         // reconciliation
-        rowsToPushFileAttachments.add(new SyncRowPending(change.localRow, true, false, false));
-        rowsToPushFileAttachments.add(new SyncRowPending(serverRow, true, false, false));
+        if ( hasAttachments ) {
+          rowsToPushFileAttachments.add(new SyncRowPending(change.localRow, true, false, false));
+          rowsToPushFileAttachments.add(new SyncRowPending(serverRow, true, false, false));
+        }
       }
       ++count;
       ++rowsProcessed;
@@ -1853,7 +1867,7 @@ public class SyncProcessor implements SynchronizerStatus {
 
   private void insertRowsInDb(SQLiteDatabase db, TableResource resource, String tableId,
       ArrayList<ColumnDefinition> orderedColumns, List<FileSyncRow> changes,
-      List<SyncRowPending> rowsToPushFileAttachments, TableResult tableResult)
+      List<SyncRowPending> rowsToPushFileAttachments, boolean hasAttachments, TableResult tableResult)
       throws ClientWebException {
     int count = 0;
     for (FileSyncRow change : changes) {
@@ -1862,7 +1876,7 @@ public class SyncProcessor implements SynchronizerStatus {
 
       values.put(DataTableColumns.ID, serverRow.getRowId());
       values.put(DataTableColumns.ROW_ETAG, serverRow.getRowETag());
-      values.put(DataTableColumns.SYNC_STATE, SyncState.synced_pending_files.name());
+      values.put(DataTableColumns.SYNC_STATE, hasAttachments ? SyncState.synced_pending_files.name() : SyncState.synced.name());
       values.put(DataTableColumns.FORM_ID, serverRow.getFormId());
       values.put(DataTableColumns.LOCALE, serverRow.getLocale());
       values.put(DataTableColumns.SAVEPOINT_TIMESTAMP, serverRow.getSavepointTimestamp());
@@ -1877,7 +1891,9 @@ public class SyncProcessor implements SynchronizerStatus {
           values, serverRow.getRowId());
       tableResult.incLocalInserts();
 
-      rowsToPushFileAttachments.add(new SyncRowPending(serverRow, true, true, true));
+      if ( hasAttachments ) {
+        rowsToPushFileAttachments.add(new SyncRowPending(serverRow, true, true, true));
+      }
       ++count;
       ++rowsProcessed;
       if (rowsProcessed % ROWS_BETWEEN_PROGRESS_UPDATES == 0) {
@@ -1889,7 +1905,7 @@ public class SyncProcessor implements SynchronizerStatus {
 
   private void updateRowsInDb(SQLiteDatabase db, TableResource resource, String tableId,
       ArrayList<ColumnDefinition> orderedColumns, List<FileSyncRow> changes,
-      List<SyncRowPending> rowsToPushFileAttachments, TableResult tableResult)
+      List<SyncRowPending> rowsToPushFileAttachments, boolean hasAttachments, TableResult tableResult)
       throws ClientWebException {
     int count = 0;
     for (FileSyncRow change : changes) {
@@ -1908,7 +1924,7 @@ public class SyncProcessor implements SynchronizerStatus {
       ContentValues values = new ContentValues();
 
       values.put(DataTableColumns.ROW_ETAG, serverRow.getRowETag());
-      values.put(DataTableColumns.SYNC_STATE, SyncState.synced_pending_files.name());
+      values.put(DataTableColumns.SYNC_STATE, hasAttachments ? SyncState.synced_pending_files.name() : SyncState.synced.name());
       values.put(DataTableColumns.FILTER_TYPE, serverRow.getFilterScope().getType().name());
       values.put(DataTableColumns.FILTER_VALUE, serverRow.getFilterScope().getValue());
       values.put(DataTableColumns.FORM_ID, serverRow.getFormId());
@@ -1926,7 +1942,9 @@ public class SyncProcessor implements SynchronizerStatus {
           serverRow.getRowId());
       tableResult.incLocalUpdates();
 
-      rowsToPushFileAttachments.add(new SyncRowPending(serverRow, false, true, true));
+      if ( hasAttachments ) {
+        rowsToPushFileAttachments.add(new SyncRowPending(serverRow, false, true, true));
+      }
 
       ++count;
       ++rowsProcessed;

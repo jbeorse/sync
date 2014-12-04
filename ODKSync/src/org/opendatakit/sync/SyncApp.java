@@ -25,6 +25,11 @@ public class SyncApp extends Application {
 
   public static final String LOGTAG = SyncApp.class.getSimpleName();
 
+  /**
+   * Set this to true if you want to attach a debugger to the Sync service.
+   */
+  private boolean debugService = false;
+  
   private static SyncApp singleton = null;
 
   public static SyncApp getInstance() {
@@ -33,6 +38,10 @@ public class SyncApp extends Application {
 
   private OdkSyncServiceProxy proxy = null;
 
+  public boolean shouldWaitForDebugger() {
+    return debugService;
+  }
+  
   public synchronized OdkSyncServiceProxy getOdkSyncServiceProxy() {
     if (proxy == null) {
       proxy = new OdkSyncServiceProxy(this);
