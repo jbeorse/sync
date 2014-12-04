@@ -85,6 +85,7 @@ import org.opendatakit.httpclientandroidlib.params.HttpParams;
 import org.opendatakit.sync.IncomingRowModifications;
 import org.opendatakit.sync.R;
 import org.opendatakit.sync.RowModification;
+import org.opendatakit.sync.SyncApp;
 import org.opendatakit.sync.SyncRow;
 import org.opendatakit.sync.Synchronizer;
 import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
@@ -296,6 +297,7 @@ public class AggregateSynchronizer implements Synchronizer {
     // set the access token...
     rsc.header(ApiConstants.ACCEPT_CONTENT_ENCODING_HEADER, ApiConstants.GZIP_CONTENT_ENCODING);
     rsc.header(ApiConstants.OPEN_DATA_KIT_VERSION_HEADER, ApiConstants.OPEN_DATA_KIT_VERSION);
+    rsc.header(HttpHeaders.USER_AGENT, "Sync " + SyncApp.getInstance().getVersionCodeString() + " (gzip)");
     GregorianCalendar g = new GregorianCalendar(TimeZone.getTimeZone("GMT"));
     g.setTime(new Date());
     SimpleDateFormat formatter = new SimpleDateFormat("E, dd MMM yyyy HH:mm:ss zz");

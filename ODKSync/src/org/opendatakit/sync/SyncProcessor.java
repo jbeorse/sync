@@ -847,6 +847,8 @@ public class SyncProcessor implements SynchronizerStatus {
       }
     }
 
+    log.i(TAG, "synchronizeTableDataRowsAndAttachments - deferInstanceAttachments: " + Boolean.toString(deferInstanceAttachments));
+
     // Prepare the tableResult. We'll start it as failure, and only update it
     // if we're successful at the end.
     String tableId = te.getTableId();
