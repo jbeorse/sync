@@ -1454,7 +1454,7 @@ public class AggregateSynchronizer implements Synchronizer {
           // write connection to file
           is = new BufferedInputStream(isRaw);
           os = new BufferedOutputStream(new FileOutputStream(tmp));
-          byte buf[] = new byte[8096];
+          byte buf[] = new byte[8192];
           int len;
           while ((len = is.read(buf)) >= 0) {
             if (len != 0) {
@@ -1476,7 +1476,7 @@ public class AggregateSynchronizer implements Synchronizer {
           if (is != null) {
             try {
               // ensure stream is consumed...
-              byte buf[] = new byte[8096];
+              byte buf[] = new byte[8192];
               while (is.read(buf) >= 0)
                 ;
             } catch (Exception e) {
