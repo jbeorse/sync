@@ -1571,6 +1571,7 @@ public class SyncProcessor implements SynchronizerStatus {
       db.setTransactionSuccessful();
     } finally {
       if (db != null) {
+        db.endTransaction();
         db.close();
         db = null;
       }
