@@ -116,7 +116,7 @@ public class SyncRow {
             uriFragments.add(dkv.value);
           }
           ++idxAttachment;
-          if ( idxAttachment > fileAttachmentColumns.size() ) {
+          if ( idxAttachment >= fileAttachmentColumns.size() ) {
             break;
           } else {
             facName = fileAttachmentColumns.get(idxAttachment).getElementKey();
