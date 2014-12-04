@@ -131,7 +131,7 @@ public interface Synchronizer {
    *         on the server.
    * @throws ClientWebException
    */
-  public IncomingRowModifications getUpdates(String tableId, String schemaETag, String dataETag)
+  public IncomingRowModifications getUpdates(String tableId, String schemaETag, String dataETag, ArrayList<ColumnDefinition> fileAttachmentColumns)
       throws ClientWebException;
 
   /**

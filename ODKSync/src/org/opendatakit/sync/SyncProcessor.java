@@ -933,7 +933,7 @@ public class SyncProcessor implements SynchronizerStatus {
 
             IncomingRowModifications modification;
             try {
-              modification = synchronizer.getUpdates(tableId, schemaETag, te.getLastDataETag());
+              modification = synchronizer.getUpdates(tableId, schemaETag, te.getLastDataETag(), fileAttachmentColumns);
             } catch (Exception e) {
               String msg = e.getMessage();
               if (msg == null) {
@@ -1028,14 +1028,14 @@ public class SyncProcessor implements SynchronizerStatus {
                 // the local row wasn't impacted by a server change
                 // see if this local row should be pushed to the server.
                 if (state == SyncState.new_row) {
-                  rowsToInsertOnServer.add(convertToSyncRow(orderedColumns, localRow));
+                  rowsToInsertOnServer.add(convertToSyncRow(orderedColumns, fileAttachmentColumns, localRow));
                 } else if (state == SyncState.changed) {
-                  rowsToUpdateOnServer.add(convertToSyncRow(orderedColumns, localRow));
+                  rowsToUpdateOnServer.add(convertToSyncRow(orderedColumns, fileAttachmentColumns, localRow));
                 } else if (state == SyncState.deleted) {
-                  rowsToDeleteOnServer.add(convertToSyncRow(orderedColumns, localRow));
+                  rowsToDeleteOnServer.add(convertToSyncRow(orderedColumns, fileAttachmentColumns, localRow));
                 } else if (state == SyncState.synced_pending_files) {
                   rowsToPushFileAttachments.add(new SyncRowPending(convertToSyncRow(orderedColumns,
-                      localRow), false, true, true));
+                      fileAttachmentColumns, localRow), false, true, true));
                 }
                 // otherwise, it is in the synced state or in_conflict state
                 // and nothing should be done with it...
@@ -1087,10 +1087,10 @@ public class SyncProcessor implements SynchronizerStatus {
 
                 if (serverRow.isDeleted()) {
                   rowsToDeleteLocally.add(new FileSyncRow(serverRow, convertToSyncRow(
-                      orderedColumns, localRow), (state == SyncState.synced_pending_files)));
+                      orderedColumns, fileAttachmentColumns, localRow), (state == SyncState.synced_pending_files)));
                 } else {
                   rowsToUpdateLocally.add(new FileSyncRow(serverRow, convertToSyncRow(
-                      orderedColumns, localRow), (state == SyncState.synced_pending_files)));
+                      orderedColumns, fileAttachmentColumns, localRow), (state == SyncState.synced_pending_files)));
                 }
               } else if (serverRow.isDeleted()
                   && (state == SyncState.deleted || (state == SyncState.in_conflict && localRowConflictTypeBeforeSync == ConflictType.LOCAL_DELETED_OLD_VALUES))) {
@@ -1107,7 +1107,7 @@ public class SyncProcessor implements SynchronizerStatus {
                 // any server in_conflict rows will be deleted during the delete
                 // step
                 rowsToDeleteLocally.add(new FileSyncRow(serverRow, convertToSyncRow(orderedColumns,
-                    localRow), false));
+                    fileAttachmentColumns, localRow), false));
               } else {
                 // SyncState.deleted and server is not deleting
                 // SyncState.new_row and record exists on server
@@ -1149,14 +1149,14 @@ public class SyncProcessor implements SynchronizerStatus {
                   throw new IllegalStateException("Unexpected state encountered");
                 }
                 FileSyncRow syncRow = new FileSyncRow(serverRow, convertToSyncRow(orderedColumns,
-                    localRow), false, localRowConflictType);
+                    fileAttachmentColumns, localRow), false, localRowConflictType);
 
                 if (!syncRow.identicalValues(orderedColumns)) {
                   if (syncRow.identicalValuesExceptRowETagAndFilterScope(orderedColumns)) {
                     // just apply the server RowETag and filterScope to the
                     // local row
                     rowsToUpdateLocally.add(new FileSyncRow(serverRow, convertToSyncRow(
-                        orderedColumns, localRow), true));
+                        orderedColumns, fileAttachmentColumns, localRow), true));
                   } else {
                     rowsToMoveToInConflictLocally.add(syncRow);
                   }
@@ -1301,7 +1301,7 @@ public class SyncProcessor implements SynchronizerStatus {
 
                   // process outcomes...
                   count = processRowOutcomes(te, resource, tableResult, orderedColumns,
-                      rowsToPushFileAttachments, hasAttachments, 
+                      fileAttachmentColumns, hasAttachments, rowsToPushFileAttachments, 
                       count, allAlteredRows.size(), segmentAlter,
                       outcomes.getRows(), specialCases);
 
@@ -1442,7 +1442,8 @@ public class SyncProcessor implements SynchronizerStatus {
 
   private int processRowOutcomes(TableDefinitionEntry te, TableResource resource,
       TableResult tableResult, ArrayList<ColumnDefinition> orderedColumns,
-      List<SyncRowPending> rowsToPushFileAttachments, boolean hasAttachments, 
+      ArrayList<ColumnDefinition> fileAttachmentColumns, boolean hasAttachments, 
+      List<SyncRowPending> rowsToPushFileAttachments, 
       int countSoFar, int totalOutcomesSize,
       List<SyncRow> segmentAlter, ArrayList<RowOutcome> outcomes, ArrayList<RowOutcome> specialCases) {
 
@@ -1491,10 +1492,11 @@ public class SyncProcessor implements SynchronizerStatus {
           } else {
             ODKDatabaseUtils.get().updateRowETagAndSyncState(db, resource.getTableId(),
                 r.getRowId(), r.getRowETag(), 
-                hasAttachments ? SyncState.synced_pending_files : SyncState.synced);
+                (hasAttachments && !syncRow.getUriFragments().isEmpty()) ?
+                    SyncState.synced_pending_files : SyncState.synced);
             // !!Important!! update the rowETag in our copy of this row.
             syncRow.setRowETag(r.getRowETag());
-            if ( hasAttachments ) {
+            if (hasAttachments && !syncRow.getUriFragments().isEmpty()) {
               rowsToPushFileAttachments.add(new SyncRowPending(syncRow, false, true, true));
             }
             // UPDATE or INSERT
@@ -1531,7 +1533,7 @@ public class SyncProcessor implements SynchronizerStatus {
           // figure out what the localRow conflict type sh
           SyncRow serverRow = new SyncRow(r.getRowId(), r.getRowETag(), r.isDeleted(), r.getFormId(),
               r.getLocale(), r.getSavepointType(), r.getSavepointTimestamp(),
-              r.getSavepointCreator(), r.getFilterScope(), r.getValues());
+              r.getSavepointCreator(), r.getFilterScope(), r.getValues(), fileAttachmentColumns);
           FileSyncRow conflictRow = new FileSyncRow(serverRow, syncRow, false, localRowConflictType);
   
           rowsToMoveToInConflictLocally.add(conflictRow);
@@ -1850,8 +1852,12 @@ public class SyncProcessor implements SynchronizerStatus {
         // it is OK if we can't get them, but they may be useful for
         // reconciliation
         if ( hasAttachments ) {
-          rowsToPushFileAttachments.add(new SyncRowPending(change.localRow, true, false, false));
-          rowsToPushFileAttachments.add(new SyncRowPending(serverRow, true, false, false));
+          if ( !change.localRow.getUriFragments().isEmpty() ) {
+            rowsToPushFileAttachments.add(new SyncRowPending(change.localRow, true, false, false));
+          }
+          if ( !serverRow.getUriFragments().isEmpty() ) {
+            rowsToPushFileAttachments.add(new SyncRowPending(serverRow, true, false, false));
+          }
         }
       }
       ++count;
@@ -1875,7 +1881,9 @@ public class SyncProcessor implements SynchronizerStatus {
 
       values.put(DataTableColumns.ID, serverRow.getRowId());
       values.put(DataTableColumns.ROW_ETAG, serverRow.getRowETag());
-      values.put(DataTableColumns.SYNC_STATE, hasAttachments ? SyncState.synced_pending_files.name() : SyncState.synced.name());
+      values.put(DataTableColumns.SYNC_STATE, 
+          (hasAttachments && !serverRow.getUriFragments().isEmpty()) ?
+              SyncState.synced_pending_files.name() : SyncState.synced.name());
       values.put(DataTableColumns.FORM_ID, serverRow.getFormId());
       values.put(DataTableColumns.LOCALE, serverRow.getLocale());
       values.put(DataTableColumns.SAVEPOINT_TIMESTAMP, serverRow.getSavepointTimestamp());
@@ -1890,7 +1898,7 @@ public class SyncProcessor implements SynchronizerStatus {
           values, serverRow.getRowId());
       tableResult.incLocalInserts();
 
-      if ( hasAttachments ) {
+      if ( hasAttachments && !serverRow.getUriFragments().isEmpty() ) {
         rowsToPushFileAttachments.add(new SyncRowPending(serverRow, true, true, true));
       }
       ++count;
@@ -1923,7 +1931,9 @@ public class SyncProcessor implements SynchronizerStatus {
       ContentValues values = new ContentValues();
 
       values.put(DataTableColumns.ROW_ETAG, serverRow.getRowETag());
-      values.put(DataTableColumns.SYNC_STATE, hasAttachments ? SyncState.synced_pending_files.name() : SyncState.synced.name());
+      values.put(DataTableColumns.SYNC_STATE, 
+          (hasAttachments  && !serverRow.getUriFragments().isEmpty()) ?
+              SyncState.synced_pending_files.name() : SyncState.synced.name());
       values.put(DataTableColumns.FILTER_TYPE, serverRow.getFilterScope().getType().name());
       values.put(DataTableColumns.FILTER_VALUE, serverRow.getFilterScope().getValue());
       values.put(DataTableColumns.FORM_ID, serverRow.getFormId());
@@ -1941,7 +1951,7 @@ public class SyncProcessor implements SynchronizerStatus {
           serverRow.getRowId());
       tableResult.incLocalUpdates();
 
-      if ( hasAttachments ) {
+      if ( hasAttachments && !serverRow.getUriFragments().isEmpty() ) {
         rowsToPushFileAttachments.add(new SyncRowPending(serverRow, false, true, true));
       }
 
@@ -1987,11 +1997,11 @@ public class SyncProcessor implements SynchronizerStatus {
     return deletesAllSuccessful;
   }
 
-  private SyncRow convertToSyncRow(ArrayList<ColumnDefinition> orderedColumns, Row localRow) {
+  private SyncRow convertToSyncRow(ArrayList<ColumnDefinition> orderedColumns, ArrayList<ColumnDefinition> fileAttachmentColumns, Row localRow) {
     String rowId = localRow.getRowId();
     String rowETag = localRow.getRawDataOrMetadataByElementKey(DataTableColumns.ROW_ETAG);
-    ArrayList<DataKeyValue> values = new ArrayList<DataKeyValue>();
 
+    ArrayList<DataKeyValue> values = new ArrayList<DataKeyValue>();
     for (ColumnDefinition column : orderedColumns) {
       if (column.isUnitOfRetention()) {
         String elementKey = column.getElementKey();
@@ -1999,6 +2009,7 @@ public class SyncProcessor implements SynchronizerStatus {
             .getRawDataOrMetadataByElementKey(elementKey)));
       }
     }
+
     SyncRow syncRow = new SyncRow(rowId, rowETag, false,
         localRow.getRawDataOrMetadataByElementKey(DataTableColumns.FORM_ID),
         localRow.getRawDataOrMetadataByElementKey(DataTableColumns.LOCALE),
@@ -2006,7 +2017,7 @@ public class SyncProcessor implements SynchronizerStatus {
         localRow.getRawDataOrMetadataByElementKey(DataTableColumns.SAVEPOINT_TIMESTAMP),
         localRow.getRawDataOrMetadataByElementKey(DataTableColumns.SAVEPOINT_CREATOR),
         Scope.asScope(localRow.getRawDataOrMetadataByElementKey(DataTableColumns.FILTER_TYPE),
-            localRow.getRawDataOrMetadataByElementKey(DataTableColumns.FILTER_VALUE)), values);
+        localRow.getRawDataOrMetadataByElementKey(DataTableColumns.FILTER_VALUE)), values, fileAttachmentColumns);
     return syncRow;
   }
 

@@ -18,9 +18,11 @@ package org.opendatakit.sync;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.List;
 
 import org.opendatakit.aggregate.odktables.rest.entity.DataKeyValue;
 import org.opendatakit.aggregate.odktables.rest.entity.Scope;
+import org.opendatakit.common.android.data.ColumnDefinition;
 
 /**
  * A SyncRow is an in-between class to map rows in the database to rows in the
@@ -30,6 +32,8 @@ import org.opendatakit.aggregate.odktables.rest.entity.Scope;
  *
  */
 public class SyncRow {
+  private static final List<String> emptyUriFragmentsList = Collections.unmodifiableList(new ArrayList<String>());
+  
   private String rowId;
   private String rowETag;
 
@@ -69,11 +73,13 @@ public class SyncRow {
   private String savepointCreator;
 
   private ArrayList<DataKeyValue> orderedValues;
+  
+  private List<String> uriFragments;
 
   public SyncRow(final String rowId, final String rowETag, final boolean deleted,
       final String formId, final String locale, final String savepointType,
       final String savepointTimestamp, final String savepointCreator, final Scope filterScope,
-      final ArrayList<DataKeyValue> values) {
+      final ArrayList<DataKeyValue> values, final ArrayList<ColumnDefinition> fileAttachmentColumns) {
     this.rowId = rowId;
     this.rowETag = rowETag;
     this.deleted = deleted;
@@ -95,6 +101,35 @@ public class SyncRow {
       });
 
       this.orderedValues = values;
+    }
+    // build up the uriFragments value...
+    // the common case is that this is empty.
+    // Use the static immutable list for that condition.
+    if ( !fileAttachmentColumns.isEmpty() ) {
+      ArrayList<String> uriFragments = new ArrayList<String>();
+      // extract the non-null uriFragments here...
+      int idxAttachment = 0;
+      String facName = fileAttachmentColumns.get(idxAttachment).getElementKey();
+      for ( DataKeyValue dkv : orderedValues) {
+        if ( dkv.column.equals(facName) ) {
+          if ( dkv.value != null ) {
+            uriFragments.add(dkv.value);
+          }
+          ++idxAttachment;
+          if ( idxAttachment > fileAttachmentColumns.size() ) {
+            break;
+          } else {
+            facName = fileAttachmentColumns.get(idxAttachment).getElementKey();
+          }
+        }
+      }
+      if ( uriFragments.isEmpty() ) {
+        this.uriFragments = emptyUriFragmentsList;
+      } else {
+        this.uriFragments = uriFragments;
+      }
+    } else {
+      this.uriFragments = emptyUriFragmentsList;
     }
   }
 
@@ -188,6 +223,10 @@ public class SyncRow {
 
       this.orderedValues = values;
     }
+  }
+  
+  public List<String> getUriFragments() {
+    return this.uriFragments;
   }
 
   @java.lang.Override

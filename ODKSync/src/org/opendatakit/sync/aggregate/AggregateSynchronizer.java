@@ -57,7 +57,6 @@ import org.apache.wink.client.RestClient;
 import org.apache.wink.client.internal.handlers.GzipHandler;
 import org.opendatakit.aggregate.odktables.rest.ApiConstants;
 import org.opendatakit.aggregate.odktables.rest.entity.Column;
-import org.opendatakit.aggregate.odktables.rest.entity.DataKeyValue;
 import org.opendatakit.aggregate.odktables.rest.entity.OdkTablesFileManifest;
 import org.opendatakit.aggregate.odktables.rest.entity.OdkTablesFileManifestEntry;
 import org.opendatakit.aggregate.odktables.rest.entity.Row;
@@ -94,8 +93,6 @@ import org.opendatakit.sync.service.SyncProgressState;
 
 import android.accounts.Account;
 import android.accounts.AccountManager;
-import android.accounts.AuthenticatorException;
-import android.accounts.OperationCanceledException;
 import android.content.Context;
 
 /**
@@ -562,7 +559,7 @@ public class AggregateSynchronizer implements Synchronizer {
    * .String, java.lang.String)
    */
   @Override
-  public IncomingRowModifications getUpdates(String tableId, String schemaETag, String dataETag)
+  public IncomingRowModifications getUpdates(String tableId, String schemaETag, String dataETag, ArrayList<ColumnDefinition> fileAttachmentColumns)
       throws ClientWebException {
     IncomingRowModifications modification = new IncomingRowModifications();
 
@@ -594,12 +591,12 @@ public class AggregateSynchronizer implements Synchronizer {
             + " exception: " + e.toString());
         throw e;
       }
-
+      
       Map<String, SyncRow> syncRows = new HashMap<String, SyncRow>();
       for (RowResource row : rows.getRows()) {
         SyncRow syncRow = new SyncRow(row.getRowId(), row.getRowETag(), row.isDeleted(),
             row.getFormId(), row.getLocale(), row.getSavepointType(), row.getSavepointTimestamp(),
-            row.getSavepointCreator(), row.getFilterScope(), row.getValues());
+            row.getSavepointCreator(), row.getFilterScope(), row.getValues(), fileAttachmentColumns);
         syncRows.put(row.getRowId(), syncRow);
       }
       modification.setRows(syncRows);
@@ -791,16 +788,15 @@ public class AggregateSynchronizer implements Synchronizer {
    * @throws IllegalArgumentException
    *           if relativeTo is not a substring of folder.
    */
-  private List<String> getAllFilesUnderFolder(String folder,
+  private List<String> getAllFilesUnderFolder(File baseFolder,
       final Set<String> excludingNamedItemsUnderFolder) {
-    final File baseFolder = new File(folder);
     String appName = ODKFileUtils.extractAppNameFromPath(baseFolder);
 
     // Return an empty list of the folder doesn't exist or is not a directory
     if (!baseFolder.exists()) {
       return new ArrayList<String>();
     } else if (!baseFolder.isDirectory()) {
-      log.e(LOGTAG, "[getAllFilesUnderFolder] folder is not a directory: " + folder);
+      log.e(LOGTAG, "[getAllFilesUnderFolder] folder is not a directory: " + baseFolder.getAbsolutePath());
       return new ArrayList<String>();
     }
 
@@ -874,7 +870,7 @@ public class AggregateSynchronizer implements Synchronizer {
 
     // Get the app-level files on our device.
     Set<String> dirsToExclude = ODKFileUtils.getDirectoriesToExcludeFromSync(true);
-    String appFolder = ODKFileUtils.getAppFolder(appName);
+    File appFolder = new File(ODKFileUtils.getAppFolder(appName));
     List<String> relativePathsOnDevice = getAllFilesUnderFolder(appFolder, dirsToExclude);
     relativePathsOnDevice = filterOutTableIdAssetFiles(relativePathsOnDevice);
     relativePathsOnDevice = filterOutAssetInitFiles(relativePathsOnDevice);
@@ -1010,7 +1006,7 @@ public class AggregateSynchronizer implements Synchronizer {
 
     // Get any assets/csv files that begin with tableId
     Set<String> dirsToExclude = new HashSet<String>();
-    String assetsCsvFolder = ODKFileUtils.getAssetsFolder(appName) + "/csv";
+    File assetsCsvFolder = new File(ODKFileUtils.getAssetsFolder(appName) + "/csv");
     List<String> relativePathsToTableIdAssetsCsvOnDevice = getAllFilesUnderFolder(assetsCsvFolder,
         dirsToExclude);
     relativePathsToTableIdAssetsCsvOnDevice = filterInTableIdFiles(
@@ -1018,7 +1014,7 @@ public class AggregateSynchronizer implements Synchronizer {
 
     // We don't want to sync anything in the instances directory, because this
     // contains things like media attachments.
-    String tableFolder = ODKFileUtils.getTablesFolder(appName, tableId);
+    File tableFolder = new File(ODKFileUtils.getTablesFolder(appName, tableId));
     dirsToExclude.add(ODKFileUtils.INSTANCES_FOLDER_NAME);
     List<String> relativePathsOnDevice = getAllFilesUnderFolder(tableFolder, dirsToExclude);
 
@@ -1534,6 +1530,39 @@ public class AggregateSynchronizer implements Synchronizer {
     }
   }
 
+  private static final class CommonFileAttachmentTerms {
+    File localFile;
+    URI instanceFileDownloadUri;
+  }
+
+  private CommonFileAttachmentTerms computeCommonFileAttachmentTerms(String realizedTableUri, String instanceId, File instanceFolder, String relativePath) {
+    // clean up the value...
+    if ( relativePath.startsWith("/") ) {
+      relativePath = relativePath.substring(1);
+    }
+    
+    File localFile = ODKFileUtils.getAsFile(appName, relativePath);
+    String baseInstanceFolder = instanceFolder.getAbsolutePath();
+    String baseLocalAttachment = localFile.getAbsolutePath();
+    if ( !baseLocalAttachment.startsWith(baseInstanceFolder) ) {
+      throw new IllegalStateException("instance data file is not within the instances tree!");
+    }
+    String partialValue = baseLocalAttachment.substring(baseInstanceFolder.length());
+    if (partialValue.startsWith("/") ) {
+      partialValue = partialValue.substring(1);
+    }
+    
+    URI instanceFileDownloadUri = normalizeUri(realizedTableUri, instanceId + "/file/"
+        + partialValue);
+
+  
+    CommonFileAttachmentTerms cat = new CommonFileAttachmentTerms();
+    cat.localFile = localFile;
+    cat.instanceFileDownloadUri = instanceFileDownloadUri;
+    
+    return cat;
+  }
+  
   @Override
   public boolean getFileAttachments(String instanceFileUri, String tableId, SyncRow serverRow,
       ArrayList<ColumnDefinition> fileAttachmentColumns, boolean deferInstanceAttachments, 
@@ -1559,75 +1588,53 @@ public class AggregateSynchronizer implements Synchronizer {
      */
     boolean success = true;
     try {
-      // 1) Get the folder holding the instance attachments
-      String instancesFolderFullPath = ODKFileUtils.getInstanceFolder(appName, tableId,
-          serverRow.getRowId());
-      File instanceFolder = new File(instancesFolderFullPath);
-
-      // 2) get all the files in that folder...
-      List<String> relativePathsToAppFolderOnDevice = getAllFilesUnderFolder(
-          instancesFolderFullPath, null);
-
-      // 1) Get the manifest of all files under this row's instanceId (rowId)
+      // 1) Get this row's instanceId (rowId)
       String instanceId = serverRow.getRowId();
-      for (DataKeyValue dkv : serverRow.getValues()) {
-        ColumnDefinition cd;
-        try {
-          cd = ColumnDefinition.find(fileAttachmentColumns, dkv.column);
-        } catch (IllegalArgumentException e) {
-          // expected...
-          continue;
+      
+      // 2) Get the folder holding the instance attachments
+      File instanceFolder = new File(ODKFileUtils.getInstanceFolder(appName, tableId, instanceId));
+
+      // 3) get all the files in that folder...
+      List<String> relativePathsToAppFolderOnDevice = getAllFilesUnderFolder(
+          instanceFolder, null);
+
+      // 4) Iterate over all non-null file attachments in the data row
+      for (String relativePath : serverRow.getUriFragments()) {
+        // clean up the value...
+        if ( relativePath.startsWith("/") ) {
+          relativePath = relativePath.substring(1);
         }
+        
+        // remove it from the local files list
+        relativePathsToAppFolderOnDevice.remove(relativePath);
+        
+        CommonFileAttachmentTerms cat = computeCommonFileAttachmentTerms(instanceFileUri, instanceId, instanceFolder, relativePath);
 
-        if (dkv.value != null) {
-          String relativePath = dkv.value;
-          // clean up the value...
-          if ( relativePath.startsWith("/") ) {
-            relativePath = relativePath.substring(1);
+        if (!cat.localFile.exists()) {
+
+          if (deferInstanceAttachments) {
+            return false;
           }
-          // remove it from the local files list
-          relativePathsToAppFolderOnDevice.remove(relativePath);
-          
-          File localFile = ODKFileUtils.getAsFile(appName, relativePath);
-          String baseInstanceFolder = instanceFolder.getAbsolutePath();
-          String baseLocalAttachment = localFile.getAbsolutePath();
-          if ( !baseLocalAttachment.startsWith(baseInstanceFolder) ) {
-            throw new IllegalStateException("instance data file is not within the instances tree!");
-          }
-          String partialValue = baseLocalAttachment.substring(baseInstanceFolder.length());
-          if (partialValue.startsWith("/") ) {
-            partialValue = partialValue.substring(1);
-          }
-          
-          URI instanceFileDownloadUri = normalizeUri(instanceFileUri, instanceId + "/file/"
-              + partialValue);
 
-          if (!localFile.exists()) {
-
-            if (deferInstanceAttachments) {
-              return false;
-            }
-
-            int statusCode = downloadFile(localFile, instanceFileDownloadUri);
-            if (statusCode != HttpStatus.SC_OK) {
-              success = false;
-            } else {
-              String md5Hash = ODKFileUtils.getMd5Hash(appName, localFile);
-              seu.updateFileSyncETag(context, appName, instanceFileDownloadUri, tableId,
-                  localFile.lastModified(), md5Hash);
-            }
+          int statusCode = downloadFile(cat.localFile, cat.instanceFileDownloadUri);
+          if (statusCode != HttpStatus.SC_OK) {
+            success = false;
           } else {
-            // assume that if the local file exists, it matches exactly the
-            // content on the server.
-            // this could be inaccurate if there are buggy programs on the
-            // device!
-            String md5hash = seu.getFileSyncETag(context, appName, instanceFileDownloadUri,
-                tableId, localFile.lastModified());
-            if (md5hash == null) {
-              md5hash = ODKFileUtils.getMd5Hash(appName, localFile);
-              seu.updateFileSyncETag(context, appName, instanceFileDownloadUri, tableId,
-                  localFile.lastModified(), md5hash);
-            }
+            String md5Hash = ODKFileUtils.getMd5Hash(appName, cat.localFile);
+            seu.updateFileSyncETag(context, appName, cat.instanceFileDownloadUri, tableId,
+                cat.localFile.lastModified(), md5Hash);
+          }
+        } else {
+          // assume that if the local file exists, it matches exactly the
+          // content on the server.
+          // this could be inaccurate if there are buggy programs on the
+          // device!
+          String md5hash = seu.getFileSyncETag(context, appName, cat.instanceFileDownloadUri,
+              tableId, cat.localFile.lastModified());
+          if (md5hash == null) {
+            md5hash = ODKFileUtils.getMd5Hash(appName, cat.localFile);
+            seu.updateFileSyncETag(context, appName, cat.instanceFileDownloadUri, tableId,
+                cat.localFile.lastModified(), md5hash);
           }
         }
       }
@@ -1685,72 +1692,51 @@ public class AggregateSynchronizer implements Synchronizer {
      */
     boolean success = true;
     try {
-      // 1) Get the folder holding the instance attachments
-      String instancesFolderFullPath = ODKFileUtils.getInstanceFolder(appName, tableId,
-          localRow.getRowId());
-      File instanceFolder = new File(instancesFolderFullPath);
-
-      // 2) iterate over all file attachment columns
-      //    try to GET that file. If the GET fails with NOT_MODIFIED,
-      //    then do nothing. Otherwise, POST the file to the server.
+      // 1) Get this row's instanceId (rowId)
       String instanceId = localRow.getRowId();
-      for (DataKeyValue dkv : localRow.getValues()) {
-        ColumnDefinition cd;
-        try {
-          cd = ColumnDefinition.find(fileAttachmentColumns, dkv.column);
-        } catch (IllegalArgumentException e) {
-          // expected...
-          continue;
+      
+      // 2) Get the folder holding the instance attachments
+      File instanceFolder = new File(ODKFileUtils.getInstanceFolder(appName, tableId, instanceId));
+
+      // 3) Iterate over all non-null file attachments in the data row
+      for (String relativePath : localRow.getUriFragments()) {
+        // clean up the value...
+        if (relativePath.startsWith("/")) {
+          relativePath = relativePath.substring(1);
         }
+        
+        CommonFileAttachmentTerms cat = computeCommonFileAttachmentTerms(instanceFileUri, instanceId, instanceFolder, relativePath);
 
-        if (dkv.value != null) {
-          String relativePath = dkv.value;
-          // clean up the value...
-          if ( relativePath.startsWith("/") ) {
-            relativePath = relativePath.substring(1);
-          }
+        if (cat.localFile.exists()) {
 
-          File localFile = ODKFileUtils.asAppFile(appName, relativePath);
-          String baseInstanceFolder = instanceFolder.getAbsolutePath();
-          String baseLocalAttachment = localFile.getAbsolutePath();
-          if ( !baseLocalAttachment.startsWith(baseInstanceFolder) ) {
-            throw new IllegalStateException("instance data file is not within the instances tree!");
-          }
-          String partialValue = baseLocalAttachment.substring(baseInstanceFolder.length());
-          if (partialValue.startsWith("/") ) {
-            partialValue = partialValue.substring(1);
-          }
+          // issue a GET. If the return is NOT_MODIFIED, then we don't need to
+          // POST it.
+          int statusCode = downloadFile(cat.localFile, cat.instanceFileDownloadUri);
+          if (statusCode == HttpStatus.SC_NOT_MODIFIED) {
+            // no-op... what is on server matches local.
+          } else if (statusCode == HttpStatus.SC_OK) {
+            // The test for ODK header ensures we detect wifi login overlays
+            // this should not happen -- indicates something is corrupted.
+            log.e(LOGTAG,
+                "Unexpectedly overwriting attachment: " + cat.instanceFileDownloadUri.toString());
+          } else if (statusCode == HttpStatus.SC_NOT_FOUND
+              || statusCode == HttpStatus.SC_NO_CONTENT) {
 
-          URI instanceFileDownloadUri = normalizeUri(instanceFileUri, instanceId + "/file/"
-              + partialValue);
+            if (deferInstanceAttachments) {
+              return false;
+            }
 
-          if (localFile.exists()) {
-
-            // issue a GET. If the return is NOT_MODIFIED, then we don't need to POST it.
-            int statusCode = downloadFile(localFile, instanceFileDownloadUri);
-            if (statusCode == HttpStatus.SC_NOT_MODIFIED) {
-              // no-op... what is on server matches local.
-            } else if (statusCode == HttpStatus.SC_OK) {
-              // The test for ODK header ensures we detect wifi login overlays
-              // this should not happen -- indicates something is corrupted.
-              log.e(LOGTAG, "Unexpectedly overwriting attachment: " + instanceFileDownloadUri.toString());
-            } else if (statusCode == HttpStatus.SC_NOT_FOUND || statusCode == HttpStatus.SC_NO_CONTENT) {
-
-              if ( deferInstanceAttachments ) {
-                return false;
-              }
-
-              // upload it...
-              boolean outcome = uploadInstanceFile(localFile, instanceFileDownloadUri);
-              if (!outcome) {
-                success = false;
-              }
-            } else {
+            // upload it...
+            boolean outcome = uploadInstanceFile(cat.localFile, cat.instanceFileDownloadUri);
+            if (!outcome) {
               success = false;
             }
           } else {
-            // we will pull these files later during a getFileAttachments() call, if needed...
+            success = false;
           }
+        } else {
+          // we will pull these files later during a getFileAttachments() call,
+          // if needed...
         }
       }
       return success;
