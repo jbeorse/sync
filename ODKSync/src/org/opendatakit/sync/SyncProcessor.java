@@ -985,13 +985,9 @@ public class SyncProcessor implements SynchronizerStatus {
             List<FileSyncRow> rowsToMoveToInConflictLocally = new ArrayList<FileSyncRow>();
 
             // localRow SyncState.new_row no changes pulled from server
-            List<SyncRow> rowsToInsertOnServer = new ArrayList<SyncRow>();
-
             // localRow SyncState.changed no changes pulled from server
-            List<SyncRow> rowsToUpdateOnServer = new ArrayList<SyncRow>();
-
             // localRow SyncState.deleted no changes pulled from server
-            List<SyncRow> rowsToDeleteOnServer = new ArrayList<SyncRow>();
+            List<SyncRow> allAlteredRows = new ArrayList<SyncRow>();
 
             // localRow SyncState.synced_pending_files no changes pulled from
             // server
@@ -1014,11 +1010,11 @@ public class SyncProcessor implements SynchronizerStatus {
                 // the local row wasn't impacted by a server change
                 // see if this local row should be pushed to the server.
                 if (state == SyncState.new_row) {
-                  rowsToInsertOnServer.add(convertToSyncRow(orderedColumns, fileAttachmentColumns, localRow));
+                  allAlteredRows.add(convertToSyncRow(orderedColumns, fileAttachmentColumns, localRow));
                 } else if (state == SyncState.changed) {
-                  rowsToUpdateOnServer.add(convertToSyncRow(orderedColumns, fileAttachmentColumns, localRow));
+                  allAlteredRows.add(convertToSyncRow(orderedColumns, fileAttachmentColumns, localRow));
                 } else if (state == SyncState.deleted) {
-                  rowsToDeleteOnServer.add(convertToSyncRow(orderedColumns, fileAttachmentColumns, localRow));
+                  allAlteredRows.add(convertToSyncRow(orderedColumns, fileAttachmentColumns, localRow));
                 } else if (state == SyncState.synced_pending_files) {
                   rowsToPushFileAttachments.add(new SyncRowPending(convertToSyncRow(orderedColumns,
                       fileAttachmentColumns, localRow), false, true, true));
@@ -1171,8 +1167,7 @@ public class SyncProcessor implements SynchronizerStatus {
 
             int totalChange = rowsToInsertLocally.size() + rowsToUpdateLocally.size()
                 + rowsToDeleteLocally.size() + rowsToMoveToInConflictLocally.size()
-                + rowsToInsertOnServer.size() + rowsToUpdateOnServer.size()
-                + rowsToDeleteOnServer.size() + rowsToPushFileAttachments.size();
+                + allAlteredRows.size() + rowsToPushFileAttachments.size();
 
             containsConflicts = containsConflicts || !rowsToMoveToInConflictLocally.isEmpty();
 
@@ -1251,8 +1246,7 @@ public class SyncProcessor implements SynchronizerStatus {
             // SERVER CHANGES
             // SERVER CHANGES
 
-            if (rowsToInsertOnServer.size() != 0 || rowsToUpdateOnServer.size() != 0
-                || rowsToDeleteOnServer.size() != 0) {
+            if (allAlteredRows.size() != 0) {
               if (tableResult.hadLocalDataChanges()) {
                 log.e(TAG, "synchronizeTableSynced hadLocalDataChanges() returned "
                     + "true, and we're about to set it to true again. Odd.");
@@ -1267,10 +1261,6 @@ public class SyncProcessor implements SynchronizerStatus {
               // idempotent interface means that the interactions
               // for inserts, updates and deletes are identical.
               int count = 0;
-              List<SyncRow> allAlteredRows = new ArrayList<SyncRow>();
-              allAlteredRows.addAll(rowsToInsertOnServer);
-              allAlteredRows.addAll(rowsToUpdateOnServer);
-              allAlteredRows.addAll(rowsToDeleteOnServer);
 
               ArrayList<RowOutcome> specialCases = new ArrayList<RowOutcome>();
 
