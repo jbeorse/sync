@@ -15,6 +15,7 @@
  */
 package org.opendatakit.sync;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -23,6 +24,7 @@ import org.opendatakit.aggregate.odktables.rest.entity.Column;
 import org.opendatakit.aggregate.odktables.rest.entity.RowOutcomeList;
 import org.opendatakit.aggregate.odktables.rest.entity.TableDefinitionResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResource;
+import org.opendatakit.aggregate.odktables.rest.entity.TableResourceList;
 import org.opendatakit.common.android.data.ColumnDefinition;
 import org.opendatakit.sync.service.SyncProgressState;
 
@@ -59,27 +61,7 @@ public interface Synchronizer {
    * @return a list of the table resources on the server
    * @throws ClientWebException
    */
-  public List<TableResource> getTables() throws ClientWebException;
-
-  /**
-   * Discover the current sync state of a given tableId. This may throw an
-   * exception if the table is not found on the server.
-   *
-   * @param tableId
-   * @return
-   * @throws ClientWebException
-   */
-  public TableResource getTable(String tableId) throws ClientWebException;
-
-  /**
-   * Returns the given tableId resource or null if the resource does not exist
-   * on the server.
-   *
-   * @param tableId
-   * @return
-   * @throws ClientWebException
-   */
-  public TableResource getTableOrNull(String tableId) throws ClientWebException;
+  public TableResourceList getTables() throws ClientWebException;
 
   /**
    * Discover the schema for a table resource.
@@ -119,8 +101,8 @@ public interface Synchronizer {
   /**
    * Retrieve changes in the server state since the last synchronization.
    *
-   * @param tableId
-   *          the unique identifier of the table
+   * @param tableResource
+   *          the TableResource from the server for a tableId
    * @param schemaETag
    *          tracks the schema instance that this id has
    * @param dataETag
@@ -131,40 +113,28 @@ public interface Synchronizer {
    *         on the server.
    * @throws ClientWebException
    */
-  public IncomingRowModifications getUpdates(String tableId, String schemaETag, String dataETag, ArrayList<ColumnDefinition> fileAttachmentColumns)
+  public IncomingRowModifications getUpdates(TableResource resource, String schemaETag, String dataETag, ArrayList<ColumnDefinition> fileAttachmentColumns)
       throws ClientWebException;
-
-  /**
-   * Apply updates in a collection up to the server.
-   * 
-   * @param tableId
-   * @param schemaETag
-   * @param dataETag
-   * @param rowsToInsertOrUpdate
-   * @return
-   * @throws ClientWebException
-   */
-  public RowOutcomeList insertOrUpdateRows(String tableId, String schemaETag, String dataETag,
-      List<SyncRow> rowsToInsertOrUpdate) throws ClientWebException;
 
   /**
    * Apply inserts, updates and deletes in a collection up to the server.
    * 
-   * @param tableId
+   * @param tableResource
+   *          the TableResource from the server for a tableId
    * @param schemaETag
    * @param dataETag
    * @param rowsToInsertOrUpdate
    * @return
    * @throws ClientWebException
    */
-  public RowOutcomeList alterRows(String tableId, String schemaETag, String dataETag,
+  public RowOutcomeList alterRows(TableResource tableResource, String schemaETag, String dataETag,
       List<SyncRow> rowsToInsertUpdateOrDelete) throws ClientWebException;
 
   /**
    * Delete the given row ids from the server.
    *
-   * @param tableId
-   *          the unique identifier of the table
+   * @param tableResource
+   *          the TableResource from the server for a tableId
    * @param schemaETag
    *          tracks the schema instance that this id has
    * @param dataETag
@@ -176,7 +146,7 @@ public interface Synchronizer {
    *         after the modification
    * @throws ClientWebException
    */
-  public RowModification deleteRow(String tableId, String schemaETag, String dataETag,
+  public RowModification deleteRow(TableResource resource, String schemaETag, String dataETag,
       SyncRow rowToDelete) throws ClientWebException;
 
   /**
@@ -185,14 +155,15 @@ public interface Synchronizer {
    * directory appid/tables/. It also excludes those files that are in a set of
    * directories that do not sync--appid/metadata, appid/logging, etc.
    *
-   * @param true if local files should be pushed. Otherwise they are only pulled
+   * @param pushLocalFiles true if local files should be pushed. Otherwise they are only pulled
    *        down.
+   * @param serverReportedAppLevelETag may be null. The server's app-level manifest ETag if known.
    * @param SynchronizerStatus
    *          for reporting detailed progress of app-level file sync
    * @return true if successful
    * @throws ClientWebException
    */
-  public boolean syncAppLevelFiles(boolean pushLocalFiles, SynchronizerStatus syncStatus)
+  public boolean syncAppLevelFiles(boolean pushLocalFiles, String serverReportedAppLevelETag, SynchronizerStatus syncStatus)
       throws ClientWebException;
 
   /**
@@ -200,13 +171,14 @@ public interface Synchronizer {
    * any media files associated with individual rows of the table.
    *
    * @param tableId
+   * @param serverReportedTableLevelETag may be null. The server's table-level manifest ETag if known.
    * @param onChange
    *          callback if the assets/csv/tableId.properties.csv file changes
    * @param pushLocal
    *          true if the local files should be pushed
    * @throws ClientWebException
    */
-  public void syncTableLevelFiles(String tableId, OnTablePropertiesChanged onChange,
+  public void syncTableLevelFiles(String tableId, String serverReportedTableLevelETag, OnTablePropertiesChanged onChange,
       boolean pushLocal, SynchronizerStatus syncStatus) throws ClientWebException;
 
   /**
@@ -238,4 +210,14 @@ public interface Synchronizer {
   public boolean putFileAttachments(String instanceFileUri, String tableId, SyncRowPending localRow,
       boolean deferInstanceAttachments)
       throws ClientWebException;
+  
+  /**
+   * Use to purge ETags of any instance attachments when server does not remember this schemaETag
+   * 
+   * @param tableId
+   * @param schemaETag
+   * @return
+   */
+  public URI constructTableInstanceFileUri(String tableId, String schemaETag);
+
 }

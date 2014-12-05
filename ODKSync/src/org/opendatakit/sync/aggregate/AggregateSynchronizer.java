@@ -30,7 +30,6 @@ import java.net.URLEncoder;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
@@ -418,12 +417,8 @@ public class AggregateSynchronizer implements Synchronizer {
     }
   }
 
-  /**
-   * Return a map of tableId to schemaETag.
-   */
   @Override
-  public List<TableResource> getTables() throws ClientWebException {
-    List<TableResource> tables = new ArrayList<TableResource>();
+  public TableResourceList getTables() throws ClientWebException {
 
     TableResourceList tableResources;
     try {
@@ -436,22 +431,7 @@ public class AggregateSynchronizer implements Synchronizer {
       throw e;
     }
 
-    for (TableResource tableResource : tableResources.getTables()) {
-      resources.put(tableResource.getTableId(), tableResource);
-      tables.add(tableResource);
-    }
-
-    Collections.sort(tables, new Comparator<TableResource>() {
-
-      @Override
-      public int compare(TableResource lhs, TableResource rhs) {
-        if (lhs.getTableId() != null) {
-          return lhs.getTableId().compareTo(rhs.getTableId());
-        }
-        return -1;
-      }
-    });
-    return tables;
+    return tableResources;
   }
 
   private void updateResource(String tableId, String tableSchemaETag, String tableDataETag) {
@@ -477,6 +457,13 @@ public class AggregateSynchronizer implements Synchronizer {
   }
 
   @Override
+  public URI constructTableInstanceFileUri(String tableId, String schemaETag) {
+    // e.g., https://msundt-test.appspot.com:443/odktables/tables/tables/Milk_bank/ref/uuid:bb26cdaf-9ccf-4a4f-8e28-c114fe30358a/attachments
+    URI instanceFileUri = normalizeUri(aggregateUri, getTablesUriFragment() + tableId + "/ref/" + schemaETag + "/attachments");
+    return instanceFileUri;
+  }
+  
+  @Override
   public TableResource createTable(String tableId, String schemaETag, ArrayList<Column> columns)
       throws ClientWebException {
 
@@ -497,44 +484,6 @@ public class AggregateSynchronizer implements Synchronizer {
 
     // save resource
     this.resources.put(resource.getTableId(), resource);
-    return resource;
-  }
-
-  @Override
-  public TableResource getTable(String tableId) throws ClientWebException {
-    if (resources.containsKey(tableId)) {
-      return resources.get(tableId);
-    } else {
-      URI uri = normalizeUri(aggregateUri, getTablesUriFragment() + tableId);
-      TableResource resource;
-      try {
-        resource = buildResource(uri).get(TableResource.class);
-      } catch (ClientWebException e) {
-        log.e(LOGTAG, "Exception while requesting table from server: " + tableId + " exception: "
-            + e.toString());
-        throw e;
-      }
-      resources.put(resource.getTableId(), resource);
-      return resource;
-    }
-  }
-
-  @Override
-  public TableResource getTableOrNull(String tableId) throws ClientWebException {
-    // TODO: need to discriminate failure modes for server responses
-    // this is not very efficient...
-    List<TableResource> resources = getTables();
-    TableResource resource = null;
-    for (TableResource t : resources) {
-      if (t.getTableId().equals(tableId)) {
-        resource = t;
-        break;
-      }
-    }
-
-    if (resource == null) {
-      return null;
-    }
     return resource;
   }
 
@@ -560,12 +509,11 @@ public class AggregateSynchronizer implements Synchronizer {
    * .String, java.lang.String)
    */
   @Override
-  public IncomingRowModifications getUpdates(String tableId, String schemaETag, String dataETag, ArrayList<ColumnDefinition> fileAttachmentColumns)
+  public IncomingRowModifications getUpdates(TableResource resource, String schemaETag, String dataETag, ArrayList<ColumnDefinition> fileAttachmentColumns)
       throws ClientWebException {
     IncomingRowModifications modification = new IncomingRowModifications();
 
-    TableResource resource = getTable(tableId);
-
+    String tableId = resource.getTableId();
     // get current and new sync tags
     // This tag is ultimately returned. May8--make sure it works.
     String resourceSchemaETag = resource.getSchemaETag();
@@ -605,50 +553,9 @@ public class AggregateSynchronizer implements Synchronizer {
     return modification;
   }
 
-  /**
-   * Insert or update the given row in the table on the server.
-   *
-   * @param tableId
-   *          the unique identifier of the table
-   * @param currentSyncTag
-   *          the last value that was stored as the syncTag
-   * @param rowToInsertOrUpdate
-   *          the row to insert or update
-   * @return a RowModification containing the (rowId, rowETag, table dataETag)
-   *         after the modification
-   */
-  public RowOutcomeList insertOrUpdateRows(String tableId, String tableSchemaETag,
-      String tableDataETag, List<SyncRow> rowsToInsertOrUpdate) throws ClientWebException {
-    TableResource resource = getTable(tableId);
-
-    ArrayList<Row> rows = new ArrayList<Row>();
-    for (SyncRow rowToInsertOrUpdate : rowsToInsertOrUpdate) {
-      Row row = Row.forUpdate(rowToInsertOrUpdate.getRowId(), rowToInsertOrUpdate.getRowETag(),
-          rowToInsertOrUpdate.getFormId(), rowToInsertOrUpdate.getLocale(),
-          rowToInsertOrUpdate.getSavepointType(), rowToInsertOrUpdate.getSavepointTimestamp(),
-          rowToInsertOrUpdate.getSavepointCreator(), rowToInsertOrUpdate.getFilterScope(),
-          rowToInsertOrUpdate.getValues());
-      rows.add(row);
-    }
-    RowList rlist = new RowList(rows);
-
-    URI uri = URI.create(resource.getDataUri());
-    RowOutcomeList outcomes;
-    try {
-      outcomes = buildResource(uri).put(new EntityType<RowOutcomeList>() {
-      }, rlist);
-    } catch (ClientWebException e) {
-      log.e(LOGTAG,
-          "Exception while updating rows on server: " + tableId + " exception: " + e.toString());
-      throw e;
-    }
-    return outcomes;
-  }
-
-  public RowOutcomeList alterRows(String tableId, String schemaETag, String dataETag,
+  @Override
+  public RowOutcomeList alterRows(TableResource resource, String schemaETag, String dataETag,
       List<SyncRow> rowsToInsertUpdateOrDelete) throws ClientWebException {
-
-    TableResource resource = getTable(tableId);
 
     ArrayList<Row> rows = new ArrayList<Row>();
     for (SyncRow rowToAlter : rowsToInsertUpdateOrDelete) {
@@ -669,7 +576,7 @@ public class AggregateSynchronizer implements Synchronizer {
       }, rlist);
     } catch (ClientWebException e) {
       log.e(LOGTAG,
-          "Exception while updating rows on server: " + tableId + " exception: " + e.toString());
+          "Exception while updating rows on server: " + resource.getTableId() + " exception: " + e.toString());
       throw e;
     }
     return outcomes;
@@ -683,9 +590,8 @@ public class AggregateSynchronizer implements Synchronizer {
    * .String, java.util.List)
    */
   @Override
-  public RowModification deleteRow(String tableId, String tableSchemaETag, String tableDataETag,
+  public RowModification deleteRow(TableResource resource, String tableSchemaETag, String tableDataETag,
       SyncRow rowToDelete) throws ClientWebException {
-    TableResource resource = getTable(tableId);
     String lastKnownServerDataTag = null; // the data tag of the whole table.
     String rowId = rowToDelete.getRowId();
     URI url = normalizeUri(resource.getDataUri(), escapeSegment(rowId) + "?row_etag="
@@ -706,7 +612,7 @@ public class AggregateSynchronizer implements Synchronizer {
     log.i(LOGTAG, "[deleteRows] setting data etag to last known server tag: "
         + lastKnownServerDataTag);
 
-    updateResource(tableId, tableSchemaETag, lastKnownServerDataTag);
+    updateResource(resource.getTableId(), tableSchemaETag, lastKnownServerDataTag);
 
     return new RowModification(rowToDelete.getRowId(), null, tableSchemaETag,
         lastKnownServerDataTag);
@@ -854,12 +760,12 @@ public class AggregateSynchronizer implements Synchronizer {
   }
 
   @Override
-  public boolean syncAppLevelFiles(boolean pushLocalFiles, SynchronizerStatus syncStatus)
+  public boolean syncAppLevelFiles(boolean pushLocalFiles, String serverReportedAppLevelETag, SynchronizerStatus syncStatus)
       throws ClientWebException {
     // Get the app-level files on the server.
     syncStatus.updateNotification(SyncProgressState.APP_FILES, R.string.getting_app_level_manifest,
         null, 1.0, false);
-    List<OdkTablesFileManifestEntry> manifest = getAppLevelFileManifest(pushLocalFiles);
+    List<OdkTablesFileManifestEntry> manifest = getAppLevelFileManifest(pushLocalFiles, serverReportedAppLevelETag);
 
     if (manifest == null) {
       log.i(LOGTAG, "no change in app-leve manifest -- skipping!");
@@ -982,14 +888,14 @@ public class AggregateSynchronizer implements Synchronizer {
   }
 
   @Override
-  public void syncTableLevelFiles(String tableId, OnTablePropertiesChanged onChange,
+  public void syncTableLevelFiles(String tableId, String serverReportedTableLevelETag, OnTablePropertiesChanged onChange,
       boolean pushLocalFiles, SynchronizerStatus syncStatus) throws ClientWebException {
 
     syncStatus.updateNotification(SyncProgressState.TABLE_FILES, R.string.getting_table_manifest,
         new Object[] { tableId }, 1.0, false);
 
     // get the table files on the server
-    List<OdkTablesFileManifestEntry> manifest = getTableLevelFileManifest(tableId, pushLocalFiles);
+    List<OdkTablesFileManifestEntry> manifest = getTableLevelFileManifest(tableId, serverReportedTableLevelETag, pushLocalFiles);
 
     if (manifest == null) {
       log.i(LOGTAG, "no change in table manifest -- skipping!");
@@ -1134,7 +1040,7 @@ public class AggregateSynchronizer implements Synchronizer {
     }
   }
 
-  public List<OdkTablesFileManifestEntry> getAppLevelFileManifest(boolean pushLocalFiles)
+  public List<OdkTablesFileManifestEntry> getAppLevelFileManifest(boolean pushLocalFiles, String serverReportedAppLevelETag)
       throws ClientWebException {
     SyncETagsUtils seu = new SyncETagsUtils();
     URI fileManifestUri = normalizeUri(aggregateUri, getManifestUriFragment());
@@ -1145,6 +1051,10 @@ public class AggregateSynchronizer implements Synchronizer {
     // transmissions of files being pushed up to the server.
     if (!pushLocalFiles && eTag != null) {
       rsc.header(HttpHeaders.IF_NONE_MATCH, eTag);
+      if ( serverReportedAppLevelETag != null && serverReportedAppLevelETag.equals(eTag) ) {
+        // no change -- we can skip the request to the server
+        return null;
+      }
     }
     ClientResponse rsp = rsc.get();
     if (rsp.getStatusCode() == HttpStatus.SC_NOT_MODIFIED) {
@@ -1175,7 +1085,7 @@ public class AggregateSynchronizer implements Synchronizer {
     return theList;
   }
 
-  public List<OdkTablesFileManifestEntry> getTableLevelFileManifest(String tableId,
+  public List<OdkTablesFileManifestEntry> getTableLevelFileManifest(String tableId, String serverReportedTableLevelETag,
       boolean pushLocalFiles) throws ClientWebException {
     SyncETagsUtils seu = new SyncETagsUtils();
     URI fileManifestUri = normalizeUri(aggregateUri, getManifestUriFragment() + tableId);
@@ -1186,6 +1096,10 @@ public class AggregateSynchronizer implements Synchronizer {
     // transmissions of files being pushed up to the server.
     if (!pushLocalFiles && eTag != null) {
       rsc.header(HttpHeaders.IF_NONE_MATCH, eTag);
+      if ( serverReportedTableLevelETag != null && serverReportedTableLevelETag.equals(eTag) ) {
+        // no change -- we can skip the request to the server
+        return null;
+      }
     }
     ClientResponse rsp = rsc.get();
     if (rsp.getStatusCode() == HttpStatus.SC_NOT_MODIFIED) {

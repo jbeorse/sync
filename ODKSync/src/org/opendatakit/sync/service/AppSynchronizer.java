@@ -16,7 +16,9 @@
 package org.opendatakit.sync.service;
 
 import java.util.Arrays;
+import java.util.List;
 
+import org.opendatakit.aggregate.odktables.rest.entity.TableResource;
 import org.opendatakit.common.android.utilities.WebLogger;
 import org.opendatakit.sync.R;
 import org.opendatakit.sync.SyncApp;
@@ -162,13 +164,13 @@ public class AppSynchronizer {
         status = SyncStatus.SYNCING;
 
         // sync the app-level files, table schemas and table-level files
-        processor.synchronizeConfigurationAndContent(push);
+        List<TableResource> workingListOfTables = processor.synchronizeConfigurationAndContent(push);
 
         // and now sync the data rows. This does not proceed if there
         // was an app-level sync failure or if the particular tableId
         // experienced a table-level sync failure in the preceeding step.
 
-        processor.synchronizeDataRowsAndAttachments(deferInstanceAttachments);
+        processor.synchronizeDataRowsAndAttachments(workingListOfTables, deferInstanceAttachments);
 
         boolean authProblems = false;
 
