@@ -106,6 +106,10 @@ public class AggregateSynchronizer implements Synchronizer {
 
   private static final String LOGTAG = AggregateSynchronizer.class.getSimpleName();
   private static final String TOKEN_INFO = "https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=";
+  
+  // parameters for queries that could return a lot of data...
+  public static final String CURSOR_PARAMETER = "cursor";
+  public static final String FETCH_LIMIT = "fetchLimit";
 
   /** Timeout (in ms) we specify for each http request */
   public static final int HTTP_REQUEST_TIMEOUT_MS = 30 * 1000;
@@ -418,14 +422,19 @@ public class AggregateSynchronizer implements Synchronizer {
   }
 
   @Override
-  public TableResourceList getTables() throws ClientWebException {
+  public TableResourceList getTables(String webSafeResumeCursor) throws ClientWebException {
 
     TableResourceList tableResources;
     try {
       String tableFrag = getTablesUriFragment();
       tableFrag = tableFrag.substring(0, tableFrag.length() - 1);
       URI uri = normalizeUri(aggregateUri, tableFrag);
-      tableResources = buildResource(uri).get(TableResourceList.class);
+      if ( webSafeResumeCursor == null ) {
+        tableResources = buildResource(uri).get(TableResourceList.class);
+      } else {
+        tableResources = buildResource(uri).queryParam(CURSOR_PARAMETER, webSafeResumeCursor)
+            .get(TableResourceList.class);
+      }
     } catch (ClientWebException e) {
       log.e(LOGTAG, "Exception while requesting list of tables from server: " + e.toString());
       throw e;

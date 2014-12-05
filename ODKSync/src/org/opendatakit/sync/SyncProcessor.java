@@ -165,30 +165,38 @@ public class SyncProcessor implements SynchronizerStatus {
     // working list of tables -- the list we will construct and return...
     List<TableResource> workingListOfTables = new ArrayList<TableResource>();
 
-    // get tables (tableId -> schemaETag) from server
+    // get tables from server
     TableResourceList tableList;
     List<TableResource> tables = new ArrayList<TableResource>();
-    try {
-      tableList = synchronizer.getTables();
-      if (tableList != null & tableList.getTables() != null) {
-        tables = tableList.getTables();
+    // For now, repeatedly do this until we get all of the tables on the server.
+    // This will likely need to change if we actually have 1000's of them...
+    String webSafeResumeCursor = null;
+    for (;;) {
+      try {
+        tableList = synchronizer.getTables(webSafeResumeCursor);
+        if (tableList != null & tableList.getTables() != null) {
+          tables.addAll(tableList.getTables());
+        }
+      } catch (ClientWebException e) {
+        mUserResult.setAppLevelStatus(Status.AUTH_EXCEPTION);
+        log.i(TAG,
+            "[synchronizeConfigurationAndContent] Could not retrieve server table list exception: "
+                + e.toString());
+        return new ArrayList<TableResource>();
+      } catch (Exception e) {
+        mUserResult.setAppLevelStatus(Status.EXCEPTION);
+        log.e(TAG,
+            "[synchronizeConfigurationAndContent] Unexpected exception getting server table list exception: "
+                + e.toString());
+        return new ArrayList<TableResource>();
       }
-    } catch (ClientWebException e) {
-      mUserResult.setAppLevelStatus(Status.AUTH_EXCEPTION);
-      log.i(TAG,
-          "[synchronizeConfigurationAndContent] Could not retrieve server table list exception: "
-              + e.toString());
-      return new ArrayList<TableResource>();
-    } catch (Exception e) {
-      mUserResult.setAppLevelStatus(Status.EXCEPTION);
-      log.e(TAG,
-          "[synchronizeConfigurationAndContent] Unexpected exception getting server table list exception: "
-              + e.toString());
-      return new ArrayList<TableResource>();
+      if ( !tableList.isHasMoreResults() ) {
+        break;
+      }
+      webSafeResumeCursor = tableList.getWebSafeResumeCursor();
     }
 
     // TODO: do the database updates with a few database transactions...
-
     // get the tables on the local device
     List<String> localTableIds;
     SQLiteDatabase db = null;

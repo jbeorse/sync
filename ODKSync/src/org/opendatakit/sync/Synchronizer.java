@@ -58,10 +58,11 @@ public interface Synchronizer {
   /**
    * Get a list of all tables in the server.
    *
+   * @param webSafeResumeCursor null or a non-empty string if we are issuing a resume query
    * @return a list of the table resources on the server
    * @throws ClientWebException
    */
-  public TableResourceList getTables() throws ClientWebException;
+  public TableResourceList getTables(String webSafeResumeCursor) throws ClientWebException;
 
   /**
    * Discover the schema for a table resource.
