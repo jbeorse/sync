@@ -20,12 +20,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.wink.client.ClientWebException;
+import org.opendatakit.aggregate.odktables.rest.entity.ChangeSetList;
 import org.opendatakit.aggregate.odktables.rest.entity.Column;
 import org.opendatakit.aggregate.odktables.rest.entity.RowOutcomeList;
+import org.opendatakit.aggregate.odktables.rest.entity.RowResourceList;
 import org.opendatakit.aggregate.odktables.rest.entity.TableDefinitionResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResourceList;
-import org.opendatakit.common.android.data.ColumnDefinition;
 import org.opendatakit.sync.service.SyncProgressState;
 
 /**
@@ -100,55 +101,49 @@ public interface Synchronizer {
   public void deleteTable(TableResource table) throws ClientWebException;
 
   /**
+   * Retrieve the changeSets applied after the changeSet with the specified dataETag
+   * 
+   * @param tableResource
+   * @param dataETag
+   * @return
+   * @throws ClientException
+   */
+  public ChangeSetList getChangeSets(TableResource tableResource, String dataETag) throws ClientWebException;
+  
+  public RowResourceList getChangeSet(TableResource tableResource, String dataETag, boolean activeOnly, String websafeResumeCursor)
+      throws ClientWebException;
+
+  /**
    * Retrieve changes in the server state since the last synchronization.
    *
    * @param tableResource
    *          the TableResource from the server for a tableId
-   * @param schemaETag
-   *          tracks the schema instance that this id has
    * @param dataETag
-   *          tracks the last dataETag for the last successfully downloaded row
-   *          in the table.
-   * @return an IncomingModification representing the latest state of the table
-   *         on server since the last sync or null if the table does not exist
-   *         on the server.
+   *          tracks the last dataETag successfully pulled into
+   *          the local data table. Fetches changes after that dataETag.
+   * @param websafeResumeCursor
+   *          either null or a value used to resume a prior query.
+   *          
+   * @return an RowResourceList of the changes on the server since that dataETag.
    * @throws ClientWebException
    */
-  public IncomingRowModifications getUpdates(TableResource resource, String schemaETag, String dataETag, ArrayList<ColumnDefinition> fileAttachmentColumns)
+  public RowResourceList getUpdates(TableResource tableResource, String dataETag, String websafeResumeCursor)
       throws ClientWebException;
 
   /**
    * Apply inserts, updates and deletes in a collection up to the server.
+   * This does not depend upon knowing the current dataETag of the server.
+   * The dataETag for the changeSet made by this call is returned to the 
+   * caller via the RowOutcomeList.
    * 
    * @param tableResource
    *          the TableResource from the server for a tableId
-   * @param schemaETag
-   * @param dataETag
    * @param rowsToInsertOrUpdate
    * @return
    * @throws ClientWebException
    */
-  public RowOutcomeList alterRows(TableResource tableResource, String schemaETag, String dataETag,
+  public RowOutcomeList alterRows(TableResource tableResource,
       List<SyncRow> rowsToInsertUpdateOrDelete) throws ClientWebException;
-
-  /**
-   * Delete the given row ids from the server.
-   *
-   * @param tableResource
-   *          the TableResource from the server for a tableId
-   * @param schemaETag
-   *          tracks the schema instance that this id has
-   * @param dataETag
-   *          tracks the last dataETag for the last successfully downloaded row
-   *          in the table.
-   * @param rowToDelete
-   *          the row to delete
-   * @return a RowModification containing the (rowId, null, table dataETag)
-   *         after the modification
-   * @throws ClientWebException
-   */
-  public RowModification deleteRow(TableResource resource, String schemaETag, String dataETag,
-      SyncRow rowToDelete) throws ClientWebException;
 
   /**
    * Synchronizes the app level files. This includes any files that are not

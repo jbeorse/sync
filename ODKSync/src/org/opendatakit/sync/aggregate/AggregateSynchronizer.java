@@ -55,19 +55,18 @@ import org.apache.wink.client.Resource;
 import org.apache.wink.client.RestClient;
 import org.apache.wink.client.internal.handlers.GzipHandler;
 import org.opendatakit.aggregate.odktables.rest.ApiConstants;
+import org.opendatakit.aggregate.odktables.rest.entity.ChangeSetList;
 import org.opendatakit.aggregate.odktables.rest.entity.Column;
 import org.opendatakit.aggregate.odktables.rest.entity.OdkTablesFileManifest;
 import org.opendatakit.aggregate.odktables.rest.entity.OdkTablesFileManifestEntry;
 import org.opendatakit.aggregate.odktables.rest.entity.Row;
 import org.opendatakit.aggregate.odktables.rest.entity.RowList;
 import org.opendatakit.aggregate.odktables.rest.entity.RowOutcomeList;
-import org.opendatakit.aggregate.odktables.rest.entity.RowResource;
 import org.opendatakit.aggregate.odktables.rest.entity.RowResourceList;
 import org.opendatakit.aggregate.odktables.rest.entity.TableDefinition;
 import org.opendatakit.aggregate.odktables.rest.entity.TableDefinitionResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResourceList;
-import org.opendatakit.common.android.data.ColumnDefinition;
 import org.opendatakit.common.android.utilities.ODKFileUtils;
 import org.opendatakit.common.android.utilities.SyncETagsUtils;
 import org.opendatakit.common.android.utilities.WebLogger;
@@ -80,14 +79,12 @@ import org.opendatakit.httpclientandroidlib.impl.client.DefaultHttpClient;
 import org.opendatakit.httpclientandroidlib.impl.conn.BasicClientConnectionManager;
 import org.opendatakit.httpclientandroidlib.params.HttpConnectionParams;
 import org.opendatakit.httpclientandroidlib.params.HttpParams;
-import org.opendatakit.sync.IncomingRowModifications;
 import org.opendatakit.sync.R;
-import org.opendatakit.sync.RowModification;
-import org.opendatakit.sync.SyncApp;
 import org.opendatakit.sync.SyncPreferences;
 import org.opendatakit.sync.SyncRow;
 import org.opendatakit.sync.SyncRowPending;
 import org.opendatakit.sync.Synchronizer;
+import org.opendatakit.sync.application.Sync;
 import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
 import org.opendatakit.sync.service.SyncProgressState;
 
@@ -110,6 +107,17 @@ public class AggregateSynchronizer implements Synchronizer {
   // parameters for queries that could return a lot of data...
   public static final String CURSOR_PARAMETER = "cursor";
   public static final String FETCH_LIMIT = "fetchLimit";
+
+  // parameter for file downloads -- if we want to have it come down as an attachment.
+  public static final String PARAM_AS_ATTACHMENT = "as_attachment";
+
+  // parameters for data/diff/query APIs.
+  public static final String QUERY_DATA_ETAG = "data_etag";
+  public static final String QUERY_SEQUENCE_VALUE = "sequence_value";
+  public static final String QUERY_ACTIVE_ONLY = "active_only";
+  // parameters for query API
+  public static final String QUERY_START_TIME = "startTime";
+  public static final String QUERY_END_TIME = "endTime";
 
   /** Timeout (in ms) we specify for each http request */
   public static final int HTTP_REQUEST_TIMEOUT_MS = 30 * 1000;
@@ -303,7 +311,7 @@ public class AggregateSynchronizer implements Synchronizer {
     // set the access token...
     rsc.header(ApiConstants.ACCEPT_CONTENT_ENCODING_HEADER, ApiConstants.GZIP_CONTENT_ENCODING);
     rsc.header(ApiConstants.OPEN_DATA_KIT_VERSION_HEADER, ApiConstants.OPEN_DATA_KIT_VERSION);
-    rsc.header(HttpHeaders.USER_AGENT, "Sync " + SyncApp.getInstance().getVersionCodeString() + " (gzip)");
+    rsc.header(HttpHeaders.USER_AGENT, "Sync " + Sync.getInstance().getVersionCodeString() + " (gzip)");
     GregorianCalendar g = new GregorianCalendar(TimeZone.getTimeZone("GMT"));
     g.setTime(new Date());
     SimpleDateFormat formatter = new SimpleDateFormat("E, dd MMM yyyy HH:mm:ss zz");
@@ -443,20 +451,6 @@ public class AggregateSynchronizer implements Synchronizer {
     return tableResources;
   }
 
-  private void updateResource(String tableId, String tableSchemaETag, String tableDataETag) {
-    // access tr from local cache...
-    TableResource tr = resources.get(tableId);
-    if (tr == null)
-      return;
-    if (!(tr.getSchemaETag().equals(tableSchemaETag))) {
-      // schemaETag is stale...
-      resources.remove(tableId);
-      return;
-    }
-    // found matching tr -- update its dataETagAtModification field
-    tr.setDataETag(tableDataETag);
-  }
-
   @Override
   public TableDefinitionResource getTableDefinition(String tableDefinitionUri)
       throws ClientWebException {
@@ -496,74 +490,102 @@ public class AggregateSynchronizer implements Synchronizer {
     return resource;
   }
 
-  /*
-   * (non-Javadoc)
-   * 
-   * @see
-   * yoonsung.odk.spreadsheet.sync.aggregate.Synchronizer#deleteTable(java.lang
-   * .String)
-   */
   @Override
   public void deleteTable(TableResource table) throws ClientWebException {
     URI uri = URI.create(table.getDefinitionUri()).normalize();
     buildResource(uri).delete();
     this.resources.remove(table.getTableId());
   }
-
-  /*
-   * (non-Javadoc)
-   * 
-   * @see
-   * yoonsung.odk.spreadsheet.sync.aggregate.Synchronizer#getUpdates(java.lang
-   * .String, java.lang.String)
-   */
+  
   @Override
-  public IncomingRowModifications getUpdates(TableResource resource, String schemaETag, String dataETag, ArrayList<ColumnDefinition> fileAttachmentColumns)
-      throws ClientWebException {
-    IncomingRowModifications modification = new IncomingRowModifications();
+  public ChangeSetList getChangeSets(TableResource table, String dataETag) throws ClientWebException {
 
-    String tableId = resource.getTableId();
-    // get current and new sync tags
-    // This tag is ultimately returned. May8--make sure it works.
-    String resourceSchemaETag = resource.getSchemaETag();
-    String resourceDataETag = resource.getDataETag();
-
-    // TODO: need to loop here to process segments of change
-    // vs. an entire bucket of changes.
-
-    // get data updates
-    if (((resourceDataETag == null) && (dataETag != null))
-        || ((resourceDataETag != null) && !resourceDataETag.equals(dataETag))) {
-      URI uri;
-      if ((resource.getDataETag() == null) || dataETag == null) {
-        uri = normalizeUri(resource.getDataUri(), "/");
-      } else {
-        String diffUri = resource.getDiffUri();
-        uri = normalizeUri(diffUri, "?data_etag=" + escapeSegment(dataETag));
-      }
-      RowResourceList rows;
-      try {
-        rows = buildResource(uri).get(RowResourceList.class);
-      } catch (ClientWebException e) {
-        log.e(LOGTAG, "Exception while requesting list of rows from server: " + tableId
-            + " exception: " + e.toString());
-        throw e;
-      }
-      
-      Map<String, SyncRow> syncRows = new HashMap<String, SyncRow>();
-      for (RowResource row : rows.getRows()) {
-        SyncRow syncRow = new SyncRow(row.getRowId(), row.getRowETag(), row.isDeleted(),
-            row.getFormId(), row.getLocale(), row.getSavepointType(), row.getSavepointTimestamp(),
-            row.getSavepointCreator(), row.getFilterScope(), row.getValues(), fileAttachmentColumns);
-        syncRows.put(row.getRowId(), syncRow);
-      }
-      modification.setRows(syncRows);
+    String tableId = table.getTableId();
+    URI uri;
+    Resource resource;
+    uri = normalizeUri(table.getDiffUri(), "/changeSets");
+    resource = buildResource(uri);
+    if ((table.getDataETag() != null) && dataETag != null) {
+      resource = buildResource(uri).queryParam(QUERY_DATA_ETAG, dataETag);
     }
-    return modification;
+    
+    ChangeSetList changeSets;
+    try {
+      changeSets = resource.get(ChangeSetList.class);
+      return changeSets;
+    } catch (ClientWebException e) {
+      log.e(LOGTAG, "Exception while requesting list of changeSets from server: " + tableId
+          + " exception: " + e.toString());
+      throw e;
+    }
+  }
+  
+  @Override
+  public RowResourceList getChangeSet(TableResource table, String dataETag, boolean activeOnly, String websafeResumeCursor)
+      throws ClientWebException {
+
+    String tableId = table.getTableId();
+    URI uri;
+    Resource resource;
+    if ((table.getDataETag() == null) || dataETag == null) {
+      throw new IllegalArgumentException("dataETag cannot be null!");
+    }
+    
+    uri = normalizeUri(table.getDiffUri(), "/changeSets/" + dataETag);
+    resource = buildResource(uri);
+    
+    if ( activeOnly ) {
+      resource = resource.queryParam(QUERY_ACTIVE_ONLY, "true");
+    }
+
+    // and apply the cursor...
+    if ( websafeResumeCursor != null ) {
+      resource = resource.queryParam(CURSOR_PARAMETER, websafeResumeCursor);
+    }
+    
+    RowResourceList rows;
+    try {
+      rows = resource.get(RowResourceList.class);
+      return rows;
+    } catch (ClientWebException e) {
+      log.e(LOGTAG, "Exception while requesting changeSet rows from server: " + tableId
+          + " exception: " + e.toString());
+      throw e;
+    }
+  }
+
+
+  @Override
+  public RowResourceList getUpdates(TableResource table, String dataETag, String websafeResumeCursor)
+      throws ClientWebException {
+
+    String tableId = table.getTableId();
+    URI uri;
+    Resource resource;
+    if ((table.getDataETag() == null) || dataETag == null) {
+      uri = URI.create(table.getDataUri());
+      resource = buildResource(uri);
+    } else {
+      uri = URI.create(table.getDiffUri());
+      resource = buildResource(uri).queryParam(QUERY_DATA_ETAG, dataETag);
+    }
+    // and apply the cursor...
+    if ( websafeResumeCursor != null ) {
+      resource = resource.queryParam(CURSOR_PARAMETER, websafeResumeCursor);
+    }
+    RowResourceList rows;
+    try {
+      rows = resource.get(RowResourceList.class);
+      return rows;
+    } catch (ClientWebException e) {
+      log.e(LOGTAG, "Exception while requesting list of rows from server: " + tableId
+          + " exception: " + e.toString());
+      throw e;
+    }
   }
 
   @Override
-  public RowOutcomeList alterRows(TableResource resource, String schemaETag, String dataETag,
+  public RowOutcomeList alterRows(TableResource resource,
       List<SyncRow> rowsToInsertUpdateOrDelete) throws ClientWebException {
 
     ArrayList<Row> rows = new ArrayList<Row>();
@@ -589,42 +611,6 @@ public class AggregateSynchronizer implements Synchronizer {
       throw e;
     }
     return outcomes;
-  }
-
-  /*
-   * (non-Javadoc)
-   * 
-   * @see
-   * yoonsung.odk.spreadsheet.sync.aggregate.Synchronizer#deleteRows(java.lang
-   * .String, java.util.List)
-   */
-  @Override
-  public RowModification deleteRow(TableResource resource, String tableSchemaETag, String tableDataETag,
-      SyncRow rowToDelete) throws ClientWebException {
-    String lastKnownServerDataTag = null; // the data tag of the whole table.
-    String rowId = rowToDelete.getRowId();
-    URI url = normalizeUri(resource.getDataUri(), escapeSegment(rowId) + "?row_etag="
-        + escapeSegment(rowToDelete.getRowETag()));
-    try {
-      lastKnownServerDataTag = buildResource(url).delete(String.class);
-    } catch (ClientWebException e) {
-      log.e(LOGTAG,
-          "Exception while deleting row " + url.toASCIIString() + " exception: " + e.toString());
-      throw e;
-    }
-    if (lastKnownServerDataTag == null) {
-      // do something--b/c the delete hasn't worked.
-      log.e(LOGTAG, "delete call didn't return a known data etag.");
-      throw new IllegalStateException("Unable to extract dataETag at modification");
-    }
-
-    log.i(LOGTAG, "[deleteRows] setting data etag to last known server tag: "
-        + lastKnownServerDataTag);
-
-    updateResource(resource.getTableId(), tableSchemaETag, lastKnownServerDataTag);
-
-    return new RowModification(rowToDelete.getRowId(), null, tableSchemaETag,
-        lastKnownServerDataTag);
   }
 
   private static List<String> filterOutTableIdAssetFiles(List<String> relativePaths) {

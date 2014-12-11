@@ -12,27 +12,29 @@
  * the License.
  */
 
-package org.opendatakit.sync;
+package org.opendatakit.sync.application;
 
 import org.opendatakit.common.android.utilities.ODKFileUtils;
+import org.opendatakit.sync.OdkSyncServiceProxy;
 import org.opendatakit.sync.R;
 
 import android.app.Application;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager.NameNotFoundException;
 
-public class SyncApp extends Application {
+public class Sync extends Application {
 
-  public static final String LOGTAG = SyncApp.class.getSimpleName();
+  public static final String LOGTAG = Sync.class.getSimpleName();
 
   /**
    * Set this to true if you want to attach a debugger to the Sync service.
+   * If true, then tables on server are dropped if not present on device.
    */
-  private boolean debugService = false;
+  private boolean debugService = true;
   
-  private static SyncApp singleton = null;
+  private static Sync singleton = null;
 
-  public static SyncApp getInstance() {
+  public static Sync getInstance() {
     return singleton;
   }
 

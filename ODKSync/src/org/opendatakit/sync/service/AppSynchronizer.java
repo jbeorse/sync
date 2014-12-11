@@ -19,17 +19,20 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.opendatakit.aggregate.odktables.rest.entity.TableResource;
+import org.opendatakit.common.android.utilities.ODKFileUtils;
 import org.opendatakit.common.android.utilities.WebLogger;
 import org.opendatakit.sync.R;
-import org.opendatakit.sync.SyncApp;
+import org.opendatakit.sync.ProcessAppAndTableLevelChanges;
 import org.opendatakit.sync.SyncPreferences;
-import org.opendatakit.sync.SyncProcessor;
+import org.opendatakit.sync.ProcessRowDataChanges;
+import org.opendatakit.sync.SyncExecutionContext;
 import org.opendatakit.sync.SynchronizationResult;
 import org.opendatakit.sync.SynchronizationResult.Status;
 import org.opendatakit.sync.Synchronizer;
 import org.opendatakit.sync.TableResult;
 import org.opendatakit.sync.activities.SyncActivity;
 import org.opendatakit.sync.aggregate.AggregateSynchronizer;
+import org.opendatakit.sync.application.Sync;
 import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
 import org.opendatakit.sync.exceptions.NoAppNameSpecifiedException;
 
@@ -153,37 +156,46 @@ public class AppSynchronizer {
         //
         // NOTE: server limits this string to 10 characters
         // For now, assume all APKs are sync'd to the same API version.
-        String versionCode = SyncApp.getInstance().getVersionCodeString();
+        String versionCode = Sync.getInstance().getVersionCodeString();
         // android.os.Debug.waitForDebugger();
         String odkClientVersion = versionCode.substring(0, versionCode.length() - 2);
 
         Synchronizer synchronizer = new AggregateSynchronizer(cntxt, appName, odkClientVersion,
             prefs.getServerUri(), prefs.getAuthToken());
-        SyncProcessor processor = new SyncProcessor(cntxt, appName, synchronizer, syncProgress);
+        
+        SynchronizationResult syncResult = new SynchronizationResult();
+        SyncExecutionContext sharedContext = new SyncExecutionContext( cntxt, appName, synchronizer, syncProgress, syncResult);
+        ProcessAppAndTableLevelChanges appAndTableLevelProcessor = new ProcessAppAndTableLevelChanges(sharedContext);
+        
+        ProcessRowDataChanges rowDataProcessor = new ProcessRowDataChanges(sharedContext);
 
         status = SyncStatus.SYNCING;
+        ODKFileUtils.assertDirectoryStructure(appName);
 
         // sync the app-level files, table schemas and table-level files
-        List<TableResource> workingListOfTables = processor.synchronizeConfigurationAndContent(push);
-
-        // and now sync the data rows. This does not proceed if there
-        // was an app-level sync failure or if the particular tableId
-        // experienced a table-level sync failure in the preceeding step.
-
-        processor.synchronizeDataRowsAndAttachments(workingListOfTables, deferInstanceAttachments);
+        List<TableResource> workingListOfTables = appAndTableLevelProcessor.synchronizeConfigurationAndContent(push);
+        
+        if (syncResult.getAppLevelStatus() != Status.SUCCESS) {
+          WebLogger.getLogger(appName).e(LOGTAG, "Abandoning data row update -- app-level sync was not successful!");
+        } else {
+          // and now sync the data rows. This does not proceed if there
+          // was an app-level sync failure or if the particular tableId
+          // experienced a table-level sync failure in the preceeding step.
+  
+          rowDataProcessor.synchronizeDataRowsAndAttachments(workingListOfTables, deferInstanceAttachments);
+        }
 
         boolean authProblems = false;
 
         String reason = "none";
         // examine results
-        SynchronizationResult overallResults = processor.getOverallResults();
-        if (overallResults.getAppLevelStatus() != Status.SUCCESS) {
-          authProblems = (overallResults.getAppLevelStatus() == Status.AUTH_EXCEPTION);
+        if (syncResult.getAppLevelStatus() != Status.SUCCESS) {
+          authProblems = (syncResult.getAppLevelStatus() == Status.AUTH_EXCEPTION);
           reason = "overall results";
           status = SyncStatus.NETWORK_ERROR;
         }
 
-        for (TableResult result : overallResults.getTableResults()) {
+        for (TableResult result : syncResult.getTableResults()) {
           org.opendatakit.sync.SynchronizationResult.Status tableStatus = result.getStatus();
           // TODO: decide how to handle the status
           if (tableStatus != Status.SUCCESS) {

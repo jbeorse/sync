@@ -23,6 +23,8 @@ import java.util.List;
 import org.opendatakit.aggregate.odktables.rest.entity.DataKeyValue;
 import org.opendatakit.aggregate.odktables.rest.entity.Scope;
 import org.opendatakit.common.android.data.ColumnDefinition;
+import org.opendatakit.common.android.data.UserTable.Row;
+import org.opendatakit.common.android.provider.DataTableColumns;
 
 /**
  * A SyncRow is an in-between class to map rows in the database to rows in the
@@ -313,5 +315,32 @@ public class SyncRow {
         + this.getFormId() + ", locale=" + this.getLocale() + ", savepointType="
         + this.getSavepointType() + ", savepointTimestamp=" + this.getSavepointTimestamp()
         + ", savepointCreator=" + this.getSavepointCreator() + ", values=" + this.getValues() + "[";
+  }
+  
+
+  public static final SyncRow convertToSyncRow(ArrayList<ColumnDefinition> orderedColumns,
+      ArrayList<ColumnDefinition> fileAttachmentColumns, Row localRow) {
+    String rowId = localRow.getRowId();
+    String rowETag = localRow.getRawDataOrMetadataByElementKey(DataTableColumns.ROW_ETAG);
+
+    ArrayList<DataKeyValue> values = new ArrayList<DataKeyValue>();
+    for (ColumnDefinition column : orderedColumns) {
+      if (column.isUnitOfRetention()) {
+        String elementKey = column.getElementKey();
+        values.add(new DataKeyValue(elementKey, localRow
+            .getRawDataOrMetadataByElementKey(elementKey)));
+      }
+    }
+
+    SyncRow syncRow = new SyncRow(rowId, rowETag, false,
+        localRow.getRawDataOrMetadataByElementKey(DataTableColumns.FORM_ID),
+        localRow.getRawDataOrMetadataByElementKey(DataTableColumns.LOCALE),
+        localRow.getRawDataOrMetadataByElementKey(DataTableColumns.SAVEPOINT_TYPE),
+        localRow.getRawDataOrMetadataByElementKey(DataTableColumns.SAVEPOINT_TIMESTAMP),
+        localRow.getRawDataOrMetadataByElementKey(DataTableColumns.SAVEPOINT_CREATOR),
+        Scope.asScope(localRow.getRawDataOrMetadataByElementKey(DataTableColumns.FILTER_TYPE),
+            localRow.getRawDataOrMetadataByElementKey(DataTableColumns.FILTER_VALUE)), values,
+        fileAttachmentColumns);
+    return syncRow;
   }
 }

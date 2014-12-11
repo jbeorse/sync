@@ -17,8 +17,8 @@ package org.opendatakit.sync.fragments;
 import org.opendatakit.common.android.listener.LicenseReaderListener;
 import org.opendatakit.common.android.utilities.WebLogger;
 import org.opendatakit.sync.R;
-import org.opendatakit.sync.SyncApp;
 import org.opendatakit.sync.activities.AboutWrapperActivity;
+import org.opendatakit.sync.application.Sync;
 
 import android.app.Fragment;
 import android.app.FragmentManager;
@@ -53,7 +53,7 @@ public class AboutMenuFragment extends Fragment implements LicenseReaderListener
     View aboutMenuView = inflater.inflate(ID, container, false);
 
     TextView versionBox = (TextView) aboutMenuView.findViewById(R.id.versionText);
-    versionBox.setText(SyncApp.getInstance().getVersionedAppName());
+    versionBox.setText(Sync.getInstance().getVersionedAppName());
 
     mTextView = (TextView) aboutMenuView.findViewById(R.id.text1);
     mTextView.setAutoLinkMask(Linkify.WEB_URLS);

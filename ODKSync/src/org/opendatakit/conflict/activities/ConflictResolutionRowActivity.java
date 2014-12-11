@@ -35,7 +35,6 @@ import org.opendatakit.common.android.utilities.ODKDataUtils;
 import org.opendatakit.common.android.utilities.ODKDatabaseUtils;
 import org.opendatakit.common.android.utilities.TableUtil;
 import org.opendatakit.common.android.utilities.WebLogger;
-import org.opendatakit.sync.ConflictTable;
 import org.opendatakit.sync.R;
 import org.opendatakit.sync.views.components.ConcordantColumn;
 import org.opendatakit.sync.views.components.ConflictColumn;

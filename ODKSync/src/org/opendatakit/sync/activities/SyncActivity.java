@@ -27,9 +27,9 @@ import org.opendatakit.common.android.utilities.SyncETagsUtils;
 import org.opendatakit.common.android.utilities.WebLogger;
 import org.opendatakit.sync.OdkSyncServiceProxy;
 import org.opendatakit.sync.R;
-import org.opendatakit.sync.SyncApp;
 import org.opendatakit.sync.SyncConsts;
 import org.opendatakit.sync.SyncPreferences;
+import org.opendatakit.sync.application.Sync;
 import org.opendatakit.sync.exceptions.NoAppNameSpecifiedException;
 import org.opendatakit.sync.files.SyncUtil;
 import org.opendatakit.sync.service.SyncProgressState;
@@ -139,7 +139,7 @@ public class SyncActivity extends Activity {
 
   @Override
   protected void onDestroy() {
-    SyncApp.getInstance().resetOdkSyncServiceProxy();
+    Sync.getInstance().resetOdkSyncServiceProxy();
     super.onDestroy();
   }
 
@@ -318,7 +318,7 @@ public class SyncActivity extends Activity {
           } else {
             try {
               disableButtons();
-              SyncApp.getInstance().getOdkSyncServiceProxy().pushToServer(appName);
+              Sync.getInstance().getOdkSyncServiceProxy().pushToServer(appName);
             } catch (RemoteException e) {
               WebLogger.getLogger(appName).e(LOGTAG, "Problem with push command");
             }
@@ -351,7 +351,7 @@ public class SyncActivity extends Activity {
         try {
           disableButtons();
           boolean syncFiles = syncInstanceAttachments.isChecked();
-          SyncApp.getInstance().getOdkSyncServiceProxy().synchronizeFromServer(appName, !syncFiles);
+          Sync.getInstance().getOdkSyncServiceProxy().synchronizeFromServer(appName, !syncFiles);
         } catch (RemoteException e) {
           WebLogger.getLogger(appName).e(LOGTAG, "Problem with pull command");
         }
@@ -471,7 +471,7 @@ public class SyncActivity extends Activity {
             final ProgressSettings progressSettings = new ProgressSettings();
             progressSettings.buttonChanged = false;
 
-            OdkSyncServiceProxy syncProxy = SyncApp.getInstance().getOdkSyncServiceProxy();
+            OdkSyncServiceProxy syncProxy = Sync.getInstance().getOdkSyncServiceProxy();
             if (!syncProxy.isBoundToService()) {
               progressSettings.progressMessageText = "NULL";
               progressSettings.progressStateText = "NULL";
@@ -481,8 +481,8 @@ public class SyncActivity extends Activity {
               progressSettings.settingsEnabled = true;
 
               if (!createdFresh) {
-                SyncApp.getInstance().resetOdkSyncServiceProxy();
-                syncProxy = SyncApp.getInstance().getOdkSyncServiceProxy();
+                Sync.getInstance().resetOdkSyncServiceProxy();
+                syncProxy = Sync.getInstance().getOdkSyncServiceProxy();
                 createdFresh = true;
                 refreshRequired.set(true);
                 WebLogger.getLogger(appName).e(LOGTAG,
@@ -585,13 +585,13 @@ public class SyncActivity extends Activity {
             WebLogger.getLogger(appName).e(LOGTAG, "Problem with update messages");
             refreshRequired.set(true);
             WebLogger.getLogger(appName).e(LOGTAG, "triggering another polling cycle");
-            SyncApp.getInstance().resetOdkSyncServiceProxy();
+            Sync.getInstance().resetOdkSyncServiceProxy();
           } catch (Exception e) {
             WebLogger.getLogger(appName).printStackTrace(e);
             WebLogger.getLogger(appName).e(LOGTAG, "in runnable for updateProgress");
             refreshRequired.set(true);
             WebLogger.getLogger(appName).e(LOGTAG, "triggering another polling cycle");
-            SyncApp.getInstance().resetOdkSyncServiceProxy();
+            Sync.getInstance().resetOdkSyncServiceProxy();
           }
 
           Thread.sleep(DELAY_PROGRESS_REFRESH);
