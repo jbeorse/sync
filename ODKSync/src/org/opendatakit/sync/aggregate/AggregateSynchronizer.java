@@ -20,7 +20,6 @@ import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.FileOutputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URI;
@@ -40,13 +39,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
-import java.util.zip.GZIPInputStream;
 
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.ext.RuntimeDelegate;
 
 import org.apache.commons.lang3.CharEncoding;
+import org.apache.http.HttpStatus;
 import org.apache.wink.client.ClientConfig;
 import org.apache.wink.client.ClientResponse;
 import org.apache.wink.client.ClientWebException;
@@ -71,14 +70,6 @@ import org.opendatakit.common.android.utilities.ODKFileUtils;
 import org.opendatakit.common.android.utilities.SyncETagsUtils;
 import org.opendatakit.common.android.utilities.WebLogger;
 import org.opendatakit.common.android.utilities.WebUtils;
-import org.opendatakit.httpclientandroidlib.Header;
-import org.opendatakit.httpclientandroidlib.HttpResponse;
-import org.opendatakit.httpclientandroidlib.HttpStatus;
-import org.opendatakit.httpclientandroidlib.client.methods.HttpGet;
-import org.opendatakit.httpclientandroidlib.impl.client.DefaultHttpClient;
-import org.opendatakit.httpclientandroidlib.impl.conn.BasicClientConnectionManager;
-import org.opendatakit.httpclientandroidlib.params.HttpConnectionParams;
-import org.opendatakit.httpclientandroidlib.params.HttpParams;
 import org.opendatakit.sync.R;
 import org.opendatakit.sync.SyncPreferences;
 import org.opendatakit.sync.SyncRow;
@@ -185,12 +176,6 @@ public class AggregateSynchronizer implements Synchronizer {
   private final URI baseUri;
   private final WebLogger log;
 
-  /**
-   * For downloading files. Should eventually probably switch to spring, but it
-   * was idiotically complicated.
-   */
-  private final DefaultHttpClient mHttpClient;
-
   private final URI normalizeUri(String aggregateUri, String additionalPathPortion) {
     URI uriBase = URI.create(aggregateUri).normalize();
     String term = uriBase.getPath();
@@ -277,6 +262,39 @@ public class AggregateSynchronizer implements Synchronizer {
         + "/";
   }
 
+  /**
+   * Simple Resource for file download.
+   * 
+   * @param uri
+   * @return
+   */
+  private Resource buildFileDownloadResource(URI uri) {
+
+    Resource rsc = rt.resource(uri);
+
+    // report our locale... (not currently used by server)
+    rsc.acceptLanguage(Locale.getDefault());
+
+    // set the access token...
+    rsc.header(ApiConstants.ACCEPT_CONTENT_ENCODING_HEADER, ApiConstants.GZIP_CONTENT_ENCODING);
+    rsc.header(ApiConstants.OPEN_DATA_KIT_VERSION_HEADER, ApiConstants.OPEN_DATA_KIT_VERSION);
+    rsc.header(HttpHeaders.USER_AGENT, "Sync " + Sync.getInstance().getVersionCodeString() + " (gzip)");
+    GregorianCalendar g = new GregorianCalendar(TimeZone.getTimeZone("GMT"));
+    Date now = new Date();
+    g.setTime(now);
+    SimpleDateFormat formatter = new SimpleDateFormat("E, dd MMM yyyy HH:mm:ss zz", Locale.US);
+    formatter.setCalendar(g);
+    rsc.header(ApiConstants.DATE_HEADER, formatter.format(now));
+
+    if (accessToken != null && baseUri != null) {
+      if (uri.getHost().equals(baseUri.getHost()) && uri.getPort() == baseUri.getPort()) {
+        rsc.header("Authorization", "Bearer " + accessToken);
+      }
+    }
+    
+    return rsc;
+  }
+
   private Resource buildResource(URI uri) {
 
     Resource rsc = rt.resource(uri);
@@ -314,7 +332,7 @@ public class AggregateSynchronizer implements Synchronizer {
     rsc.header(HttpHeaders.USER_AGENT, "Sync " + Sync.getInstance().getVersionCodeString() + " (gzip)");
     GregorianCalendar g = new GregorianCalendar(TimeZone.getTimeZone("GMT"));
     g.setTime(new Date());
-    SimpleDateFormat formatter = new SimpleDateFormat("E, dd MMM yyyy HH:mm:ss zz");
+    SimpleDateFormat formatter = new SimpleDateFormat("E, dd MMM yyyy HH:mm:ss zz", Locale.US);
     formatter.setCalendar(g);
     rsc.header(ApiConstants.DATE_HEADER, formatter.format(new Date()));
 
@@ -344,11 +362,6 @@ public class AggregateSynchronizer implements Synchronizer {
     log.e(LOGTAG, "AggregateUri:" + aggregateUri);
     this.baseUri = normalizeUri(aggregateUri, "/");
     log.e(LOGTAG, "baseUri:" + baseUri);
-
-    this.mHttpClient = new DefaultHttpClient(new BasicClientConnectionManager());
-    final HttpParams params = mHttpClient.getParams();
-    HttpConnectionParams.setConnectionTimeout(params, HTTP_REQUEST_TIMEOUT_MS);
-    HttpConnectionParams.setSoTimeout(params, HTTP_REQUEST_TIMEOUT_MS);
 
     // now everything should work...
     ClientConfig cc;
@@ -1299,30 +1312,19 @@ public class AggregateSynchronizer implements Synchronizer {
     int attemptCount = 0;
     while (!success && attemptCount++ <= 2) {
 
-      // set up request...
-      HttpGet req = new HttpGet(downloadUrl);
-      req.setHeader(ApiConstants.ACCEPT_CONTENT_ENCODING_HEADER, ApiConstants.GZIP_CONTENT_ENCODING);
-      req.setHeader(ApiConstants.OPEN_DATA_KIT_VERSION_HEADER, ApiConstants.OPEN_DATA_KIT_VERSION);
-      GregorianCalendar g = new GregorianCalendar(TimeZone.getTimeZone("GMT"));
-      g.setTime(new Date());
-      SimpleDateFormat formatter = new SimpleDateFormat("E, dd MMM yyyy HH:mm:ss zz", Locale.US);
-      formatter.setCalendar(g);
-      req.setHeader(ApiConstants.DATE_HEADER, formatter.format(new Date()));
+      Resource resource = buildFileDownloadResource(downloadUrl);
       if ( destFile.exists() ) {
         String md5Hash = ODKFileUtils.getMd5Hash(appName, destFile);
-        req.setHeader(HttpHeaders.ETAG, md5Hash);
+        resource.header(HttpHeaders.ETAG, md5Hash);
       }
-      if (accessToken != null) {
-        req.setHeader("Authorization", "Bearer " + accessToken);
-      }
-
-      HttpResponse response = null;
+      
+      ClientResponse response = null;
       try {
-        response = mHttpClient.execute(req);
-        int statusCode = response.getStatusLine().getStatusCode();
+        response = resource.get();
+        int statusCode = response.getStatusCode();
 
         if (statusCode != HttpStatus.SC_OK) {
-          discardEntityBytes(response);
+          response.consumeContent();
           if (statusCode == HttpStatus.SC_UNAUTHORIZED) {
             // clear the cookies -- should not be necessary?
             // ss: might just be a collect thing?
@@ -1331,8 +1333,8 @@ public class AggregateSynchronizer implements Synchronizer {
           return statusCode;
         }
         
-        if (!response.containsHeader(ApiConstants.OPEN_DATA_KIT_VERSION_HEADER)) {
-          discardEntityBytes(response);
+        if (!response.getHeaders().containsKey(ApiConstants.OPEN_DATA_KIT_VERSION_HEADER)) {
+          response.consumeContent();
           log.w(LOGTAG, "downloading " + downloadUrl.toString() + " appears to have been redirected.");
           return 302;
         }
@@ -1341,24 +1343,8 @@ public class AggregateSynchronizer implements Synchronizer {
         BufferedInputStream is = null;
         BufferedOutputStream os = null;
         try {
-          Header[] encodings = response.getHeaders(ApiConstants.CONTENT_ENCODING_HEADER);
-          boolean isCompressed = false;
-          if (encodings != null) {
-            for (int i = 0; i < encodings.length; ++i) {
-              if (encodings[i].getValue().equalsIgnoreCase(ApiConstants.GZIP_CONTENT_ENCODING)) {
-                isCompressed = true;
-                break;
-              }
-            }
-          }
-          
           // open the InputStream of the (uncompressed) entity body...
-          InputStream isRaw;
-          if (isCompressed) {
-            isRaw = new GZIPInputStream(response.getEntity().getContent());
-          } else {
-            isRaw = response.getEntity().getContent();
-          }
+          InputStream isRaw = response.getEntity(InputStream.class);
 
           // write connection to file
           is = new BufferedInputStream(isRaw);
@@ -1401,11 +1387,10 @@ public class AggregateSynchronizer implements Synchronizer {
             tmp.delete();
           }
         }
-
-      } catch (Exception e) {
+      } catch (ClientWebException e) {
         log.printStackTrace(e);
         if ( response != null ) {
-          WebUtils.get().discardEntityBytes(response);
+          response.consumeContent();
         }
         if (attemptCount != 1) {
           throw e;
@@ -1413,31 +1398,6 @@ public class AggregateSynchronizer implements Synchronizer {
       }
     }
     return HttpStatus.SC_OK;
-  }
-
-  /**
-   * Utility to ensure that the entity stream of a response is drained of bytes.
-   *
-   * @param response
-   */
-  private void discardEntityBytes(HttpResponse response) {
-    // may be a server that does not handle
-    org.opendatakit.httpclientandroidlib.HttpEntity entity = response.getEntity();
-    if (entity != null) {
-      try {
-        // have to read the stream in order to reuse the connection
-        InputStream is = response.getEntity().getContent();
-        // read to end of stream...
-        final long count = 1024L;
-        while (is.skip(count) == count)
-          ;
-        is.close();
-      } catch (IOException e) {
-        log.printStackTrace(e);
-      } catch (Exception e) {
-        log.printStackTrace(e);
-      }
-    }
   }
 
   private static final class CommonFileAttachmentTerms {
