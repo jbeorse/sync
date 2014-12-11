@@ -30,7 +30,7 @@ public class Sync extends Application {
    * Set this to true if you want to attach a debugger to the Sync service.
    * If true, then tables on server are dropped if not present on device.
    */
-  private boolean debugService = true;
+  private boolean debugService = false;
   
   private static Sync singleton = null;
 
