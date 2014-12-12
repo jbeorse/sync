@@ -15,12 +15,13 @@
  */
 package org.opendatakit.sync.aggregate;
 
-import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.net.CookieHandler;
+import java.net.CookieManager;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -118,6 +119,7 @@ public class AggregateSynchronizer implements Synchronizer {
 
   static Map<String, String> mimeMapping;
   static {
+
     Map<String, String> m = new HashMap<String, String>();
     m.put("jpeg", "image/jpeg");
     m.put("jpg", "image/jpeg");
@@ -175,6 +177,9 @@ public class AggregateSynchronizer implements Synchronizer {
   /** normalized aggregateUri */
   private final URI baseUri;
   private final WebLogger log;
+  // cookie manager 
+  private final CookieManager cm;
+
 
   private final URI normalizeUri(String aggregateUri, String additionalPathPortion) {
     URI uriBase = URI.create(aggregateUri).normalize();
@@ -261,14 +266,14 @@ public class AggregateSynchronizer implements Synchronizer {
     return "/odktables/" + escapeSegment(appName) + "/files/" + escapeSegment(odkClientApiVersion)
         + "/";
   }
-
   /**
-   * Simple Resource for file download.
+   * Simple Resource for all server interactions.
    * 
    * @param uri
    * @return
+   * @throws InvalidAuthTokenException 
    */
-  private Resource buildFileDownloadResource(URI uri) {
+  private Resource buildBasicResource(URI uri) throws InvalidAuthTokenException {
 
     Resource rsc = rt.resource(uri);
 
@@ -295,13 +300,11 @@ public class AggregateSynchronizer implements Synchronizer {
     return rsc;
   }
 
-  private Resource buildResource(URI uri) {
+  private Resource buildResource(URI uri, MediaType contentType) throws InvalidAuthTokenException {
 
-    Resource rsc = rt.resource(uri);
+    Resource rsc = buildBasicResource(uri);
 
-    // select our preferred protocol...
-    MediaType protocolType = MediaType.APPLICATION_JSON_TYPE;
-    rsc.contentType(protocolType);
+    rsc.contentType(contentType);
 
     // set our preferred response media type to json using quality parameters
     Map<String, String> mediaTypeParams;
@@ -320,35 +323,33 @@ public class AggregateSynchronizer implements Synchronizer {
     // accept either json or plain text (no XML to device)
     rsc.accept(json, tplainUtf8);
 
-    // report our locale... (not currently used by server)
-    rsc.acceptLanguage(Locale.getDefault());
-
     // set the response entity character set to CharEncoding.UTF_8
     rsc.header("Accept-Charset", CharEncoding.UTF_8);
-
-    // set the access token...
-    rsc.header(ApiConstants.ACCEPT_CONTENT_ENCODING_HEADER, ApiConstants.GZIP_CONTENT_ENCODING);
-    rsc.header(ApiConstants.OPEN_DATA_KIT_VERSION_HEADER, ApiConstants.OPEN_DATA_KIT_VERSION);
-    rsc.header(HttpHeaders.USER_AGENT, "Sync " + Sync.getInstance().getVersionCodeString() + " (gzip)");
-    GregorianCalendar g = new GregorianCalendar(TimeZone.getTimeZone("GMT"));
-    g.setTime(new Date());
-    SimpleDateFormat formatter = new SimpleDateFormat("E, dd MMM yyyy HH:mm:ss zz", Locale.US);
-    formatter.setCalendar(g);
-    rsc.header(ApiConstants.DATE_HEADER, formatter.format(new Date()));
-
-    if (accessToken != null && baseUri != null) {
-      if (uri.getHost().equals(baseUri.getHost()) && uri.getPort() == baseUri.getPort()) {
-        rsc.header("Authorization", "Bearer " + accessToken);
-      }
-    }
     
     return rsc;
   }
 
-  private Resource buildResource(URI uri, MediaType contentType) {
+  /**
+   * Simple Resource for file download.
+   * 
+   * @param uri
+   * @return
+   * @throws InvalidAuthTokenException 
+   */
+  private Resource buildFileDownloadResource(URI uri) throws InvalidAuthTokenException {
 
-    Resource rsc = buildResource(uri);
-    rsc.contentType(contentType);
+    Resource rsc = buildBasicResource(uri);
+    
+    return rsc;
+  }
+
+  private Resource buildResource(URI uri) throws InvalidAuthTokenException {
+
+    // select our preferred protocol...
+    MediaType protocolType = MediaType.APPLICATION_JSON_TYPE;
+    
+    Resource rsc = buildResource(uri, protocolType);
+    
     return rsc;
   }
 
@@ -363,6 +364,15 @@ public class AggregateSynchronizer implements Synchronizer {
     this.baseUri = normalizeUri(aggregateUri, "/");
     log.e(LOGTAG, "baseUri:" + baseUri);
 
+    // This is technically not correct, as we should really have a global
+    // that we manage for this... If there are two or more service threads
+    // running, we could forget other session cookies. But, by creating a 
+    // new cookie manager here, we ensure that we don't have any stale 
+    // session cookies at the start of each sync.
+    
+    cm = new CookieManager();
+    CookieHandler.setDefault(cm);
+    
     // now everything should work...
     ClientConfig cc;
 
@@ -443,7 +453,7 @@ public class AggregateSynchronizer implements Synchronizer {
   }
 
   @Override
-  public TableResourceList getTables(String webSafeResumeCursor) throws ClientWebException {
+  public TableResourceList getTables(String webSafeResumeCursor) throws ClientWebException, InvalidAuthTokenException {
 
     TableResourceList tableResources;
     try {
@@ -466,7 +476,7 @@ public class AggregateSynchronizer implements Synchronizer {
 
   @Override
   public TableDefinitionResource getTableDefinition(String tableDefinitionUri)
-      throws ClientWebException {
+      throws ClientWebException, InvalidAuthTokenException {
     URI uri = URI.create(tableDefinitionUri).normalize();
     TableDefinitionResource definitionRes = buildResource(uri).get(TableDefinitionResource.class);
     return definitionRes;
@@ -481,7 +491,7 @@ public class AggregateSynchronizer implements Synchronizer {
   
   @Override
   public TableResource createTable(String tableId, String schemaETag, ArrayList<Column> columns)
-      throws ClientWebException {
+      throws ClientWebException, InvalidAuthTokenException {
 
     // build request
     URI uri = normalizeUri(aggregateUri, getTablesUriFragment() + tableId);
@@ -504,14 +514,14 @@ public class AggregateSynchronizer implements Synchronizer {
   }
 
   @Override
-  public void deleteTable(TableResource table) throws ClientWebException {
+  public void deleteTable(TableResource table) throws ClientWebException, InvalidAuthTokenException {
     URI uri = URI.create(table.getDefinitionUri()).normalize();
     buildResource(uri).delete();
     this.resources.remove(table.getTableId());
   }
   
   @Override
-  public ChangeSetList getChangeSets(TableResource table, String dataETag) throws ClientWebException {
+  public ChangeSetList getChangeSets(TableResource table, String dataETag) throws ClientWebException, InvalidAuthTokenException {
 
     String tableId = table.getTableId();
     URI uri;
@@ -535,7 +545,7 @@ public class AggregateSynchronizer implements Synchronizer {
   
   @Override
   public RowResourceList getChangeSet(TableResource table, String dataETag, boolean activeOnly, String websafeResumeCursor)
-      throws ClientWebException {
+      throws ClientWebException, InvalidAuthTokenException {
 
     String tableId = table.getTableId();
     URI uri;
@@ -570,7 +580,7 @@ public class AggregateSynchronizer implements Synchronizer {
 
   @Override
   public RowResourceList getUpdates(TableResource table, String dataETag, String websafeResumeCursor)
-      throws ClientWebException {
+      throws ClientWebException, InvalidAuthTokenException {
 
     String tableId = table.getTableId();
     URI uri;
@@ -599,7 +609,7 @@ public class AggregateSynchronizer implements Synchronizer {
 
   @Override
   public RowOutcomeList alterRows(TableResource resource,
-      List<SyncRow> rowsToInsertUpdateOrDelete) throws ClientWebException {
+      List<SyncRow> rowsToInsertUpdateOrDelete) throws ClientWebException, InvalidAuthTokenException {
 
     ArrayList<Row> rows = new ArrayList<Row>();
     for (SyncRow rowToAlter : rowsToInsertUpdateOrDelete) {
@@ -769,7 +779,7 @@ public class AggregateSynchronizer implements Synchronizer {
 
   @Override
   public boolean syncAppLevelFiles(boolean pushLocalFiles, String serverReportedAppLevelETag, SynchronizerStatus syncStatus)
-      throws ClientWebException {
+      throws ClientWebException, InvalidAuthTokenException {
     // Get the app-level files on the server.
     syncStatus.updateNotification(SyncProgressState.APP_FILES, R.string.getting_app_level_manifest,
         null, 1.0, false);
@@ -897,7 +907,7 @@ public class AggregateSynchronizer implements Synchronizer {
 
   @Override
   public void syncTableLevelFiles(String tableId, String serverReportedTableLevelETag, OnTablePropertiesChanged onChange,
-      boolean pushLocalFiles, SynchronizerStatus syncStatus) throws ClientWebException {
+      boolean pushLocalFiles, SynchronizerStatus syncStatus) throws ClientWebException, InvalidAuthTokenException {
 
     syncStatus.updateNotification(SyncProgressState.TABLE_FILES, R.string.getting_table_manifest,
         new Object[] { tableId }, 1.0, false);
@@ -1049,7 +1059,7 @@ public class AggregateSynchronizer implements Synchronizer {
   }
 
   public List<OdkTablesFileManifestEntry> getAppLevelFileManifest(boolean pushLocalFiles, String serverReportedAppLevelETag)
-      throws ClientWebException {
+      throws ClientWebException, InvalidAuthTokenException {
     SyncETagsUtils seu = new SyncETagsUtils();
     URI fileManifestUri = normalizeUri(aggregateUri, getManifestUriFragment());
     String eTag = seu.getManifestSyncETag(context, appName, fileManifestUri, null);
@@ -1094,7 +1104,7 @@ public class AggregateSynchronizer implements Synchronizer {
   }
 
   public List<OdkTablesFileManifestEntry> getTableLevelFileManifest(String tableId, String serverReportedTableLevelETag,
-      boolean pushLocalFiles) throws ClientWebException {
+      boolean pushLocalFiles) throws ClientWebException, InvalidAuthTokenException {
     SyncETagsUtils seu = new SyncETagsUtils();
     URI fileManifestUri = normalizeUri(aggregateUri, getManifestUriFragment() + tableId);
     String eTag = seu.getManifestSyncETag(context, appName, fileManifestUri, tableId);
@@ -1138,7 +1148,7 @@ public class AggregateSynchronizer implements Synchronizer {
     return theList;
   }
 
-  private boolean deleteFile(String pathRelativeToAppFolder) throws ClientWebException {
+  private boolean deleteFile(String pathRelativeToAppFolder) throws ClientWebException, InvalidAuthTokenException {
     String escapedPath = uriEncodeSegments(pathRelativeToAppFolder);
     URI filesUri = normalizeUri(aggregateUri, getFilePathURI() + escapedPath);
     log.i(LOGTAG, "[deleteFile] fileDeleteUri: " + filesUri.toString());
@@ -1147,7 +1157,7 @@ public class AggregateSynchronizer implements Synchronizer {
     return true;
   }
 
-  private boolean uploadFile(String wholePathToFile, String pathRelativeToAppFolder) {
+  private boolean uploadFile(String wholePathToFile, String pathRelativeToAppFolder) throws InvalidAuthTokenException {
     File file = new File(wholePathToFile);
     String escapedPath = uriEncodeSegments(pathRelativeToAppFolder);
     URI filesUri = normalizeUri(aggregateUri, getFilePathURI() + escapedPath);
@@ -1164,7 +1174,7 @@ public class AggregateSynchronizer implements Synchronizer {
     return true;
   }
 
-  private boolean uploadInstanceFile(File file, URI instanceFileUri) {
+  private boolean uploadInstanceFile(File file, URI instanceFileUri) throws InvalidAuthTokenException {
     log.i(LOGTAG, "[uploadFile] filePostUri: " + instanceFileUri.toString());
     String ct = determineContentType(file.getName());
     MediaType contentType = MediaType.valueOf(ct);
@@ -1340,26 +1350,43 @@ public class AggregateSynchronizer implements Synchronizer {
         }
         
         File tmp = new File(destFile.getParentFile(), destFile.getName() + ".tmp");
-        BufferedInputStream is = null;
+        int totalLen = 0;
+        InputStream is = null;
         BufferedOutputStream os = null;
         try {
           // open the InputStream of the (uncompressed) entity body...
-          InputStream isRaw = response.getEntity(InputStream.class);
-
-          // write connection to file
-          is = new BufferedInputStream(isRaw);
+          is = response.getEntity(InputStream.class);
           os = new BufferedOutputStream(new FileOutputStream(tmp));
+          
+          // write connection to temporary file
           byte buf[] = new byte[8192];
           int len;
-          while ((len = is.read(buf)) >= 0) {
+          while ((len = is.read(buf, 0, buf.length)) >= 0) {
             if (len != 0) {
+              totalLen += len;
               os.write(buf, 0, len);
             }
           }
+          is.close();
+          is = null;
+          
           os.flush();
           os.close();
           os = null;
+
           success = tmp.renameTo(destFile);
+        } catch (Exception e) {
+          // most likely a socket timeout
+          e.printStackTrace();
+          log.e(LOGTAG,  "downloading " + downloadUrl.toString() + " failed after " + totalLen + " bytes: " + e.toString());
+          try {
+            // signal to the framework that this socket is hosed.
+            // with the various nested streams, this may not work...
+            is.reset();
+          } catch ( Exception ex ) {
+            // ignore
+          }
+          throw e;
         } finally {
           if (os != null) {
             try {
@@ -1386,6 +1413,7 @@ public class AggregateSynchronizer implements Synchronizer {
           if (tmp.exists()) {
             tmp.delete();
           }
+          response.consumeContent();
         }
       } catch (ClientWebException e) {
         log.printStackTrace(e);

@@ -22,6 +22,7 @@ import org.opendatakit.common.android.utilities.WebLogger;
 import org.opendatakit.sync.SynchronizationResult.Status;
 import org.opendatakit.sync.Synchronizer.OnTablePropertiesChanged;
 import org.opendatakit.sync.application.Sync;
+import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
 import org.opendatakit.sync.exceptions.SchemaMismatchException;
 import org.opendatakit.sync.service.SyncProgressState;
 
@@ -183,6 +184,13 @@ public class ProcessAppAndTableLevelChanges {
       boolean success = sc.getSynchronizer().syncAppLevelFiles(pushToServer,
           tableList.getAppLevelManifestETag(), sc);
       sc.setAppLevelStatus(success ? Status.SUCCESS : Status.FAILURE);
+    } catch (InvalidAuthTokenException e) {
+      // TODO: update a synchronization result to report back to them as well.
+      sc.setAppLevelStatus(Status.AUTH_EXCEPTION);
+      log.e(TAG,
+          "[synchronizeConfigurationAndContent] auth token failure while trying to synchronize app-level files.");
+      log.printStackTrace(e);
+      return new ArrayList<TableResource>();
     } catch (ClientWebException e) {
       // TODO: update a synchronization result to report back to them as well.
       sc.setAppLevelStatus(Status.AUTH_EXCEPTION);
@@ -251,7 +259,23 @@ public class ProcessAppAndTableLevelChanges {
       // delete any other tables
       if (issueDeletes) {
         for (TableResource tableToDelete : serverTablesToDelete) {
-          sc.getSynchronizer().deleteTable(tableToDelete);
+          try {
+            sc.getSynchronizer().deleteTable(tableToDelete);
+          } catch (InvalidAuthTokenException e) {
+            // TODO: update a synchronization result to report back to them as well.
+            sc.setAppLevelStatus(Status.AUTH_EXCEPTION);
+            log.e(TAG,
+                "[synchronizeConfigurationAndContent] auth token failure while trying to delete tables.");
+            log.printStackTrace(e);
+            return new ArrayList<TableResource>();
+          } catch (ClientWebException e) {
+            // TODO: update a synchronization result to report back to them as well.
+            sc.setAppLevelStatus(Status.AUTH_EXCEPTION);
+            log.e(TAG,
+                "[synchronizeConfigurationAndContent] error trying to delete tables.");
+            log.printStackTrace(e);
+            return new ArrayList<TableResource>();
+          }
         }
       }
     } else {
@@ -348,6 +372,20 @@ public class ProcessAppAndTableLevelChanges {
                 "[synchronizeConfigurationAndContent] Unexpected exception parsing table definition exception: "
                     + e.toString());
             continue;
+          } catch (InvalidAuthTokenException e) {
+            log.printStackTrace(e);
+            tableResult.setStatus(Status.AUTH_EXCEPTION);
+            log.e(TAG,
+                "[synchronizeConfigurationAndContent] Unexpected auth exception accessing table definition exception: "
+                    + e.toString());
+            continue;
+          } catch (ClientWebException e) {
+            log.printStackTrace(e);
+            tableResult.setStatus(Status.EXCEPTION);
+            log.e(TAG,
+                "[synchronizeConfigurationAndContent] Unexpected exception accessing table definition exception: "
+                    + e.toString());
+            continue;
           } catch (IOException e) {
             log.printStackTrace(e);
             tableResult.setStatus(Status.EXCEPTION);
@@ -438,6 +476,8 @@ public class ProcessAppAndTableLevelChanges {
    *          down.
    * @return null if there is an error, otherwise a new or updated table
    *         resource
+   * @throws InvalidAuthTokenException 
+   * @throws ClientWebException 
    */
   private TableResource synchronizeTableConfigurationAndContent(TableDefinitionEntry te,
       ArrayList<ColumnDefinition> orderedDefns, TableResource resource,
@@ -659,22 +699,40 @@ public class ProcessAppAndTableLevelChanges {
         }
       }
 
-      sc.getSynchronizer().syncTableLevelFiles(tableId, resource.getTableLevelManifestETag(),
-          new OnTablePropertiesChanged() {
-            @Override
-            public void onTablePropertiesChanged(String tableId) {
-              try {
-                sc.getCsvUtil().updateTablePropertiesFromCsv(null, tableId);
-              } catch (IOException e) {
-                log.printStackTrace(e);
-                String msg = e.getMessage();
-                if (msg == null)
-                  msg = e.toString();
-                tableResult.setMessage(msg);
-                tableResult.setStatus(Status.EXCEPTION);
+      try {
+        sc.getSynchronizer().syncTableLevelFiles(tableId, resource.getTableLevelManifestETag(),
+            new OnTablePropertiesChanged() {
+              @Override
+              public void onTablePropertiesChanged(String tableId) {
+                try {
+                  sc.getCsvUtil().updateTablePropertiesFromCsv(null, tableId);
+                } catch (IOException e) {
+                  log.printStackTrace(e);
+                  String msg = e.getMessage();
+                  if (msg == null)
+                    msg = e.toString();
+                  tableResult.setMessage(msg);
+                  tableResult.setStatus(Status.EXCEPTION);
+                }
               }
-            }
-          }, pushLocalTableLevelFiles, sc);
+            }, pushLocalTableLevelFiles, sc);
+      } catch (InvalidAuthTokenException e) {
+        log.printStackTrace(e);
+        String msg = e.getMessage();
+        if (msg == null)
+          msg = e.toString();
+        tableResult.setMessage(msg);
+        tableResult.setStatus(Status.AUTH_EXCEPTION);
+        return null;
+      } catch (ClientWebException e) {
+        log.printStackTrace(e);
+        String msg = e.getMessage();
+        if (msg == null)
+          msg = e.toString();
+        tableResult.setMessage(msg);
+        tableResult.setStatus(Status.EXCEPTION);
+        return null;
+      }
 
       // we found the matching resource on the server and we have set up our
       // local table to be ready for any data merge with the server's table.

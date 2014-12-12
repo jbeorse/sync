@@ -58,6 +58,7 @@ public class ReAuthSecurityHandler implements ClientHandler {
     logger.trace("Entering BasicAuthSecurityHandler.doChain()"); //$NON-NLS-1$
     ClientResponse response = context.doChain(request);
     if (response.getStatusCode() == UNAUTHORIZED) {
+      response.consumeContent();
       String accessToken;
       try {
         accessToken = sync.updateAccessToken();

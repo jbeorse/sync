@@ -27,6 +27,7 @@ import org.opendatakit.aggregate.odktables.rest.entity.RowResourceList;
 import org.opendatakit.aggregate.odktables.rest.entity.TableDefinitionResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResourceList;
+import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
 import org.opendatakit.sync.service.SyncProgressState;
 
 /**
@@ -62,8 +63,9 @@ public interface Synchronizer {
    * @param webSafeResumeCursor null or a non-empty string if we are issuing a resume query
    * @return a list of the table resources on the server
    * @throws ClientWebException
+   * @throws InvalidAuthTokenException 
    */
-  public TableResourceList getTables(String webSafeResumeCursor) throws ClientWebException;
+  public TableResourceList getTables(String webSafeResumeCursor) throws ClientWebException, InvalidAuthTokenException;
 
   /**
    * Discover the schema for a table resource.
@@ -71,9 +73,10 @@ public interface Synchronizer {
    * @param tableDefinitionUri
    * @return the table definition
    * @throws ClientWebException
+   * @throws InvalidAuthTokenException 
    */
   public TableDefinitionResource getTableDefinition(String tableDefinitionUri) 
-      throws ClientWebException;
+      throws ClientWebException, InvalidAuthTokenException;
 
   /**
    * Assert that a table with the given id and schema exists on the server.
@@ -87,9 +90,10 @@ public interface Synchronizer {
    * @return the TableResource for the table (the server may return different
    *         SyncTag values)
    * @throws ClientWebException
+   * @throws InvalidAuthTokenException 
    */
   public TableResource createTable(String tableId, String schemaETag, ArrayList<Column> columns)
-      throws ClientWebException;
+      throws ClientWebException, InvalidAuthTokenException;
 
   /**
    * Delete the table with the given id from the server.
@@ -97,8 +101,9 @@ public interface Synchronizer {
    * @param table
    *          the realizedTable resource to delete
    * @throws ClientWebException
+   * @throws InvalidAuthTokenException 
    */
-  public void deleteTable(TableResource table) throws ClientWebException;
+  public void deleteTable(TableResource table) throws ClientWebException, InvalidAuthTokenException;
 
   /**
    * Retrieve the changeSets applied after the changeSet with the specified dataETag
@@ -106,12 +111,13 @@ public interface Synchronizer {
    * @param tableResource
    * @param dataETag
    * @return
+   * @throws InvalidAuthTokenException 
    * @throws ClientException
    */
-  public ChangeSetList getChangeSets(TableResource tableResource, String dataETag) throws ClientWebException;
+  public ChangeSetList getChangeSets(TableResource tableResource, String dataETag) throws ClientWebException, InvalidAuthTokenException;
   
   public RowResourceList getChangeSet(TableResource tableResource, String dataETag, boolean activeOnly, String websafeResumeCursor)
-      throws ClientWebException;
+      throws ClientWebException, InvalidAuthTokenException;
 
   /**
    * Retrieve changes in the server state since the last synchronization.
@@ -126,9 +132,10 @@ public interface Synchronizer {
    *          
    * @return an RowResourceList of the changes on the server since that dataETag.
    * @throws ClientWebException
+   * @throws InvalidAuthTokenException 
    */
   public RowResourceList getUpdates(TableResource tableResource, String dataETag, String websafeResumeCursor)
-      throws ClientWebException;
+      throws ClientWebException, InvalidAuthTokenException;
 
   /**
    * Apply inserts, updates and deletes in a collection up to the server.
@@ -141,9 +148,10 @@ public interface Synchronizer {
    * @param rowsToInsertOrUpdate
    * @return
    * @throws ClientWebException
+   * @throws InvalidAuthTokenException 
    */
   public RowOutcomeList alterRows(TableResource tableResource,
-      List<SyncRow> rowsToInsertUpdateOrDelete) throws ClientWebException;
+      List<SyncRow> rowsToInsertUpdateOrDelete) throws ClientWebException, InvalidAuthTokenException;
 
   /**
    * Synchronizes the app level files. This includes any files that are not
@@ -158,9 +166,10 @@ public interface Synchronizer {
    *          for reporting detailed progress of app-level file sync
    * @return true if successful
    * @throws ClientWebException
+   * @throws InvalidAuthTokenException 
    */
   public boolean syncAppLevelFiles(boolean pushLocalFiles, String serverReportedAppLevelETag, SynchronizerStatus syncStatus)
-      throws ClientWebException;
+      throws ClientWebException, InvalidAuthTokenException;
 
   /**
    * Sync only the files associated with the specified table. This does NOT sync
@@ -173,9 +182,10 @@ public interface Synchronizer {
    * @param pushLocal
    *          true if the local files should be pushed
    * @throws ClientWebException
+   * @throws InvalidAuthTokenException 
    */
   public void syncTableLevelFiles(String tableId, String serverReportedTableLevelETag, OnTablePropertiesChanged onChange,
-      boolean pushLocal, SynchronizerStatus syncStatus) throws ClientWebException;
+      boolean pushLocal, SynchronizerStatus syncStatus) throws ClientWebException, InvalidAuthTokenException;
 
   /**
    * Ensure that the file attachments for the indicated row values are pulled
