@@ -676,8 +676,49 @@ public class ProcessRowDataChanges {
               if (rows.isHasMoreResults()) {
                 websafeResumeCursor = rows.getWebSafeResumeCursor();
               } else {
-                pullCompletedSuccessfully = true;
-                break;
+                // ////////////////////////////////
+                // ////////////////////////////////
+                // Success
+                //
+                // We have to update our dataETag here so that the server
+                // knows we saw its changes. Otherwise it won't let us
+                // put up new information.
+                //
+                // Note that we may have additional changes from
+                // subsequent dataETags (changeSets). We only 
+                // break out of this loop if the dataETag on the 
+                // last request matches the firstDataETag. Otherwise,
+                // we re-issue a fetch using the firstDataETag as 
+                // a starting point.
+                {
+                  SQLiteDatabase db = null;
+
+                  try {
+                    db = sc.getDatabase();
+                    // update the dataETag to the one returned by the first
+                    // of the fetch queries, above.
+                    ODKDatabaseUtils.get().updateDBTableETags(db, tableId,
+                        tableResource.getSchemaETag(), firstDataETag);
+                    // and be sure to update our in-memory objects...
+                    te.setSchemaETag(tableResource.getSchemaETag());
+                    te.setLastDataETag(firstDataETag);
+                    tableResource.setDataETag(firstDataETag);
+                  } finally {
+                    if (db != null) {
+                      db.close();
+                      db = null;
+                    }
+                  }
+                }
+                
+                if ( !firstDataETag.equals(rows.getDataETag()) ) {
+                  // re-issue request...
+                  websafeResumeCursor = null;
+                } else {
+                  // success -- exit the update loop...
+                  pullCompletedSuccessfully = true;
+                  break;
+                }
               }
             }
 
@@ -687,38 +728,6 @@ public class ProcessRowDataChanges {
 
             if (!pullCompletedSuccessfully) {
               break;
-            }
-
-            // ////////////////////////////////
-            // ////////////////////////////////
-            // We have to update our dataETag here so that the server
-            // knows we saw its changes. Otherwise it won't let us
-            // put up new information.
-            //
-            // Note that we may have additional changes from
-            // subsequent dataETags (changeSets). That is OK.
-            // Whenever we need to push up our changes, or when
-            // we next sync, we will get the rest of the rows
-            // from those changeSets.
-            {
-              SQLiteDatabase db = null;
-
-              try {
-                db = sc.getDatabase();
-                // update the dataETag to the one returned by the first
-                // of the fetch queries, above.
-                ODKDatabaseUtils.get().updateDBTableETags(db, tableId,
-                    tableResource.getSchemaETag(), firstDataETag);
-                // and be sure to update our in-memory objects...
-                te.setSchemaETag(tableResource.getSchemaETag());
-                te.setLastDataETag(firstDataETag);
-                tableResource.setDataETag(firstDataETag);
-              } finally {
-                if (db != null) {
-                  db.close();
-                  db = null;
-                }
-              }
             }
 
             // ////////////////////////////////
