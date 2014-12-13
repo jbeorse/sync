@@ -621,7 +621,7 @@ public class AggregateSynchronizer implements Synchronizer {
       row.setDeleted(rowToAlter.isDeleted());
       rows.add(row);
     }
-    RowList rlist = new RowList(rows);
+    RowList rlist = new RowList(rows, resource.getDataETag());
 
     URI uri = URI.create(resource.getDataUri());
     RowOutcomeList outcomes;

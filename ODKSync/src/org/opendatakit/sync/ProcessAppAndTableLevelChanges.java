@@ -8,6 +8,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.http.HttpStatus;
 import org.apache.wink.client.ClientWebException;
 import org.opendatakit.aggregate.odktables.rest.entity.Column;
 import org.opendatakit.aggregate.odktables.rest.entity.TableDefinitionResource;
@@ -28,9 +29,6 @@ import org.opendatakit.sync.service.SyncProgressState;
 
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
-
-import com.fasterxml.jackson.core.JsonParseException;
-import com.fasterxml.jackson.databind.JsonMappingException;
 
 /**
  * Isolate the app-level and table-level synchronization steps
@@ -95,8 +93,18 @@ public class ProcessAppAndTableLevelChanges {
         if (tableList != null & tableList.getTables() != null) {
           tables.addAll(tableList.getTables());
         }
-      } catch (ClientWebException e) {
+      } catch (InvalidAuthTokenException e) {
         sc.setAppLevelStatus(Status.AUTH_EXCEPTION);
+        log.i(TAG,
+            "[synchronizeConfigurationAndContent] Could not retrieve server table list exception: "
+                + e.toString());
+        return new ArrayList<TableResource>();
+      } catch (ClientWebException e) {
+        if ( e.getResponse() != null && e.getResponse().getStatusCode() == HttpStatus.SC_UNAUTHORIZED ) {
+          sc.setAppLevelStatus(Status.AUTH_EXCEPTION);
+        } else {
+          sc.setAppLevelStatus(Status.EXCEPTION);
+        }
         log.i(TAG,
             "[synchronizeConfigurationAndContent] Could not retrieve server table list exception: "
                 + e.toString());
@@ -193,7 +201,11 @@ public class ProcessAppAndTableLevelChanges {
       return new ArrayList<TableResource>();
     } catch (ClientWebException e) {
       // TODO: update a synchronization result to report back to them as well.
-      sc.setAppLevelStatus(Status.AUTH_EXCEPTION);
+      if ( e.getResponse() != null && e.getResponse().getStatusCode() == HttpStatus.SC_UNAUTHORIZED ) {
+        sc.setAppLevelStatus(Status.AUTH_EXCEPTION);
+      } else {
+        sc.setAppLevelStatus(Status.EXCEPTION);
+      }
       log.e(TAG,
           "[synchronizeConfigurationAndContent] error trying to synchronize app-level files.");
       log.printStackTrace(e);
@@ -270,7 +282,11 @@ public class ProcessAppAndTableLevelChanges {
             return new ArrayList<TableResource>();
           } catch (ClientWebException e) {
             // TODO: update a synchronization result to report back to them as well.
-            sc.setAppLevelStatus(Status.AUTH_EXCEPTION);
+            if ( e.getResponse() != null && e.getResponse().getStatusCode() == HttpStatus.SC_UNAUTHORIZED ) {
+              sc.setAppLevelStatus(Status.AUTH_EXCEPTION);
+            } else {
+              sc.setAppLevelStatus(Status.EXCEPTION);
+            }
             log.e(TAG,
                 "[synchronizeConfigurationAndContent] error trying to delete tables.");
             log.printStackTrace(e);
@@ -323,11 +339,7 @@ public class ProcessAppAndTableLevelChanges {
               isLocalMatch = true;
             }
           } catch (SQLiteException e) {
-            log.printStackTrace(e);
-            tableResult.setStatus(Status.EXCEPTION);
-            log.e(TAG,
-                "[synchronizeConfigurationAndContent] Unexpected exception getting columns of tableId: "
-                    + serverTableId + " exception: " + e.toString());
+            exception("synchronizeConfigurationAndContent - database exception", serverTableId, e, tableResult);
             continue;
           } finally {
             if (db != null) {
@@ -358,47 +370,24 @@ public class ProcessAppAndTableLevelChanges {
                 db = null;
               }
             }
-          } catch (JsonParseException e) {
-            log.printStackTrace(e);
-            tableResult.setStatus(Status.EXCEPTION);
-            log.e(TAG,
-                "[synchronizeConfigurationAndContent] Unexpected exception parsing table definition exception: "
-                    + e.toString());
-            continue;
-          } catch (JsonMappingException e) {
-            log.printStackTrace(e);
-            tableResult.setStatus(Status.EXCEPTION);
-            log.e(TAG,
-                "[synchronizeConfigurationAndContent] Unexpected exception parsing table definition exception: "
-                    + e.toString());
+          } catch (ClientWebException e) {
+            if ( e.getResponse() != null && e.getResponse().getStatusCode() == HttpStatus.SC_UNAUTHORIZED ) {
+              clientAuthException("synchronizeConfigurationAndContent", serverTableId, e, tableResult);
+            } else {
+              clientWebException("synchronizeConfigurationAndContent - Unexpected exception parsing table definition exception",
+                serverTableId, e, tableResult);
+            }
             continue;
           } catch (InvalidAuthTokenException e) {
-            log.printStackTrace(e);
-            tableResult.setStatus(Status.AUTH_EXCEPTION);
-            log.e(TAG,
-                "[synchronizeConfigurationAndContent] Unexpected auth exception accessing table definition exception: "
-                    + e.toString());
-            continue;
-          } catch (ClientWebException e) {
-            log.printStackTrace(e);
-            tableResult.setStatus(Status.EXCEPTION);
-            log.e(TAG,
-                "[synchronizeConfigurationAndContent] Unexpected exception accessing table definition exception: "
-                    + e.toString());
-            continue;
-          } catch (IOException e) {
-            log.printStackTrace(e);
-            tableResult.setStatus(Status.EXCEPTION);
-            log.e(TAG,
-                "[synchronizeConfigurationAndContent] Unexpected exception accessing table definition exception: "
-                    + e.toString());
+            clientAuthException("synchronizeConfigurationAndContent", serverTableId, e, tableResult);
             continue;
           } catch (SchemaMismatchException e) {
-            log.printStackTrace(e);
-            tableResult.setStatus(Status.EXCEPTION);
-            log.e(TAG,
-                "[synchronizeConfigurationAndContent] The schema for this table does not match that on the server"
-                    + e.toString());
+            exception("synchronizeConfigurationAndContent - schema for this table does not match that on the server",
+                serverTableId, e, tableResult);
+            continue;
+          } catch (Exception e) {
+            exception("synchronizeConfigurationAndContent - Unexpected exception accessing table definition",
+                serverTableId, e, tableResult);
             continue;
           }
         }
@@ -430,15 +419,9 @@ public class ProcessAppAndTableLevelChanges {
           ODKDatabaseUtils.get().deleteDBTableAndAllData(db, sc.getAppName(), localTableId);
           tableResult.setStatus(Status.SUCCESS);
         } catch (SQLiteException e) {
-          tableResult.setStatus(Status.EXCEPTION);
-          log.e(TAG,
-              "[synchronizeConfigurationAndContent] Unexpected exception deleting local tableId "
-                  + localTableId + " exception: " + e.toString());
+          exception("synchronizeConfigurationAndContent - database exception deleting table", localTableId, e, tableResult);
         } catch (Exception e) {
-          tableResult.setStatus(Status.EXCEPTION);
-          log.e(TAG,
-              "[synchronizeConfigurationAndContent] Unexpected exception deleting local tableId "
-                  + localTableId + " exception: " + e.toString());
+          exception("synchronizeConfigurationAndContent - unexpected exception deleting table", localTableId, e, tableResult);
         } finally {
           if (db != null) {
             db.close();
@@ -510,9 +493,7 @@ public class ProcessAppAndTableLevelChanges {
     }
 
     try {
-      String dataETag = te.getLastDataETag();
       String schemaETag = te.getSchemaETag();
-      boolean serverUpdated = false;
 
       if (resource == null) {
         // exists locally but not on server...
@@ -567,7 +548,6 @@ public class ProcessAppAndTableLevelChanges {
           }
         }
 
-        dataETag = null;
         /**************************
          * PART 1A: CREATE THE TABLE First we need to create the table on the
          * server. This comes in two parts--the definition and the properties.
@@ -576,13 +556,18 @@ public class ProcessAppAndTableLevelChanges {
         try {
           resource = sc.getSynchronizer().createTable(tableId, schemaETag,
               ColumnDefinition.getColumns(orderedDefns));
+        } catch (ClientWebException e) {
+          if ( e.getResponse() != null && e.getResponse().getStatusCode() == HttpStatus.SC_UNAUTHORIZED ) {
+            clientAuthException("synchronizeTableConfigurationAndContent - createTable on server", tableId, e, tableResult);
+          } else {
+            clientWebException("synchronizeTableConfigurationAndContent - createTable on server", tableId, e, tableResult);
+          }
+          return null;
+        } catch (InvalidAuthTokenException e) {
+          clientAuthException("synchronizeTableConfigurationAndContent - createTable on server", tableId, e, tableResult);
+          return null;
         } catch (Exception e) {
-          log.printStackTrace(e);
-          String msg = e.getMessage();
-          if (msg == null)
-            msg = e.toString();
-          tableResult.setMessage(msg);
-          tableResult.setStatus(Status.EXCEPTION);
+          exception("synchronizeTableConfigurationAndContent - createTable on server", tableId, e, tableResult);
           return null;
         }
 
@@ -600,7 +585,6 @@ public class ProcessAppAndTableLevelChanges {
             db = null;
           }
         }
-        serverUpdated = true;
       }
 
       // we found the matching resource on the server and we have set up our
@@ -625,13 +609,18 @@ public class ProcessAppAndTableLevelChanges {
         TableDefinitionResource definitionResource;
         try {
           definitionResource = sc.getSynchronizer().getTableDefinition(resource.getDefinitionUri());
+        } catch (ClientWebException e) {
+          if ( e.getResponse() != null && e.getResponse().getStatusCode() == HttpStatus.SC_UNAUTHORIZED ) {
+            clientAuthException("synchronizeTableConfigurationAndContent - get table definition from server", tableId, e, tableResult);
+          } else {
+            clientWebException("synchronizeTableConfigurationAndContent - get table definition from server", tableId, e, tableResult);
+          }
+          return null;
+        } catch (InvalidAuthTokenException e) {
+          clientAuthException("synchronizeTableConfigurationAndContent - get table definition from server", tableId, e, tableResult);
+          return null;
         } catch (Exception e) {
-          log.printStackTrace(e);
-          String msg = e.getMessage();
-          if (msg == null)
-            msg = e.toString();
-          tableResult.setMessage(msg);
-          tableResult.setStatus(Status.EXCEPTION);
+          exception("synchronizeTableConfigurationAndContent - get table definition from server", tableId, e, tableResult);
           return null;
         }
 
@@ -653,29 +642,8 @@ public class ProcessAppAndTableLevelChanges {
           tableResult.setMessage(e.toString());
           tableResult.setStatus(Status.FAILURE);
           return null;
-        } catch (JsonParseException e) {
-          log.printStackTrace(e);
-          String msg = e.getMessage();
-          if (msg == null)
-            msg = e.toString();
-          tableResult.setMessage(msg);
-          tableResult.setStatus(Status.EXCEPTION);
-          return null;
-        } catch (JsonMappingException e) {
-          log.printStackTrace(e);
-          String msg = e.getMessage();
-          if (msg == null)
-            msg = e.toString();
-          tableResult.setMessage(msg);
-          tableResult.setStatus(Status.EXCEPTION);
-          return null;
-        } catch (IOException e) {
-          log.printStackTrace(e);
-          String msg = e.getMessage();
-          if (msg == null)
-            msg = e.toString();
-          tableResult.setMessage(msg);
-          tableResult.setStatus(Status.EXCEPTION);
+        } catch (Exception e) {
+          exception("synchronizeTableConfigurationAndContent - create table locally", tableId, e, tableResult);
           return null;
         } finally {
           if (db != null) {
@@ -716,21 +684,16 @@ public class ProcessAppAndTableLevelChanges {
                 }
               }
             }, pushLocalTableLevelFiles, sc);
-      } catch (InvalidAuthTokenException e) {
-        log.printStackTrace(e);
-        String msg = e.getMessage();
-        if (msg == null)
-          msg = e.toString();
-        tableResult.setMessage(msg);
-        tableResult.setStatus(Status.AUTH_EXCEPTION);
-        return null;
       } catch (ClientWebException e) {
-        log.printStackTrace(e);
-        String msg = e.getMessage();
-        if (msg == null)
-          msg = e.toString();
-        tableResult.setMessage(msg);
-        tableResult.setStatus(Status.EXCEPTION);
+        if ( e.getResponse() != null && e.getResponse().getStatusCode() == HttpStatus.SC_UNAUTHORIZED ) {
+          clientAuthException("synchronizeTableConfigurationAndContent", tableId, e, tableResult);
+        } else {
+          clientWebException("synchronizeTableConfigurationAndContent - Unexpected exception parsing table definition exception",
+              tableId, e, tableResult);
+        }
+        return null;
+      } catch (InvalidAuthTokenException e) {
+        clientAuthException("synchronizeTableConfigurationAndContent", tableId, e, tableResult);
         return null;
       }
 
@@ -763,14 +726,11 @@ public class ProcessAppAndTableLevelChanges {
    *          the syncTag belonging to the modification from which you acquired
    *          the {@link TableDefinitionResource}.
    * @return the new {@link TableProperties} for the table.
-   * @throws IOException
-   * @throws JsonMappingException
-   * @throws JsonParseException
    * @throws SchemaMismatchException
    */
   private ArrayList<ColumnDefinition> addTableFromDefinitionResource(SQLiteDatabase db,
       TableDefinitionResource definitionResource, boolean doesNotExistLocally)
-      throws JsonParseException, JsonMappingException, IOException, SchemaMismatchException {
+      throws SchemaMismatchException {
     if (doesNotExistLocally) {
       try {
         ArrayList<ColumnDefinition> orderedDefns;
@@ -823,6 +783,68 @@ public class ProcessAppAndTableLevelChanges {
       return ColumnDefinition.buildColumnDefinitions(sc.getAppName(), definitionResource.getTableId(),
           localColumns);
     }
+  }
+
+  /**
+   * Common error reporting...
+   * 
+   * @param method
+   * @param tableId
+   * @param e
+   * @param tableResult
+   */
+  private void clientAuthException(String method, String tableId, Exception e,
+      TableResult tableResult) {
+    String msg = e.getMessage();
+    if (msg == null) {
+      msg = e.toString();
+    }
+    log.printStackTrace(e);
+    log.e(TAG, String.format("ResourceAccessException in %s for table: %s exception: %s", method,
+        tableId, msg));
+    tableResult.setStatus(Status.AUTH_EXCEPTION);
+    tableResult.setMessage(msg);
+  }
+
+  /**
+   * Common error reporting...
+   * 
+   * @param method
+   * @param tableId
+   * @param e
+   * @param tableResult
+   */
+  private void clientWebException(String method, String tableId, ClientWebException e,
+      TableResult tableResult) {
+    String msg = e.getMessage();
+    if (msg == null) {
+      msg = e.toString();
+    }
+    log.printStackTrace(e);
+    log.e(TAG, String.format("ResourceAccessException in %s for table: %s exception: %s", method,
+        tableId, msg));
+    tableResult.setStatus(Status.EXCEPTION);
+    tableResult.setMessage(msg);
+  }
+
+  /**
+   * Common error reporting...
+   * 
+   * @param method
+   * @param tableId
+   * @param e
+   * @param tableResult
+   */
+  private void exception(String method, String tableId, Exception e, TableResult tableResult) {
+    String msg = e.getMessage();
+    if (msg == null) {
+      msg = e.toString();
+    }            
+    log.printStackTrace(e);
+    log.e(TAG, String.format("Unexpected exception in %s on table: %s exception: %s", method,
+        tableId, msg));
+    tableResult.setStatus(Status.EXCEPTION);
+    tableResult.setMessage(msg);
   }
 
 }
