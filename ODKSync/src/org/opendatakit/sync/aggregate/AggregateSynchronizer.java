@@ -1325,7 +1325,7 @@ public class AggregateSynchronizer implements Synchronizer {
       Resource resource = buildFileDownloadResource(downloadUrl);
       if ( destFile.exists() ) {
         String md5Hash = ODKFileUtils.getMd5Hash(appName, destFile);
-        resource.header(HttpHeaders.ETAG, md5Hash);
+        resource.header(HttpHeaders.IF_NONE_MATCH, md5Hash);
       }
       
       ClientResponse response = null;
@@ -1512,12 +1512,12 @@ public class AggregateSynchronizer implements Synchronizer {
           }
 
           int statusCode = downloadFile(cat.localFile, cat.instanceFileDownloadUri);
-          if (statusCode != HttpStatus.SC_OK) {
-            success = false;
-          } else {
+          if (statusCode == HttpStatus.SC_OK || statusCode == HttpStatus.SC_NOT_MODIFIED) { 
             String md5Hash = ODKFileUtils.getMd5Hash(appName, cat.localFile);
             seu.updateFileSyncETag(context, appName, cat.instanceFileDownloadUri, tableId,
                 cat.localFile.lastModified(), md5Hash);
+          } else {
+            success = false;
           }
         } else {
           // assume that if the local file exists, it matches exactly the
