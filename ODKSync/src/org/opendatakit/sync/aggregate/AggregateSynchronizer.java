@@ -1439,7 +1439,14 @@ public class AggregateSynchronizer implements Synchronizer {
       relativePath = relativePath.substring(1);
     }
     
-    File localFile = ODKFileUtils.getAsFile(appName, relativePath);
+    String relativeInstanceFolderPath = ODKFileUtils.asRelativePath(appName, instanceFolder);
+    File localFile;
+    if ( relativePath.startsWith(relativeInstanceFolderPath)) {
+      log.w(LOGTAG, "rowpath contains full app-relative path!");
+      localFile = ODKFileUtils.getAsFile(appName, relativePath);
+    } else {
+      localFile = new File(instanceFolder, relativePath);
+    }
     String baseInstanceFolder = instanceFolder.getAbsolutePath();
     String baseLocalAttachment = localFile.getAbsolutePath();
     if ( !baseLocalAttachment.startsWith(baseInstanceFolder) ) {
@@ -1500,10 +1507,11 @@ public class AggregateSynchronizer implements Synchronizer {
           relativePath = relativePath.substring(1);
         }
         
-        // remove it from the local files list
-        relativePathsToAppFolderOnDevice.remove(relativePath);
-        
         CommonFileAttachmentTerms cat = computeCommonFileAttachmentTerms(instanceFileUri, instanceId, instanceFolder, relativePath);
+
+        String appFolderRelativePath = ODKFileUtils.asRelativePath(appName, cat.localFile);
+        // remove it from the local files list
+        relativePathsToAppFolderOnDevice.remove(appFolderRelativePath);
 
         if (!cat.localFile.exists()) {
 
