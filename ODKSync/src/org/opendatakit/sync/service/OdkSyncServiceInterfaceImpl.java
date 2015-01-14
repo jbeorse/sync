@@ -16,11 +16,10 @@
 package org.opendatakit.sync.service;
 
 import org.opendatakit.common.android.utilities.WebLogger;
-import org.opendatakit.sync.service.OdkSyncServiceInterface.Stub;
 
 import android.os.RemoteException;
 
-public class OdkSyncServiceInterfaceImpl extends Stub {
+public class OdkSyncServiceInterfaceImpl extends OdkSyncServiceInterface.Stub {
 
   private static final String LOGTAG = OdkSyncServiceInterfaceImpl.class.getSimpleName();
   private OdkSyncService syncService;

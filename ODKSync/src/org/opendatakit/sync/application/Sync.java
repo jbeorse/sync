@@ -27,7 +27,10 @@ public class Sync extends Application {
   public static final String LOGTAG = Sync.class.getSimpleName();
 
   /**
-   * Set this to true if you want to attach a debugger to the Sync service.
+   * Set this to true if you want to attach a debugger to any or all 
+   * of the services. The debugger is attached in the onBind() call.
+   * This affects the OdkDbShimService, OdkWebkitServerService and
+   * Sync services.
    * If true, then tables on server are dropped if not present on device.
    */
   private boolean debugService = false;
