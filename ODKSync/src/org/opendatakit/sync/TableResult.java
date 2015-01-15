@@ -234,5 +234,9 @@ public class TableResult {
     }
     this.mStatus = newStatus;
   }
+  
+  public void resetStatus() {
+    this.mStatus = Status.WORKING;
+  }
 
 }

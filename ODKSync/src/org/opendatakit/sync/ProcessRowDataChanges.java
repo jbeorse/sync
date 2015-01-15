@@ -558,7 +558,7 @@ public class ProcessRowDataChanges {
       int passNumber = 1;
       while (passNumber <= 2) {
         // reset the table status to working...
-        tableResult.setStatus(Status.WORKING);
+        tableResult.resetStatus();
         tableResult.setMessage((passNumber==1) ? "beginning row data sync" : "retrying row data sync");
 
         ++passNumber;
@@ -711,7 +711,7 @@ public class ProcessRowDataChanges {
                   }
                 }
                 
-                if ( !firstDataETag.equals(rows.getDataETag()) ) {
+                if ( (firstDataETag == null) ? (rows.getDataETag() != null) : !firstDataETag.equals(rows.getDataETag()) ) {
                   // re-issue request...
                   websafeResumeCursor = null;
                 } else {
