@@ -18,8 +18,6 @@ package org.opendatakit.sync.service;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.opendatakit.sync.application.Sync;
-
 import android.app.Service;
 import android.content.Intent;
 import android.os.IBinder;
@@ -42,9 +40,6 @@ public class OdkSyncService extends Service {
 
   @Override
   public IBinder onBind(Intent intent) {
-    if (Sync.getInstance().shouldWaitForDebugger()) {
-      android.os.Debug.waitForDebugger();
-    }
     return serviceInterface;
   }
 

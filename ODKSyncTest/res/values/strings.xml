@@ -2,5 +2,5 @@
 <resources>
 
     <string name="app_name">ODKSyncTestTest</string>
-	<string name="app_userLabel">OpenDataKit Test Harness</string>
+
 </resources>

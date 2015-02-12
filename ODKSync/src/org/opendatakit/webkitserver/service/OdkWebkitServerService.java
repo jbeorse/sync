@@ -17,8 +17,6 @@ package org.opendatakit.webkitserver.service;
 
 import java.io.IOException;
 
-import org.opendatakit.sync.application.Sync;
-
 import android.app.Service;
 import android.content.Intent;
 import android.os.IBinder;
@@ -50,7 +48,7 @@ public class OdkWebkitServerService extends Service {
             retryCount++;
             Thread.sleep(1000);
             if (retryCount % 60 == 0) {
-              Log.v(LOGTAG, "Sync.Thread.WebServer -- waking to confirm webserver is working");
+              Log.v(LOGTAG, "Thread.WebServer -- waking to confirm webserver is working");
             }
           } catch (InterruptedException e) {
             e.printStackTrace();
@@ -64,9 +62,6 @@ public class OdkWebkitServerService extends Service {
 
   @Override
   public IBinder onBind(Intent intent) {
-    if (Sync.getInstance().shouldWaitForDebugger()) {
-      android.os.Debug.waitForDebugger();
-    }
     return servInterface;
   }
 
@@ -94,7 +89,7 @@ public class OdkWebkitServerService extends Service {
         testing.start();
         server = testing;
       } catch (IOException e) {
-        Log.v("Sync.Thread.WebServer", "Exception: " + e.toString());
+        Log.v("Tables.Thread.WebServer", "Exception: " + e.toString());
       }
     }
   }

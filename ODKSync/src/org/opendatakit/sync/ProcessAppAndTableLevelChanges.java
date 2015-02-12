@@ -73,6 +73,7 @@ public class ProcessAppAndTableLevelChanges {
     boolean issueDeletes = false;
     if (Sync.getInstance().shouldWaitForDebugger()) {
       issueDeletes = true;
+      android.os.Debug.waitForDebugger();
     }
 
     sc.updateNotification(SyncProgressState.STARTING, R.string.retrieving_tables_list_from_server, null, 0.0, false);
