@@ -1,6 +1,8 @@
-package org.opendatakit.sync.service;
+package org.opendatakit.sync.service.impl;
 
 import org.opendatakit.sync.AbstractSyncServiceTest;
+import org.opendatakit.sync.service.OdkSyncServiceInterface;
+import org.opendatakit.sync.service.SyncStatus;
 
 
 public class SyncServiceTest extends AbstractSyncServiceTest {

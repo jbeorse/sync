@@ -24,18 +24,21 @@ import org.opendatakit.aggregate.odktables.rest.ConflictType;
 import org.opendatakit.aggregate.odktables.rest.ElementType;
 import org.opendatakit.aggregate.odktables.rest.KeyValueStoreConstants;
 import org.opendatakit.aggregate.odktables.rest.SyncState;
+import org.opendatakit.common.android.activities.BaseListActivity;
+import org.opendatakit.common.android.application.CommonApplication;
 import org.opendatakit.common.android.data.ColumnDefinition;
-import org.opendatakit.common.android.data.KeyValueStoreEntry;
+import org.opendatakit.common.android.data.OrderedColumns;
 import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
-import org.opendatakit.common.android.database.DatabaseFactory;
+import org.opendatakit.common.android.listener.DatabaseConnectionListener;
 import org.opendatakit.common.android.provider.DataTableColumns;
 import org.opendatakit.common.android.utilities.NameUtil;
 import org.opendatakit.common.android.utilities.ODKDataUtils;
-import org.opendatakit.common.android.utilities.ODKDatabaseUtils;
-import org.opendatakit.common.android.utilities.TableUtil;
 import org.opendatakit.common.android.utilities.WebLogger;
+import org.opendatakit.database.service.KeyValueStoreEntry;
+import org.opendatakit.database.service.OdkDbHandle;
 import org.opendatakit.sync.R;
+import org.opendatakit.sync.application.Sync;
 import org.opendatakit.sync.views.components.ConcordantColumn;
 import org.opendatakit.sync.views.components.ConflictColumn;
 import org.opendatakit.sync.views.components.ConflictResolutionListAdapter;
@@ -43,12 +46,11 @@ import org.opendatakit.sync.views.components.ConflictResolutionListAdapter.Resol
 import org.opendatakit.sync.views.components.ConflictResolutionListAdapter.Section;
 
 import android.app.AlertDialog;
-import android.app.ListActivity;
 import android.content.ContentValues;
 import android.content.DialogInterface;
 import android.content.DialogInterface.OnCancelListener;
-import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
+import android.os.RemoteException;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
@@ -61,8 +63,8 @@ import android.widget.Toast;
  * @author sudar.sam@gmail.com
  *
  */
-public class ConflictResolutionRowActivity extends ListActivity implements
-    ConflictResolutionListAdapter.UICallbacks {
+public class ConflictResolutionRowActivity extends BaseListActivity implements
+    ConflictResolutionListAdapter.UICallbacks, DatabaseConnectionListener {
 
   private static final String TAG = ConflictResolutionRowActivity.class.getSimpleName();
 
@@ -81,7 +83,7 @@ public class ConflictResolutionRowActivity extends ListActivity implements
 
   private String mAppName;
   private String mTableId;
-  private ArrayList<ColumnDefinition> mOrderedDefns;
+  private OrderedColumns mOrderedDefns;
   private ConflictTable mConflictTable;
   private ConflictResolutionListAdapter mAdapter;
   /** The row number of the row in conflict within the {@link ConflictTable}. */
@@ -127,163 +129,21 @@ public class ConflictResolutionRowActivity extends ListActivity implements
 
     mTableId = getIntent().getStringExtra(Constants.TABLE_ID);
     this.mRowId = getIntent().getStringExtra(INTENT_KEY_ROW_ID);
-
-    Map<String, String> persistedDisplayNames = new HashMap<String, String>();
-    {
-      SQLiteDatabase db = null;
-      try {
-        db = DatabaseFactory.get().getDatabase(this, mAppName);
-        mOrderedDefns = TableUtil.get().getColumnDefinitions(db, mAppName, mTableId);
-        List<KeyValueStoreEntry> columnDisplayNames = ODKDatabaseUtils.get().getDBTableMetadata(db,
-            mTableId, KeyValueStoreConstants.PARTITION_COLUMN, null,
-            KeyValueStoreConstants.COLUMN_DISPLAY_NAME);
-        for (KeyValueStoreEntry e : columnDisplayNames) {
-          try {
-            ColumnDefinition.find(mOrderedDefns, e.aspect);
-            persistedDisplayNames.put(e.aspect, e.value);
-          } catch (IllegalArgumentException ex) {
-            // ignore
-          }
-        }
-        this.mConflictTable = getConflictTable(db, mTableId, mOrderedDefns);
-      } finally {
-        db.close();
-      }
-    }
-
-    this.mLocal = mConflictTable.getLocalTable();
-    this.mServer = mConflictTable.getServerTable();
-    //
-    // And now we need to construct up the adapter.
-    // There are several things to do be aware of. We need to get all the
-    // section headings, which will be the column names. We also need to get
-    // all the values which are in conflict, as well as those that are not.
-    // We'll present them in user-defined order, as they may have set up the
-    // useful information together.
-    this.mRowNumber = this.mLocal.getRowNumFromId(mRowId);
-    Row localRow = this.mLocal.getRowAtIndex(mRowNumber);
-    Row serverRow = this.mServer.getRowAtIndex(mRowNumber);
-    this.mServerRowETag = serverRow.getRawDataOrMetadataByElementKey(DataTableColumns.ROW_ETAG);
-    // This will be the number of rows down we are in the adapter. Each
-    // heading and each cell value gets its own row. Columns in conflict get
-    // two, as we'll need to display each one to the user.
-    int adapterOffset = 0;
-    List<Section> sections = new ArrayList<Section>();
-    this.mConflictColumns = new ArrayList<ConflictColumn>();
-    List<ConcordantColumn> noConflictColumns = new ArrayList<ConcordantColumn>();
-
-    for (ColumnDefinition cd : mOrderedDefns) {
-      if (!cd.isUnitOfRetention()) {
-        continue;
-      }
-      String elementKey = cd.getElementKey();
-      ElementType elementType = cd.getType();
-      String columnDisplayName = persistedDisplayNames.get(elementKey);
-      if (columnDisplayName != null) {
-        columnDisplayName = ODKDataUtils.getLocalizedDisplayName(columnDisplayName);
-      } else {
-        columnDisplayName = NameUtil.constructSimpleDisplayName(elementKey);
-      }
-      Section newSection = new Section(adapterOffset, columnDisplayName);
-      ++adapterOffset;
-      sections.add(newSection);
-      String localRawValue = localRow.getRawDataOrMetadataByElementKey(elementKey);
-      String localDisplayValue = localRow.getDisplayTextOfData(this, elementType, elementKey, true);
-      String serverRawValue = serverRow.getRawDataOrMetadataByElementKey(elementKey);
-      String serverDisplayValue = serverRow.getDisplayTextOfData(this, elementType, elementKey,
-          true);
-      if ((localRawValue == null && serverRawValue == null)
-          || (localRawValue != null && localRawValue.equals(serverRawValue))) {
-        // TODO: this doesn't compare actual equality of blobs if their display
-        // text is the same.
-        // We only want to display a single row, b/c there are no choices to
-        // be made by the user.
-        ConcordantColumn concordance = new ConcordantColumn(adapterOffset, localDisplayValue);
-        noConflictColumns.add(concordance);
-        ++adapterOffset;
-      } else {
-        // We need to display both the server and local versions.
-        ConflictColumn conflictColumn = new ConflictColumn(adapterOffset, elementKey,
-            localRawValue, localDisplayValue, serverRawValue, serverDisplayValue);
-        ++adapterOffset;
-        mConflictColumns.add(conflictColumn);
-      }
-    }
-    // Now that we have the appropriate lists, we need to construct the
-    // adapter that will display the information.
-    this.mAdapter = new ConflictResolutionListAdapter(this.getActionBar().getThemedContext(),
-        mAppName, this, sections, noConflictColumns, mConflictColumns);
-    this.setListAdapter(mAdapter);
-    this.onDecisionMade();
-    // Here we'll handle the cases of whether or not rows were deleted. There
-    // are three cases to consider:
-    // 1) both rows were updated, neither is deleted. This is the normal case
-    // 2) the server row was deleted, the local was updated (thus a conflict)
-    // 3) the local was deleted, the server was updated (thus a conflict)
-    // To Figure this out we'll first need the state of each version.
-    // Note that these calls should never return nulls, as whenever a row is in
-    // conflict, there should be a conflict type. Therefore if we throw an
-    // error that is fine, as we've violated an invariant.
-
-    int localConflictType = Integer.parseInt(mLocal.getRowAtIndex(mRowNumber)
-        .getRawDataOrMetadataByElementKey(DataTableColumns.CONFLICT_TYPE));
-    int serverConflictType = Integer.parseInt(mServer.getRowAtIndex(mRowNumber)
-        .getRawDataOrMetadataByElementKey(DataTableColumns.CONFLICT_TYPE));
-    if (localConflictType == ConflictType.LOCAL_UPDATED_UPDATED_VALUES
-        && serverConflictType == ConflictType.SERVER_UPDATED_UPDATED_VALUES) {
-      // Then it's a normal conflict. Hide the elements of the view relevant
-      // to deletion restoration.
-      mTextViewConflictMessage.setText(getString(R.string.conflict_resolve_or_choose));
-
-      this.mButtonTakeLocal.setOnClickListener(new TakeLocalClickListener());
-      this.mButtonTakeLocal.setText(getString(R.string.conflict_take_local_updates));
-      this.mButtonTakeServer.setOnClickListener(new TakeServerClickListener());
-      this.mButtonTakeServer.setText(getString(R.string.conflict_take_server_updates));
-      this.mButtonResolveRow.setVisibility(View.GONE /* View.VISIBLE */);
-      this.onDecisionMade();
-    } else if (localConflictType == ConflictType.LOCAL_DELETED_OLD_VALUES
-        && serverConflictType == ConflictType.SERVER_UPDATED_UPDATED_VALUES) {
-      // Then the local row was deleted, but someone had inserted a newer
-      // updated version on the server.
-      this.mTextViewConflictMessage
-          .setText(getString(R.string.conflict_local_was_deleted_explanation));
-      this.mButtonTakeServer.setOnClickListener(new TakeServerClickListener());
-      this.mButtonTakeServer.setText(getString(R.string.conflict_restore_with_server_changes));
-      this.mButtonTakeLocal.setOnClickListener(new SetRowToDeleteOnServerListener());
-      this.mButtonTakeLocal.setText(getString(R.string.conflict_enforce_local_delete));
-
-      mButtonResolveRow.setEnabled(false);
-      mButtonResolveRow.setVisibility(View.GONE);
-      mAdapter.setConflictColumnsEnabled(false);
-      mAdapter.notifyDataSetChanged();
-    } else if (localConflictType == ConflictType.LOCAL_UPDATED_UPDATED_VALUES
-        && serverConflictType == ConflictType.SERVER_DELETED_OLD_VALUES) {
-      // Then the row was updated locally but someone had deleted it on the
-      // server.
-      this.mTextViewConflictMessage
-          .setText(getString(R.string.conflict_server_was_deleted_explanation));
-      this.mButtonTakeLocal.setOnClickListener(new TakeLocalClickListener());
-      this.mButtonTakeLocal.setText(getString(R.string.conflict_restore_with_local_changes));
-      this.mButtonTakeServer.setText(getString(R.string.conflict_apply_delete_from_server));
-      this.mButtonTakeServer.setOnClickListener(new DiscardChangesAndDeleteLocalListener());
-
-      mButtonResolveRow.setEnabled(false);
-      mButtonResolveRow.setVisibility(View.GONE);
-      mAdapter.setConflictColumnsEnabled(false);
-      mAdapter.notifyDataSetChanged();
-    } else {
-      // We should never get here, because it breaks an invariant.
-      // We know the vers
-      WebLogger.getLogger(mAppName).e(
-          TAG,
-          "server and local versions of the row did not match a known"
-              + " pair of conflict types. local: " + localConflictType + ", sever: "
-              + serverConflictType);
-    }
   }
 
-  public ConflictTable getConflictTable(SQLiteDatabase db, String tableId,
-      ArrayList<ColumnDefinition> orderedDefns) {
+  @Override
+  protected void onResume() {
+    super.onResume();
+  }
+  
+  @Override
+  protected void onPostResume() {
+    super.onPostResume();
+    ((CommonApplication) getApplication()).establishDatabaseConnectionListener(this);
+  }
+
+  public ConflictTable getConflictTable(OdkDbHandle db, String tableId,
+      OrderedColumns orderedDefns) throws RemoteException {
     // The new protocol for syncing is as follows:
     // local rows and server rows both have SYNC_STATE=CONFLICT.
     // The server version will have their _conflict_type column set to either
@@ -302,22 +162,23 @@ public class ConflictResolutionRowActivity extends ListActivity implements
     String conflictTypeServerDeletedStr = Integer.toString(ConflictType.SERVER_DELETED_OLD_VALUES);
     String conflictTypeServerUpdatedStr = Integer
         .toString(ConflictType.SERVER_UPDATED_UPDATED_VALUES);
-    UserTable localTable = ODKDatabaseUtils.get().rawSqlQuery(
+    String[] empty = {};
+    UserTable localTable = Sync.getInstance().getDatabase().rawSqlQuery(
+        mAppName, 
         db,
-        mAppName,
         tableId,
         orderedDefns,
         SQL_FOR_SYNC_STATE_AND_CONFLICT_STATE,
         new String[] { syncStateConflictStr, conflictTypeLocalDeletedStr,
-            conflictTypeLocalUpdatedStr }, null, null, DataTableColumns.ID, "ASC");
-    UserTable serverTable = ODKDatabaseUtils.get().rawSqlQuery(
-        db,
+            conflictTypeLocalUpdatedStr }, empty, null, DataTableColumns.ID, "ASC");
+    UserTable serverTable = Sync.getInstance().getDatabase().rawSqlQuery(
         mAppName,
+        db,
         tableId,
         orderedDefns,
         SQL_FOR_SYNC_STATE_AND_CONFLICT_STATE,
         new String[] { syncStateConflictStr, conflictTypeServerDeletedStr,
-            conflictTypeServerUpdatedStr }, null, null, DataTableColumns.ID, "ASC");
+            conflictTypeServerUpdatedStr }, empty, null, DataTableColumns.ID, "ASC");
     return new ConflictTable(localTable, serverTable);
   }
 
@@ -461,24 +322,40 @@ public class ConflictResolutionRowActivity extends ListActivity implements
           // delete all data (since it was deleted on the server and we accepted
           // that)
           mIsShowingTakeServerDialog = false;
-          SQLiteDatabase db = null;
-          try {
-            db = DatabaseFactory.get().getDatabase(ConflictResolutionRowActivity.this, mAppName);
-            db.beginTransaction();
-            // delete the server conflict row
-            ODKDatabaseUtils.get().deleteServerConflictRowWithId(db, mTableId, mRowId);
-            // move the local record into the 'new_row' sync state
-            // so it can be physically deleted.
-            ODKDatabaseUtils.get().updateRowETagAndSyncState(db, mTableId, mRowId, null,
-                SyncState.new_row);
-            // and physically delete it.
-            ODKDatabaseUtils.get()
-                .deleteDataInExistingDBTableWithId(db, mAppName, mTableId, mRowId);
-            db.setTransactionSuccessful();
-          } finally {
-            if (db != null) {
-              db.endTransaction();
-              db.close();
+          OdkDbHandle db = null;
+          boolean successful = false;
+          if ( Sync.getInstance().getDatabase() == null ) {
+            WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+            Toast.makeText(ConflictResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+          } else {
+            try {
+              db = Sync.getInstance().getDatabase().openDatabase(mAppName, true);
+              // delete the server conflict row
+              Sync.getInstance().getDatabase().deleteServerConflictRowWithId(mAppName, db,
+                  mTableId, mRowId);
+              // move the local record into the 'new_row' sync state
+              // so it can be physically deleted.
+              Sync.getInstance().getDatabase().updateRowETagAndSyncState(mAppName, db,
+                  mTableId, mRowId, null,
+                  SyncState.new_row.name());
+              // and physically delete it.
+              Sync.getInstance().getDatabase().deleteDataInExistingDBTableWithId(mAppName, db,
+                  mTableId, mRowId);
+              successful = true;
+            } catch (RemoteException e) {
+              WebLogger.getLogger(mAppName).printStackTrace(e);
+              WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+              Toast.makeText(ConflictResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+            } finally {
+              if (db != null) {
+                try {
+                  Sync.getInstance().getDatabase().closeTransactionAndDatabase(mAppName, db, successful);
+                } catch (RemoteException e) {
+                  WebLogger.getLogger(mAppName).printStackTrace(e);
+                  WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+                  Toast.makeText(ConflictResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+                }
+              }
             }
           }
           ConflictResolutionRowActivity.this.finish();
@@ -552,24 +429,41 @@ public class ConflictResolutionRowActivity extends ListActivity implements
             updateValues.put(cc.getElementKey(), cc.getServerRawValue());
           }
 
-          SQLiteDatabase db = null;
-          try {
-            db = DatabaseFactory.get().getDatabase(ConflictResolutionRowActivity.this, mAppName);
-            db.beginTransaction();
-            // update with server's changes -- leave all unspecified values
-            // unchanged
-            ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns,
-                updateValues, mRowId);
-            // delete the record of the server row
-            ODKDatabaseUtils.get().deleteServerConflictRowWithId(db, mTableId, mRowId);
-            // move the local conflict back into the normal (null) state
-            ODKDatabaseUtils.get().restoreRowFromConflict(db, mTableId, mRowId, SyncState.deleted,
-                localConflictType);
-            db.setTransactionSuccessful();
-          } finally {
-            if (db != null) {
-              db.endTransaction();
-              db.close();
+          OdkDbHandle db = null;
+          boolean successful = false;
+          if ( Sync.getInstance().getDatabase() == null ) {
+            WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+            Toast.makeText(ConflictResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+          } else {
+            try {
+              db = Sync.getInstance().getDatabase().openDatabase(mAppName, true);
+              // update with server's changes -- leave all unspecified values
+              // unchanged
+              Sync.getInstance().getDatabase().updateDataInExistingDBTableWithId(mAppName, db,
+                  mTableId, mOrderedDefns,
+                  updateValues, mRowId);
+              // delete the record of the server row
+              Sync.getInstance().getDatabase().deleteServerConflictRowWithId(mAppName, db,
+                  mTableId, mRowId);
+              // move the local conflict back into the normal (null) state
+              Sync.getInstance().getDatabase().restoreRowFromConflict(mAppName, db,
+                  mTableId, mRowId, SyncState.deleted.name(),
+                  localConflictType);
+              successful = true;
+            } catch (RemoteException e) {
+              WebLogger.getLogger(mAppName).printStackTrace(e);
+              WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+              Toast.makeText(ConflictResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+            } finally {
+              if (db != null) {
+                try {
+                  Sync.getInstance().getDatabase().closeTransactionAndDatabase(mAppName, db, successful);
+                } catch (RemoteException e) {
+                  WebLogger.getLogger(mAppName).printStackTrace(e);
+                  WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+                  Toast.makeText(ConflictResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+                }
+              }
             }
           }
           ConflictResolutionRowActivity.this.finish();
@@ -638,23 +532,40 @@ public class ConflictResolutionRowActivity extends ListActivity implements
             updateValues.put(cc.getElementKey(), cc.getLocalRawValue());
           }
 
-          SQLiteDatabase db = null;
-          try {
-            db = DatabaseFactory.get().getDatabase(ConflictResolutionRowActivity.this, mAppName);
-            db.beginTransaction();
-            // update with server's changes
-            ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns,
-                updateValues, mRowId);
-            // delete the record of the server row
-            ODKDatabaseUtils.get().deleteServerConflictRowWithId(db, mTableId, mRowId);
-            // move the local conflict back into the normal (null) state
-            ODKDatabaseUtils.get().restoreRowFromConflict(db, mTableId, mRowId, SyncState.changed,
-                localConflictType);
-            db.setTransactionSuccessful();
-          } finally {
-            if (db != null) {
-              db.endTransaction();
-              db.close();
+          OdkDbHandle db = null;
+          boolean successful = false;
+          if ( Sync.getInstance().getDatabase() == null ) {
+            WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+            Toast.makeText(ConflictResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+          } else {
+            try {
+              db = Sync.getInstance().getDatabase().openDatabase(mAppName, true);
+              // update with server's changes
+              Sync.getInstance().getDatabase().updateDataInExistingDBTableWithId(mAppName, db,
+                  mTableId, mOrderedDefns,
+                  updateValues, mRowId);
+              // delete the record of the server row
+              Sync.getInstance().getDatabase().deleteServerConflictRowWithId(mAppName, db,
+                  mTableId, mRowId);
+              // move the local conflict back into the normal (null) state
+              Sync.getInstance().getDatabase().restoreRowFromConflict(mAppName, db, 
+                  mTableId, mRowId, SyncState.changed.name(),
+                  localConflictType);
+              successful = true;
+            } catch (RemoteException e) {
+              WebLogger.getLogger(mAppName).printStackTrace(e);
+              WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+              Toast.makeText(ConflictResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+            } finally {
+              if (db != null) {
+                try {
+                  Sync.getInstance().getDatabase().closeTransactionAndDatabase(mAppName, db, successful);
+                } catch (RemoteException e) {
+                  WebLogger.getLogger(mAppName).printStackTrace(e);
+                  WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+                  Toast.makeText(ConflictResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+                }
+              }
             }
           }
           ConflictResolutionRowActivity.this.finish();
@@ -721,23 +632,40 @@ public class ConflictResolutionRowActivity extends ListActivity implements
             updateValues.put(cc.getElementKey(), cc.getServerRawValue());
           }
 
-          SQLiteDatabase db = null;
-          try {
-            db = DatabaseFactory.get().getDatabase(ConflictResolutionRowActivity.this, mAppName);
-            db.beginTransaction();
-            // update with server's changes
-            ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns,
-                updateValues, mRowId);
-            // delete the record of the server row
-            ODKDatabaseUtils.get().deleteServerConflictRowWithId(db, mTableId, mRowId);
-            // move the local conflict back into the normal (null) state
-            ODKDatabaseUtils.get().restoreRowFromConflict(db, mTableId, mRowId,
-                SyncState.synced_pending_files, localConflictType);
-            db.setTransactionSuccessful();
-          } finally {
-            if (db != null) {
-              db.endTransaction();
-              db.close();
+          OdkDbHandle db = null;
+          boolean successful = false;
+          if ( Sync.getInstance().getDatabase() == null ) {
+            WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+            Toast.makeText(ConflictResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+          } else {
+            try {
+              db = Sync.getInstance().getDatabase().openDatabase(mAppName, true);
+              // update with server's changes
+              Sync.getInstance().getDatabase().updateDataInExistingDBTableWithId(mAppName, db,
+                  mTableId, mOrderedDefns,
+                  updateValues, mRowId);
+              // delete the record of the server row
+              Sync.getInstance().getDatabase().deleteServerConflictRowWithId(mAppName, db,
+                  mTableId, mRowId);
+              // move the local conflict back into the normal (null) state
+              Sync.getInstance().getDatabase().restoreRowFromConflict(mAppName, db,
+                  mTableId, mRowId,
+                  SyncState.synced_pending_files.name(), localConflictType);
+              successful = true;
+            } catch (RemoteException e) {
+              WebLogger.getLogger(mAppName).printStackTrace(e);
+              WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+              Toast.makeText(ConflictResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+            } finally {
+              if (db != null) {
+                try {
+                  Sync.getInstance().getDatabase().closeTransactionAndDatabase(mAppName, db, successful);
+                } catch (RemoteException e) {
+                  WebLogger.getLogger(mAppName).printStackTrace(e);
+                  WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+                  Toast.makeText(ConflictResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+                }
+              }
             }
           }
           ConflictResolutionRowActivity.this.finish();
@@ -807,23 +735,39 @@ public class ConflictResolutionRowActivity extends ListActivity implements
             updateValues.put(kv.getKey(), kv.getValue());
           }
 
-          SQLiteDatabase db = null;
-          try {
-            db = DatabaseFactory.get().getDatabase(ConflictResolutionRowActivity.this, mAppName);
-            db.beginTransaction();
-            // update with server's changes
-            ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, mTableId, mOrderedDefns,
-                updateValues, mRowId);
-            // delete the record of the server row
-            ODKDatabaseUtils.get().deleteServerConflictRowWithId(db, mTableId, mRowId);
-            // move the local conflict back into the normal (null) state
-            ODKDatabaseUtils.get().restoreRowFromConflict(db, mTableId, mRowId, SyncState.changed,
-                localConflictType);
-            db.setTransactionSuccessful();
-          } finally {
-            if (db != null) {
-              db.endTransaction();
-              db.close();
+          OdkDbHandle db = null;
+          boolean successful = false;
+          if ( Sync.getInstance().getDatabase() == null ) {
+            WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+            Toast.makeText(ConflictResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+          } else {
+            try {
+              db = Sync.getInstance().getDatabase().openDatabase(mAppName, true);
+              // update with server's changes
+              Sync.getInstance().getDatabase().updateDataInExistingDBTableWithId(mAppName, db, 
+                  mTableId, mOrderedDefns,
+                  updateValues, mRowId);
+              // delete the record of the server row
+              Sync.getInstance().getDatabase().deleteServerConflictRowWithId(mAppName, db,
+                  mTableId, mRowId);
+              // move the local conflict back into the normal (null) state
+              Sync.getInstance().getDatabase().restoreRowFromConflict(mAppName, db, 
+                  mTableId, mRowId, SyncState.changed.name(), localConflictType);
+              successful = true;
+            } catch (RemoteException e) {
+              WebLogger.getLogger(mAppName).printStackTrace(e);
+              WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+              Toast.makeText(ConflictResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+            } finally {
+              if (db != null) {
+                try {
+                  Sync.getInstance().getDatabase().closeTransactionAndDatabase(mAppName, db, successful);
+                } catch (RemoteException e) {
+                  WebLogger.getLogger(mAppName).printStackTrace(e);
+                  WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+                  Toast.makeText(ConflictResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+                }
+              }
             }
           }
           ConflictResolutionRowActivity.this.finish();
@@ -849,6 +793,191 @@ public class ConflictResolutionRowActivity extends ListActivity implements
 
     }
 
+  }
+
+  @Override
+  public String getAppName() {
+    return mAppName;
+  }
+
+  @Override
+  public void databaseAvailable() {
+
+    if ( Sync.getInstance().getDatabase() == null ) {
+      return;
+    }
+    
+    Map<String, String> persistedDisplayNames = new HashMap<String, String>();
+    {
+      OdkDbHandle db = null;
+      try {
+        db = Sync.getInstance().getDatabase().openDatabase(mAppName, false);
+        mOrderedDefns = Sync.getInstance().getDatabase().getUserDefinedColumns(mAppName, db, mTableId);
+        List<KeyValueStoreEntry> columnDisplayNames = 
+            Sync.getInstance().getDatabase().getDBTableMetadata(mAppName, db,
+            mTableId, KeyValueStoreConstants.PARTITION_COLUMN, null,
+            KeyValueStoreConstants.COLUMN_DISPLAY_NAME);
+        for (KeyValueStoreEntry e : columnDisplayNames) {
+          try {
+            mOrderedDefns.find(e.aspect);
+            persistedDisplayNames.put(e.aspect, e.value);
+          } catch (IllegalArgumentException ex) {
+            // ignore
+          }
+        }
+        this.mConflictTable = getConflictTable(db, mTableId, mOrderedDefns);
+      } catch (RemoteException e1) {
+        WebLogger.getLogger(mAppName).printStackTrace(e1);
+        WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+        Toast.makeText(ConflictResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+      } finally {
+        if ( db != null ) {
+          try {
+            Sync.getInstance().getDatabase().closeDatabase(mAppName, db);
+          } catch (RemoteException e) {
+            WebLogger.getLogger(mAppName).printStackTrace(e);
+            WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+            Toast.makeText(ConflictResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+          }
+        }
+      }
+    }
+
+    this.mLocal = mConflictTable.getLocalTable();
+    this.mServer = mConflictTable.getServerTable();
+    //
+    // And now we need to construct up the adapter.
+    // There are several things to do be aware of. We need to get all the
+    // section headings, which will be the column names. We also need to get
+    // all the values which are in conflict, as well as those that are not.
+    // We'll present them in user-defined order, as they may have set up the
+    // useful information together.
+    this.mRowNumber = this.mLocal.getRowNumFromId(mRowId);
+    Row localRow = this.mLocal.getRowAtIndex(mRowNumber);
+    Row serverRow = this.mServer.getRowAtIndex(mRowNumber);
+    this.mServerRowETag = serverRow.getRawDataOrMetadataByElementKey(DataTableColumns.ROW_ETAG);
+    // This will be the number of rows down we are in the adapter. Each
+    // heading and each cell value gets its own row. Columns in conflict get
+    // two, as we'll need to display each one to the user.
+    int adapterOffset = 0;
+    List<Section> sections = new ArrayList<Section>();
+    this.mConflictColumns = new ArrayList<ConflictColumn>();
+    List<ConcordantColumn> noConflictColumns = new ArrayList<ConcordantColumn>();
+
+    for (ColumnDefinition cd : mOrderedDefns.getColumnDefinitions()) {
+      if (!cd.isUnitOfRetention()) {
+        continue;
+      }
+      String elementKey = cd.getElementKey();
+      ElementType elementType = cd.getType();
+      String columnDisplayName = persistedDisplayNames.get(elementKey);
+      if (columnDisplayName != null) {
+        columnDisplayName = ODKDataUtils.getLocalizedDisplayName(columnDisplayName);
+      } else {
+        columnDisplayName = NameUtil.constructSimpleDisplayName(elementKey);
+      }
+      Section newSection = new Section(adapterOffset, columnDisplayName);
+      ++adapterOffset;
+      sections.add(newSection);
+      String localRawValue = localRow.getRawDataOrMetadataByElementKey(elementKey);
+      String localDisplayValue = localRow.getDisplayTextOfData(this, elementType, elementKey, true);
+      String serverRawValue = serverRow.getRawDataOrMetadataByElementKey(elementKey);
+      String serverDisplayValue = serverRow.getDisplayTextOfData(this, elementType, elementKey,
+          true);
+      if ((localRawValue == null && serverRawValue == null)
+          || (localRawValue != null && localRawValue.equals(serverRawValue))) {
+        // TODO: this doesn't compare actual equality of blobs if their display
+        // text is the same.
+        // We only want to display a single row, b/c there are no choices to
+        // be made by the user.
+        ConcordantColumn concordance = new ConcordantColumn(adapterOffset, localDisplayValue);
+        noConflictColumns.add(concordance);
+        ++adapterOffset;
+      } else {
+        // We need to display both the server and local versions.
+        ConflictColumn conflictColumn = new ConflictColumn(adapterOffset, elementKey,
+            localRawValue, localDisplayValue, serverRawValue, serverDisplayValue);
+        ++adapterOffset;
+        mConflictColumns.add(conflictColumn);
+      }
+    }
+    // Now that we have the appropriate lists, we need to construct the
+    // adapter that will display the information.
+    this.mAdapter = new ConflictResolutionListAdapter(this.getActionBar().getThemedContext(),
+        mAppName, this, sections, noConflictColumns, mConflictColumns);
+    this.setListAdapter(mAdapter);
+    this.onDecisionMade();
+    // Here we'll handle the cases of whether or not rows were deleted. There
+    // are three cases to consider:
+    // 1) both rows were updated, neither is deleted. This is the normal case
+    // 2) the server row was deleted, the local was updated (thus a conflict)
+    // 3) the local was deleted, the server was updated (thus a conflict)
+    // To Figure this out we'll first need the state of each version.
+    // Note that these calls should never return nulls, as whenever a row is in
+    // conflict, there should be a conflict type. Therefore if we throw an
+    // error that is fine, as we've violated an invariant.
+
+    int localConflictType = Integer.parseInt(mLocal.getRowAtIndex(mRowNumber)
+        .getRawDataOrMetadataByElementKey(DataTableColumns.CONFLICT_TYPE));
+    int serverConflictType = Integer.parseInt(mServer.getRowAtIndex(mRowNumber)
+        .getRawDataOrMetadataByElementKey(DataTableColumns.CONFLICT_TYPE));
+    if (localConflictType == ConflictType.LOCAL_UPDATED_UPDATED_VALUES
+        && serverConflictType == ConflictType.SERVER_UPDATED_UPDATED_VALUES) {
+      // Then it's a normal conflict. Hide the elements of the view relevant
+      // to deletion restoration.
+      mTextViewConflictMessage.setText(getString(R.string.conflict_resolve_or_choose));
+
+      this.mButtonTakeLocal.setOnClickListener(new TakeLocalClickListener());
+      this.mButtonTakeLocal.setText(getString(R.string.conflict_take_local_updates));
+      this.mButtonTakeServer.setOnClickListener(new TakeServerClickListener());
+      this.mButtonTakeServer.setText(getString(R.string.conflict_take_server_updates));
+      this.mButtonResolveRow.setVisibility(View.GONE /* View.VISIBLE */);
+      this.onDecisionMade();
+    } else if (localConflictType == ConflictType.LOCAL_DELETED_OLD_VALUES
+        && serverConflictType == ConflictType.SERVER_UPDATED_UPDATED_VALUES) {
+      // Then the local row was deleted, but someone had inserted a newer
+      // updated version on the server.
+      this.mTextViewConflictMessage
+          .setText(getString(R.string.conflict_local_was_deleted_explanation));
+      this.mButtonTakeServer.setOnClickListener(new TakeServerClickListener());
+      this.mButtonTakeServer.setText(getString(R.string.conflict_restore_with_server_changes));
+      this.mButtonTakeLocal.setOnClickListener(new SetRowToDeleteOnServerListener());
+      this.mButtonTakeLocal.setText(getString(R.string.conflict_enforce_local_delete));
+
+      mButtonResolveRow.setEnabled(false);
+      mButtonResolveRow.setVisibility(View.GONE);
+      mAdapter.setConflictColumnsEnabled(false);
+      mAdapter.notifyDataSetChanged();
+    } else if (localConflictType == ConflictType.LOCAL_UPDATED_UPDATED_VALUES
+        && serverConflictType == ConflictType.SERVER_DELETED_OLD_VALUES) {
+      // Then the row was updated locally but someone had deleted it on the
+      // server.
+      this.mTextViewConflictMessage
+          .setText(getString(R.string.conflict_server_was_deleted_explanation));
+      this.mButtonTakeLocal.setOnClickListener(new TakeLocalClickListener());
+      this.mButtonTakeLocal.setText(getString(R.string.conflict_restore_with_local_changes));
+      this.mButtonTakeServer.setText(getString(R.string.conflict_apply_delete_from_server));
+      this.mButtonTakeServer.setOnClickListener(new DiscardChangesAndDeleteLocalListener());
+
+      mButtonResolveRow.setEnabled(false);
+      mButtonResolveRow.setVisibility(View.GONE);
+      mAdapter.setConflictColumnsEnabled(false);
+      mAdapter.notifyDataSetChanged();
+    } else {
+      // We should never get here, because it breaks an invariant.
+      // We know the vers
+      WebLogger.getLogger(mAppName).e(
+          TAG,
+          "server and local versions of the row did not match a known"
+              + " pair of conflict types. local: " + localConflictType + ", sever: "
+              + serverConflictType);
+    }
+  }
+
+  @Override
+  public void databaseUnavailable() {
+    // TODO Auto-generated method stub
+    
   }
 
 }

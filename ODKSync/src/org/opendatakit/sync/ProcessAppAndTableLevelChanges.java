@@ -14,12 +14,11 @@ import org.opendatakit.aggregate.odktables.rest.entity.Column;
 import org.opendatakit.aggregate.odktables.rest.entity.TableDefinitionResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResourceList;
-import org.opendatakit.common.android.data.ColumnDefinition;
+import org.opendatakit.common.android.data.ColumnList;
+import org.opendatakit.common.android.data.OrderedColumns;
 import org.opendatakit.common.android.data.TableDefinitionEntry;
-import org.opendatakit.common.android.utilities.ODKDatabaseUtils;
-import org.opendatakit.common.android.utilities.SyncETagsUtils;
-import org.opendatakit.common.android.utilities.TableUtil;
 import org.opendatakit.common.android.utilities.WebLogger;
+import org.opendatakit.database.service.OdkDbHandle;
 import org.opendatakit.sync.SynchronizationResult.Status;
 import org.opendatakit.sync.Synchronizer.OnTablePropertiesChanged;
 import org.opendatakit.sync.application.Sync;
@@ -27,8 +26,7 @@ import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
 import org.opendatakit.sync.exceptions.SchemaMismatchException;
 import org.opendatakit.sync.service.SyncProgressState;
 
-import android.database.sqlite.SQLiteDatabase;
-import android.database.sqlite.SQLiteException;
+import android.os.RemoteException;
 
 /**
  * Isolate the app-level and table-level synchronization steps
@@ -66,8 +64,9 @@ public class ProcessAppAndTableLevelChanges {
    *
    * This does not process zip files; it is unclear whether we should do
    * anything for those or just leave them as zip files locally.
+   * @throws RemoteException 
    */
-  public List<TableResource> synchronizeConfigurationAndContent(boolean pushToServer) {
+  public List<TableResource> synchronizeConfigurationAndContent(boolean pushToServer) throws RemoteException {
     log.i(TAG, "entered synchronizeConfigurationAndContent()");
 
     boolean issueDeletes = false;
@@ -124,11 +123,11 @@ public class ProcessAppAndTableLevelChanges {
     // TODO: do the database updates with a few database transactions...
     // get the tables on the local device
     List<String> localTableIds;
-    SQLiteDatabase db = null;
+    OdkDbHandle db = null;
     try {
-      db = sc.getDatabase();
-      localTableIds = ODKDatabaseUtils.get().getAllTableIds(db);
-    } catch (SQLiteException e) {
+      db = sc.getDatabase(false);
+      localTableIds = Sync.getInstance().getDatabase().getAllTableIds(sc.getAppName(), db);
+    } catch (RemoteException e) {
       sc.setAppLevelStatus(Status.EXCEPTION);
       log.e(TAG,
           "[synchronizeConfigurationAndContent] Unexpected exception getting local tableId list exception: "
@@ -136,7 +135,7 @@ public class ProcessAppAndTableLevelChanges {
       return new ArrayList<TableResource>();
     } finally {
       if (db != null) {
-        db.close();
+        Sync.getInstance().getDatabase().closeDatabase(sc.getAppName(), db);
         db = null;
       }
     }
@@ -235,14 +234,14 @@ public class ProcessAppAndTableLevelChanges {
 
         if (!localTableId.equals("framework")) {
           TableDefinitionEntry entry;
-          ArrayList<ColumnDefinition> orderedDefns;
+          OrderedColumns orderedDefns;
           try {
-            db = sc.getDatabase();
-            entry = ODKDatabaseUtils.get().getTableDefinitionEntry(db, localTableId);
-            orderedDefns = TableUtil.get().getColumnDefinitions(db, sc.getAppName(), localTableId);
+            db = sc.getDatabase(false);
+            entry = Sync.getInstance().getDatabase().getTableDefinitionEntry(sc.getAppName(), db, localTableId);
+            orderedDefns = Sync.getInstance().getDatabase().getUserDefinedColumns(sc.getAppName(), db, localTableId);
           } finally {
             if (db != null) {
-              db.close();
+              Sync.getInstance().getDatabase().closeDatabase(sc.getAppName(), db);
               db = null;
             }
           }
@@ -314,7 +313,7 @@ public class ProcessAppAndTableLevelChanges {
         }
         firstTime = false;
 
-        ArrayList<ColumnDefinition> orderedDefns = null;
+        OrderedColumns orderedDefns = null;
 
         String serverTableId = table.getTableId();
 
@@ -331,18 +330,18 @@ public class ProcessAppAndTableLevelChanges {
           // see if the schemaETag matches. If so, we can skip a lot of steps...
           // no need to verify schema match -- just sync files...
           try {
-            db = sc.getDatabase();
-            entry = ODKDatabaseUtils.get().getTableDefinitionEntry(db, serverTableId);
-            orderedDefns = TableUtil.get().getColumnDefinitions(db, sc.getAppName(), serverTableId);
+            db = sc.getDatabase(false);
+            entry = Sync.getInstance().getDatabase().getTableDefinitionEntry(sc.getAppName(), db, serverTableId);
+            orderedDefns = Sync.getInstance().getDatabase().getUserDefinedColumns(sc.getAppName(), db, serverTableId);
             if (table.getSchemaETag().equals(entry.getSchemaETag())) {
               isLocalMatch = true;
             }
-          } catch (SQLiteException e) {
+          } catch (RemoteException e) {
             exception("synchronizeConfigurationAndContent - database exception", serverTableId, e, tableResult);
             continue;
           } finally {
             if (db != null) {
-              db.close();
+              Sync.getInstance().getDatabase().closeDatabase(sc.getAppName(), db);
               db = null;
             }
           }
@@ -358,14 +357,16 @@ public class ProcessAppAndTableLevelChanges {
             TableDefinitionResource definitionResource = sc.getSynchronizer().getTableDefinition(table
                 .getDefinitionUri());
 
+            boolean successful = false;
             try {
-              db = sc.getDatabase();
+              db = sc.getDatabase(true);
               orderedDefns = addTableFromDefinitionResource(db, definitionResource,
                   doesNotExistLocally);
-              entry = ODKDatabaseUtils.get().getTableDefinitionEntry(db, serverTableId);
+              entry = Sync.getInstance().getDatabase().getTableDefinitionEntry(sc.getAppName(), db, serverTableId);
+              successful = true;
             } finally {
               if (db != null) {
-                db.close();
+                Sync.getInstance().getDatabase().closeTransactionAndDatabase(sc.getAppName(), db, successful);
                 db = null;
               }
             }
@@ -413,18 +414,23 @@ public class ProcessAppAndTableLevelChanges {
         // eventually might not be true if there are multiple syncs running
         // simultaneously...
         TableResult tableResult = sc.getTableResult(localTableId);
+        boolean successful = false;
         try {
-          db = sc.getDatabase();
-          ODKDatabaseUtils.get().deleteDBTableAndAllData(db, sc.getAppName(), localTableId);
-          tableResult.setStatus(Status.SUCCESS);
-        } catch (SQLiteException e) {
+          db = sc.getDatabase(true);
+          Sync.getInstance().getDatabase().deleteDBTableAndAllData(sc.getAppName(), db, localTableId);
+          successful = true;
+        } catch (RemoteException e) {
           exception("synchronizeConfigurationAndContent - database exception deleting table", localTableId, e, tableResult);
         } catch (Exception e) {
           exception("synchronizeConfigurationAndContent - unexpected exception deleting table", localTableId, e, tableResult);
         } finally {
           if (db != null) {
-            db.close();
-            db = null;
+            try {
+              Sync.getInstance().getDatabase().closeTransactionAndDatabase(sc.getAppName(), db, successful);
+              tableResult.setStatus(Status.SUCCESS);
+            } finally {
+              db = null;
+            }
           }
         }
         sc.incMajorSyncStep();
@@ -458,12 +464,13 @@ public class ProcessAppAndTableLevelChanges {
    *          down.
    * @return null if there is an error, otherwise a new or updated table
    *         resource
+   * @throws RemoteException 
    * @throws InvalidAuthTokenException 
    * @throws ClientWebException 
    */
   private TableResource synchronizeTableConfigurationAndContent(TableDefinitionEntry te,
-      ArrayList<ColumnDefinition> orderedDefns, TableResource resource,
-      boolean pushLocalTableLevelFiles) {
+      OrderedColumns orderedDefns, TableResource resource,
+      boolean pushLocalTableLevelFiles) throws RemoteException {
 
     // used to get the above from the ACTIVE store. if things go wonky, maybe
     // check to see if it was ACTIVE rather than SERVER for a reason. can't
@@ -479,15 +486,18 @@ public class ProcessAppAndTableLevelChanges {
         R.string.verifying_table_schema_on_server, new Object[] { tableId }, 0.0, false);
     final TableResult tableResult = sc.getTableResult(tableId);
     String displayName;
-    SQLiteDatabase db = null;
+    OdkDbHandle db = null;
     try {
-      db = sc.getDatabase();
-      displayName = TableUtil.get().getLocalizedDisplayName(db, tableId);
+      db = sc.getDatabase(false);
+      displayName = CommonUtils.getLocalizedDisplayName(sc.getAppName(), db, tableId);
       tableResult.setTableDisplayName(displayName);
     } finally {
       if (db != null) {
-        db.close();
-        db = null;
+        try {
+          Sync.getInstance().getDatabase().closeDatabase(sc.getAppName(), db);
+        } finally {
+          db = null;
+        }
       }
     }
 
@@ -505,15 +515,15 @@ public class ProcessAppAndTableLevelChanges {
 
         // we are creating data on the server
 
+        boolean successful = false;
         try {
-          db = sc.getDatabase();
-          db.beginTransaction();
+          db = sc.getDatabase(true);
           // change row sync and conflict status to handle new server schema.
           // Clean up this table and set the dataETag to null.
-          ODKDatabaseUtils.get().changeDataRowsToNewRowState(db, tableId);
+          Sync.getInstance().getDatabase().changeDataRowsToNewRowState(sc.getAppName(), db, tableId);
           // we need to clear out the dataETag so
           // that we will pull all server changes and sync our properties.
-          ODKDatabaseUtils.get().updateDBTableETags(db, tableId, null, null);
+          Sync.getInstance().getDatabase().updateDBTableETags(sc.getAppName(), db, tableId, null, null);
           //
           // Although the server does not recognize this tableId, we can
           // keep our record of the ETags for the table-level files and
@@ -532,18 +542,18 @@ public class ProcessAppAndTableLevelChanges {
             // Clearing it here handles the case where an admin deleted the
             // table on the server and we are now re-pushing that table to
             // the server.
-            SyncETagsUtils seu = new SyncETagsUtils();
             URI tableInstanceFilesUri = sc.getSynchronizer().constructTableInstanceFileUri(tableId,
                 schemaETag);
-            seu.deleteAllSyncETagsUnderServerUri(db, tableInstanceFilesUri);
+            Sync.getInstance().getDatabase().deleteAllSyncETagsUnderServer(sc.getAppName(), db, tableInstanceFilesUri.toString());
           }
-
-          db.setTransactionSuccessful();
+          successful = true;
         } finally {
           if (db != null) {
-            db.endTransaction();
-            db.close();
-            db = null;
+            try {
+              Sync.getInstance().getDatabase().closeTransactionAndDatabase(sc.getAppName(), db, successful);
+            } finally {
+              db = null;
+            }
           }
         }
 
@@ -554,7 +564,7 @@ public class ProcessAppAndTableLevelChanges {
         // First create the table definition on the server.
         try {
           resource = sc.getSynchronizer().createTable(tableId, schemaETag,
-              ColumnDefinition.getColumns(orderedDefns));
+              orderedDefns.getColumns());
         } catch (ClientWebException e) {
           if ( e.getResponse() != null && e.getResponse().getStatusCode() == HttpStatus.SC_UNAUTHORIZED ) {
             clientAuthException("synchronizeTableConfigurationAndContent - createTable on server", tableId, e, tableResult);
@@ -571,17 +581,19 @@ public class ProcessAppAndTableLevelChanges {
         }
 
         schemaETag = resource.getSchemaETag();
+        boolean xsuccessful = false;
         try {
-          db = sc.getDatabase();
-          db.beginTransaction();
+          db = sc.getDatabase(true);
           // update schemaETag to that on server (dataETag is null already).
-          ODKDatabaseUtils.get().updateDBTableETags(db, tableId, schemaETag, null);
-          db.setTransactionSuccessful();
+          Sync.getInstance().getDatabase().updateDBTableETags(sc.getAppName(), db, tableId, schemaETag, null);
+          xsuccessful = true;
         } finally {
           if (db != null) {
-            db.endTransaction();
-            db.close();
-            db = null;
+            try {
+              Sync.getInstance().getDatabase().closeTransactionAndDatabase(sc.getAppName(), db, xsuccessful);
+            } finally {
+              db = null;
+            }
           }
         }
       }
@@ -625,12 +637,13 @@ public class ProcessAppAndTableLevelChanges {
 
         // record that we have pulled it
         tableResult.setPulledServerSchema(true);
+        boolean successful = false;
         try {
-          db = sc.getDatabase();
+          db = sc.getDatabase(true);
           // apply changes
           // this also updates the data rows so they will sync
           orderedDefns = addTableFromDefinitionResource(db, definitionResource, false);
-
+          successful = true;
           log.w(TAG,
               "database schema has changed. Structural modifications, if any, were successful.");
         } catch (SchemaMismatchException e) {
@@ -646,8 +659,11 @@ public class ProcessAppAndTableLevelChanges {
           return null;
         } finally {
           if (db != null) {
-            db.close();
-            db = null;
+            try {
+              Sync.getInstance().getDatabase().closeTransactionAndDatabase(sc.getAppName(), db, successful);
+            } finally {
+              db = null;
+            }
           }
         }
       }
@@ -657,12 +673,15 @@ public class ProcessAppAndTableLevelChanges {
       // write our properties and definitions files.
       // write the current schema and properties set.
       try {
-        db = sc.getDatabase();
+        db = sc.getDatabase(false);
         sc.getCsvUtil().writePropertiesCsv(db, tableId, orderedDefns);
       } finally {
         if (db != null) {
-          db.close();
-          db = null;
+          try {
+            Sync.getInstance().getDatabase().closeDatabase(sc.getAppName(), db);
+          } finally {
+            db = null;
+          }
         }
       }
 
@@ -674,6 +693,13 @@ public class ProcessAppAndTableLevelChanges {
                 try {
                   sc.getCsvUtil().updateTablePropertiesFromCsv(null, tableId);
                 } catch (IOException e) {
+                  log.printStackTrace(e);
+                  String msg = e.getMessage();
+                  if (msg == null)
+                    msg = e.toString();
+                  tableResult.setMessage(msg);
+                  tableResult.setStatus(Status.EXCEPTION);
+                } catch (RemoteException e) {
                   log.printStackTrace(e);
                   String msg = e.getMessage();
                   if (msg == null)
@@ -716,6 +742,7 @@ public class ProcessAppAndTableLevelChanges {
 
   /**
    * Update the database to reflect the new structure.
+   * Expected to be called with a database open for transactions.
    * <p>
    * This should be called when downloading a table from the server, which is
    * why the syncTag is separate.
@@ -726,28 +753,23 @@ public class ProcessAppAndTableLevelChanges {
    *          the {@link TableDefinitionResource}.
    * @return the new {@link TableProperties} for the table.
    * @throws SchemaMismatchException
+   * @throws RemoteException 
    */
-  private ArrayList<ColumnDefinition> addTableFromDefinitionResource(SQLiteDatabase db,
+  private OrderedColumns addTableFromDefinitionResource(OdkDbHandle db,
       TableDefinitionResource definitionResource, boolean doesNotExistLocally)
-      throws SchemaMismatchException {
+      throws SchemaMismatchException, RemoteException {
     if (doesNotExistLocally) {
-      try {
-        ArrayList<ColumnDefinition> orderedDefns;
-        db.beginTransaction();
-        orderedDefns = ODKDatabaseUtils.get().createOrOpenDBTableWithColumns(db, sc.getAppName(),
-            definitionResource.getTableId(), definitionResource.getColumns());
-        ODKDatabaseUtils.get().updateDBTableETags(db, definitionResource.getTableId(),
-            definitionResource.getSchemaETag(), null);
-        db.setTransactionSuccessful();
-        return orderedDefns;
-      } finally {
-        db.endTransaction();
-      }
+      OrderedColumns orderedDefns;
+      orderedDefns = Sync.getInstance().getDatabase().createOrOpenDBTableWithColumns(sc.getAppName(), db,
+          definitionResource.getTableId(), new ColumnList(definitionResource.getColumns()));
+      Sync.getInstance().getDatabase().updateDBTableETags(sc.getAppName(), db, definitionResource.getTableId(),
+          definitionResource.getSchemaETag(), null);
+      return orderedDefns;
     } else {
-      List<Column> localColumns = ODKDatabaseUtils.get().getUserDefinedColumns(db,
-          definitionResource.getTableId());
+      OrderedColumns localColumnDefns = Sync.getInstance().getDatabase().getUserDefinedColumns(
+          sc.getAppName(), db, definitionResource.getTableId());
       List<Column> serverColumns = definitionResource.getColumns();
-
+      List<Column> localColumns = localColumnDefns.getColumns();
       if (localColumns.size() != serverColumns.size()) {
         throw new SchemaMismatchException("Server schema differs from local schema");
       }
@@ -760,27 +782,21 @@ public class ProcessAppAndTableLevelChanges {
         }
       }
 
-      TableDefinitionEntry te = ODKDatabaseUtils.get().getTableDefinitionEntry(db,
+      TableDefinitionEntry te = Sync.getInstance().getDatabase().getTableDefinitionEntry(
+          sc.getAppName(), db,
           definitionResource.getTableId());
       String schemaETag = te.getSchemaETag();
       if (schemaETag == null || !schemaETag.equals(definitionResource.getSchemaETag())) {
         // server has changed its schema
-        try {
-          db.beginTransaction();
-          // change row sync and conflict status to handle new server schema.
-          // Clean up this table and set the dataETag to null.
-          ODKDatabaseUtils.get().changeDataRowsToNewRowState(db, definitionResource.getTableId());
-          // and update to the new schemaETag, but clear our dataETag
-          // so that all data rows sync.
-          ODKDatabaseUtils.get().updateDBTableETags(db, definitionResource.getTableId(),
-              definitionResource.getSchemaETag(), null);
-          db.setTransactionSuccessful();
-        } finally {
-          db.endTransaction();
-        }
+        // change row sync and conflict status to handle new server schema.
+        // Clean up this table and set the dataETag to null.
+        Sync.getInstance().getDatabase().changeDataRowsToNewRowState(sc.getAppName(), db, definitionResource.getTableId());
+        // and update to the new schemaETag, but clear our dataETag
+        // so that all data rows sync.
+        Sync.getInstance().getDatabase().updateDBTableETags(sc.getAppName(), db, definitionResource.getTableId(),
+            definitionResource.getSchemaETag(), null);
       }
-      return ColumnDefinition.buildColumnDefinitions(sc.getAppName(), definitionResource.getTableId(),
-          localColumns);
+      return localColumnDefns;
     }
   }
 

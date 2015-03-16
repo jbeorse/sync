@@ -15,6 +15,7 @@
 	<string name="action_settings">Settings</string> <!--  used in res/menu/main.xml (needed?) -->
 	<string name="webkit_permission_tree">Open Data Kit WebServer</string>
 	<string name="webkit_launch_permission">Launch WebServer</string>
+	<string name="database_launch_permission">Launch Database</string>
 	<string name="dbshim_launch_permission">Launch DbShim</string>
 <!-- SyncActivity (aggregate_activity.xml) -->
 	<string name="server_url">Aggregate URL:</string>

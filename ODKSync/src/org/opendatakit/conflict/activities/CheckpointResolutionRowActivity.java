@@ -23,18 +23,21 @@ import java.util.Map;
 import org.opendatakit.aggregate.odktables.rest.ElementType;
 import org.opendatakit.aggregate.odktables.rest.KeyValueStoreConstants;
 import org.opendatakit.aggregate.odktables.rest.SavepointTypeManipulator;
+import org.opendatakit.common.android.activities.BaseListActivity;
+import org.opendatakit.common.android.application.CommonApplication;
 import org.opendatakit.common.android.data.ColumnDefinition;
-import org.opendatakit.common.android.data.KeyValueStoreEntry;
+import org.opendatakit.common.android.data.OrderedColumns;
 import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
-import org.opendatakit.common.android.database.DatabaseFactory;
+import org.opendatakit.common.android.listener.DatabaseConnectionListener;
 import org.opendatakit.common.android.provider.DataTableColumns;
 import org.opendatakit.common.android.utilities.NameUtil;
 import org.opendatakit.common.android.utilities.ODKDataUtils;
-import org.opendatakit.common.android.utilities.ODKDatabaseUtils;
-import org.opendatakit.common.android.utilities.TableUtil;
 import org.opendatakit.common.android.utilities.WebLogger;
+import org.opendatakit.database.service.KeyValueStoreEntry;
+import org.opendatakit.database.service.OdkDbHandle;
 import org.opendatakit.sync.R;
+import org.opendatakit.sync.application.Sync;
 import org.opendatakit.sync.views.components.ConcordantColumn;
 import org.opendatakit.sync.views.components.ConflictColumn;
 import org.opendatakit.sync.views.components.ConflictResolutionListAdapter;
@@ -42,14 +45,14 @@ import org.opendatakit.sync.views.components.ConflictResolutionListAdapter.Resol
 import org.opendatakit.sync.views.components.ConflictResolutionListAdapter.Section;
 
 import android.app.AlertDialog;
-import android.app.ListActivity;
 import android.content.DialogInterface;
 import android.content.DialogInterface.OnCancelListener;
-import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
+import android.os.RemoteException;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
+import android.widget.Toast;
 
 /**
  * Activity for resolving the conflicts in a row. This is the native version,
@@ -58,8 +61,8 @@ import android.widget.TextView;
  * @author sudar.sam@gmail.com
  *
  */
-public class CheckpointResolutionRowActivity extends ListActivity implements
-    ConflictResolutionListAdapter.UICallbacks {
+public class CheckpointResolutionRowActivity extends BaseListActivity implements
+    ConflictResolutionListAdapter.UICallbacks, DatabaseConnectionListener {
 
   private static final String TAG = CheckpointResolutionRowActivity.class.getSimpleName();
 
@@ -75,7 +78,7 @@ public class CheckpointResolutionRowActivity extends ListActivity implements
   private ConflictResolutionListAdapter mAdapter;
   private String mAppName;
   private String mTableId;
-  private ArrayList<ColumnDefinition> mOrderedDefns;
+  private OrderedColumns mOrderedDefns;
 
   private String mRowId;
   UserTable mConflictTable;
@@ -110,157 +113,17 @@ public class CheckpointResolutionRowActivity extends ListActivity implements
 
     mTableId = getIntent().getStringExtra(Constants.TABLE_ID);
     this.mRowId = getIntent().getStringExtra(INTENT_KEY_ROW_ID);
+  }
 
-    Map<String, String> persistedDisplayNames = new HashMap<String, String>();
-    {
-      SQLiteDatabase db = null;
-      try {
-        db = DatabaseFactory.get().getDatabase(this, mAppName);
-        mOrderedDefns = TableUtil.get().getColumnDefinitions(db, mAppName, mTableId);
-
-        List<KeyValueStoreEntry> columnDisplayNames = ODKDatabaseUtils.get().getDBTableMetadata(db,
-            mTableId, KeyValueStoreConstants.PARTITION_COLUMN, null,
-            KeyValueStoreConstants.COLUMN_DISPLAY_NAME);
-
-        for (KeyValueStoreEntry e : columnDisplayNames) {
-          try {
-            ColumnDefinition.find(mOrderedDefns, e.aspect);
-            persistedDisplayNames.put(e.aspect, e.value);
-          } catch (IllegalArgumentException ex) {
-            // ignore
-          }
-        }
-
-        mConflictTable = ODKDatabaseUtils.get().rawSqlQuery(db, mAppName, mTableId, mOrderedDefns,
-            DataTableColumns.ID + "=?", new String[] { mRowId }, null, null,
-            DataTableColumns.SAVEPOINT_TIMESTAMP, "ASC");
-      } finally {
-        db.close();
-      }
-    }
-
-    if (mConflictTable.getNumberOfRows() == 0) {
-      // another process deleted this row?
-      setResult(RESULT_OK);
-      finish();
-      return;
-    }
-
-    // the first row is the oldest -- it should be a COMPLETE or INCOMPLETE row
-    // if it isn't, then this is a new row and the option is to delete it or
-    // save as incomplete. Otherwise, it is to roll back or update to
-    // incomplete.
-
-    Row rowStarting = mConflictTable.getRowAtIndex(0);
-    String type = rowStarting.getRawDataOrMetadataByElementKey(DataTableColumns.SAVEPOINT_TYPE);
-    boolean deleteEntirely = (type == null || type.length() == 0);
-
-    if (!deleteEntirely) {
-      if (mConflictTable.getNumberOfRows() == 1
-          && (SavepointTypeManipulator.isComplete(type) || SavepointTypeManipulator
-              .isIncomplete(type))) {
-        // something else seems to have resolved this?
-        setResult(RESULT_OK);
-        finish();
-        return;
-      }
-    }
-
-    Row rowEnding = mConflictTable.getRowAtIndex(mConflictTable.getNumberOfRows() - 1);
-    //
-    // And now we need to construct up the adapter.
-
-    // There are several things to do be aware of. We need to get all the
-    // section headings, which will be the column names. We also need to get
-    // all the values which are in conflict, as well as those that are not.
-    // We'll present them in user-defined order, as they may have set up the
-    // useful information together.
-    // This will be the number of rows down we are in the adapter. Each
-    // heading and each cell value gets its own row. Columns in conflict get
-    // two, as we'll need to display each one to the user.
-    int adapterOffset = 0;
-    List<Section> sections = new ArrayList<Section>();
-    this.mConflictColumns = new ArrayList<ConflictColumn>();
-    List<ConcordantColumn> noConflictColumns = new ArrayList<ConcordantColumn>();
-    for (ColumnDefinition cd : mOrderedDefns) {
-      if (!cd.isUnitOfRetention()) {
-        continue;
-      }
-      String elementKey = cd.getElementKey();
-      ElementType elementType = cd.getType();
-      String columnDisplayName = persistedDisplayNames.get(elementKey);
-      if (columnDisplayName != null) {
-        columnDisplayName = ODKDataUtils.getLocalizedDisplayName(columnDisplayName);
-      } else {
-        columnDisplayName = NameUtil.constructSimpleDisplayName(elementKey);
-      }
-      Section newSection = new Section(adapterOffset, columnDisplayName);
-      ++adapterOffset;
-      sections.add(newSection);
-      String localRawValue = rowEnding.getRawDataOrMetadataByElementKey(elementKey);
-      String localDisplayValue = rowEnding
-          .getDisplayTextOfData(this, elementType, elementKey, true);
-      String serverRawValue = rowStarting.getRawDataOrMetadataByElementKey(elementKey);
-      String serverDisplayValue = rowStarting.getDisplayTextOfData(this, elementType, elementKey,
-          true);
-      if (deleteEntirely || (localRawValue == null && serverRawValue == null)
-          || (localRawValue != null && localRawValue.equals(serverRawValue))) {
-        // TODO: this doesn't compare actual equality of blobs if their display
-        // text is the same.
-        // We only want to display a single row, b/c there are no choices to
-        // be made by the user.
-        ConcordantColumn concordance = new ConcordantColumn(adapterOffset, localDisplayValue);
-        noConflictColumns.add(concordance);
-        ++adapterOffset;
-      } else {
-        // We need to display both the server and local versions.
-        ConflictColumn conflictColumn = new ConflictColumn(adapterOffset, elementKey,
-            localRawValue, localDisplayValue, serverRawValue, serverDisplayValue);
-        ++adapterOffset;
-        mConflictColumns.add(conflictColumn);
-      }
-    }
-    // Now that we have the appropriate lists, we need to construct the
-    // adapter that will display the information.
-    this.mAdapter = new ConflictResolutionListAdapter(this.getActionBar().getThemedContext(),
-        mAppName, this, sections, noConflictColumns, mConflictColumns);
-    this.setListAdapter(mAdapter);
-    // Here we'll handle the cases of whether or not rows were deleted. There
-    // are three cases to consider:
-    // 1) both rows were updated, neither is deleted. This is the normal case
-    // 2) the server row was deleted, the local was updated (thus a conflict)
-    // 3) the local was deleted, the server was updated (thus a conflict)
-    // To Figure this out we'll first need the state of each version.
-    // Note that these calls should never return nulls, as whenever a row is in
-    // conflict, there should be a conflict type. Therefore if we throw an
-    // error that is fine, as we've violated an invariant.
-
-    if (!deleteEntirely) {
-      this.mButtonTakeNewest
-          .setOnClickListener(new DiscardOlderValuesAndMarkNewestAsIncompleteRowClickListener());
-      this.mButtonTakeOldest
-          .setOnClickListener(new DiscardNewerValuesAndRetainOldestInOriginalStateRowClickListener());
-      if (SavepointTypeManipulator.isComplete(type)) {
-        this.mTextViewCheckpointOverviewMessage
-            .setText(getString(R.string.checkpoint_restore_complete_or_take_newest));
-        this.mButtonTakeOldest.setText(getString(R.string.checkpoint_take_oldest_finalized));
-      } else {
-        this.mTextViewCheckpointOverviewMessage
-            .setText(getString(R.string.checkpoint_restore_incomplete_or_take_newest));
-        this.mButtonTakeOldest.setText(getString(R.string.checkpoint_take_oldest_incomplete));
-      }
-      mAdapter.setConflictColumnsEnabled(false);
-      mAdapter.notifyDataSetChanged();
-    } else {
-      this.mButtonTakeNewest
-          .setOnClickListener(new DiscardOlderValuesAndMarkNewestAsIncompleteRowClickListener());
-      this.mButtonTakeOldest.setOnClickListener(new DiscardAllValuesAndDeleteRowClickListener());
-      this.mTextViewCheckpointOverviewMessage
-          .setText(getString(R.string.checkpoint_remove_or_take_newest));
-      this.mButtonTakeOldest.setText(getString(R.string.checkpoint_take_oldest_remove));
-    }
-
-    this.onDecisionMade();
+  @Override
+  protected void onResume() {
+    super.onResume();
+  }
+  
+  @Override
+  protected void onPostResume() {
+    super.onPostResume();
+    ((CommonApplication) getApplication()).establishDatabaseConnectionListener(this);
   }
 
   /*
@@ -371,17 +234,30 @@ public class CheckpointResolutionRowActivity extends ListActivity implements
         public void onClick(DialogInterface dialog, int which) {
           mIsShowingTakeNewestDialog = false;
 
-          SQLiteDatabase db = null;
-          try {
-            db = DatabaseFactory.get().getDatabase(CheckpointResolutionRowActivity.this, mAppName);
-            db.beginTransaction();
-            ODKDatabaseUtils.get().saveAsIncompleteMostRecentCheckpointDataInDBTableWithId(db,
-                mTableId, mRowId);
-            db.setTransactionSuccessful();
-          } finally {
-            if (db != null) {
-              db.endTransaction();
-              db.close();
+          OdkDbHandle db = null;
+          boolean successful = false;
+          if ( Sync.getInstance().getDatabase() == null ) {
+            WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+            Toast.makeText(CheckpointResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+          } else {
+            try {
+              db = Sync.getInstance().getDatabase().openDatabase(mAppName, true);
+              Sync.getInstance().getDatabase().saveAsIncompleteMostRecentCheckpointDataInDBTableWithId(mAppName, db, mTableId, mRowId);
+              successful = true;
+            } catch (RemoteException e) {
+              WebLogger.getLogger(mAppName).printStackTrace(e);
+              WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+              Toast.makeText(CheckpointResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+            } finally {
+              if (db != null) {
+                try {
+                  Sync.getInstance().getDatabase().closeTransactionAndDatabase(mAppName, db, successful);
+                } catch (RemoteException e) {
+                  WebLogger.getLogger(mAppName).printStackTrace(e);
+                  WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+                  Toast.makeText(CheckpointResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+                }
+              }
             }
           }
           CheckpointResolutionRowActivity.this.finish();
@@ -423,16 +299,30 @@ public class CheckpointResolutionRowActivity extends ListActivity implements
         public void onClick(DialogInterface dialog, int which) {
           mIsShowingTakeOldestDialog = false;
 
-          SQLiteDatabase db = null;
-          try {
-            db = DatabaseFactory.get().getDatabase(CheckpointResolutionRowActivity.this, mAppName);
-            db.beginTransaction();
-            ODKDatabaseUtils.get().deleteCheckpointRowsWithId(db, mAppName, mTableId, mRowId);
-            db.setTransactionSuccessful();
-          } finally {
-            if (db != null) {
-              db.endTransaction();
-              db.close();
+          OdkDbHandle db = null;
+          boolean successful = false;
+          if ( Sync.getInstance().getDatabase() == null ) {
+            WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+            Toast.makeText(CheckpointResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+          } else {
+            try {
+              db = Sync.getInstance().getDatabase().openDatabase(mAppName, true);
+              Sync.getInstance().getDatabase().deleteCheckpointRowsWithId(mAppName, db, mTableId, mRowId);
+              successful = true;
+            } catch (RemoteException e) {
+              WebLogger.getLogger(mAppName).printStackTrace(e);
+              WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+              Toast.makeText(CheckpointResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+            } finally {
+              if (db != null) {
+                try {
+                  Sync.getInstance().getDatabase().closeTransactionAndDatabase(mAppName, db, successful);
+                } catch (RemoteException e) {
+                  WebLogger.getLogger(mAppName).printStackTrace(e);
+                  WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+                  Toast.makeText(CheckpointResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+                }
+              }
             }
           }
 
@@ -475,16 +365,30 @@ public class CheckpointResolutionRowActivity extends ListActivity implements
         public void onClick(DialogInterface dialog, int which) {
           mIsShowingTakeOldestDialog = false;
 
-          SQLiteDatabase db = null;
-          try {
-            db = DatabaseFactory.get().getDatabase(CheckpointResolutionRowActivity.this, mAppName);
-            db.beginTransaction();
-            ODKDatabaseUtils.get().deleteCheckpointRowsWithId(db, mAppName, mTableId, mRowId);
-            db.setTransactionSuccessful();
-          } finally {
-            if (db != null) {
-              db.endTransaction();
-              db.close();
+          OdkDbHandle db = null;
+          boolean successful = false;
+          if ( Sync.getInstance().getDatabase() == null ) {
+            WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+            Toast.makeText(CheckpointResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+          } else {
+            try {
+              db = Sync.getInstance().getDatabase().openDatabase(mAppName, true);
+              Sync.getInstance().getDatabase().deleteCheckpointRowsWithId(mAppName, db, mTableId, mRowId);
+              successful = true;
+            } catch (RemoteException e) {
+              WebLogger.getLogger(mAppName).printStackTrace(e);
+              WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+              Toast.makeText(CheckpointResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+            } finally {
+              if (db != null) {
+                try {
+                  Sync.getInstance().getDatabase().closeTransactionAndDatabase(mAppName, db, successful);
+                } catch (RemoteException e) {
+                  WebLogger.getLogger(mAppName).printStackTrace(e);
+                  WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+                  Toast.makeText(CheckpointResolutionRowActivity.this, "database access failure", Toast.LENGTH_LONG).show();
+                }
+              }
             }
           }
           CheckpointResolutionRowActivity.this.finish();
@@ -511,6 +415,194 @@ public class CheckpointResolutionRowActivity extends ListActivity implements
       builder.create().show();
     }
 
+  }
+
+  @Override
+  public String getAppName() {
+    return mAppName;
+  }
+
+  @Override
+  public void databaseAvailable() {
+    
+    if ( Sync.getInstance().getDatabase() == null ) {
+      return;
+    }
+
+    Map<String, String> persistedDisplayNames = new HashMap<String, String>();
+    {
+      OdkDbHandle db = null;
+      try {
+        db = Sync.getInstance().getDatabase().openDatabase(mAppName, false);
+        mOrderedDefns = Sync.getInstance().getDatabase().getUserDefinedColumns(mAppName, db, mTableId);
+
+        List<KeyValueStoreEntry> columnDisplayNames = 
+            Sync.getInstance().getDatabase().getDBTableMetadata(mAppName, db,
+                mTableId, KeyValueStoreConstants.PARTITION_COLUMN, null,
+                KeyValueStoreConstants.COLUMN_DISPLAY_NAME);
+
+        for (KeyValueStoreEntry e : columnDisplayNames) {
+          try {
+            mOrderedDefns.find(e.aspect);
+            persistedDisplayNames.put(e.aspect, e.value);
+          } catch (IllegalArgumentException ex) {
+            // ignore
+          }
+        }
+
+        mConflictTable = Sync.getInstance().getDatabase().rawSqlQuery(mAppName, db,
+            mTableId, mOrderedDefns,
+            DataTableColumns.ID + "=?", new String[] { mRowId }, null, null,
+            DataTableColumns.SAVEPOINT_TIMESTAMP, "ASC");
+      } catch (RemoteException e1) {
+        WebLogger.getLogger(mAppName).printStackTrace(e1);
+        WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+        setResult(RESULT_CANCELED);
+        finish();
+        return;
+      } finally {
+        if ( db != null ) {
+          try {
+            Sync.getInstance().getDatabase().closeDatabase(mAppName, db);
+          } catch (RemoteException e) {
+            WebLogger.getLogger(mAppName).printStackTrace(e);
+            WebLogger.getLogger(mAppName).e(TAG, "database access failure");
+            setResult(RESULT_CANCELED);
+            finish();
+            return;
+          }
+        }
+      }
+    }
+
+    if (mConflictTable.getNumberOfRows() == 0) {
+      // another process deleted this row?
+      setResult(RESULT_OK);
+      finish();
+      return;
+    }
+
+    // the first row is the oldest -- it should be a COMPLETE or INCOMPLETE row
+    // if it isn't, then this is a new row and the option is to delete it or
+    // save as incomplete. Otherwise, it is to roll back or update to
+    // incomplete.
+
+    Row rowStarting = mConflictTable.getRowAtIndex(0);
+    String type = rowStarting.getRawDataOrMetadataByElementKey(DataTableColumns.SAVEPOINT_TYPE);
+    boolean deleteEntirely = (type == null || type.length() == 0);
+
+    if (!deleteEntirely) {
+      if (mConflictTable.getNumberOfRows() == 1
+          && (SavepointTypeManipulator.isComplete(type) || SavepointTypeManipulator
+              .isIncomplete(type))) {
+        // something else seems to have resolved this?
+        setResult(RESULT_OK);
+        finish();
+        return;
+      }
+    }
+
+    Row rowEnding = mConflictTable.getRowAtIndex(mConflictTable.getNumberOfRows() - 1);
+    //
+    // And now we need to construct up the adapter.
+
+    // There are several things to do be aware of. We need to get all the
+    // section headings, which will be the column names. We also need to get
+    // all the values which are in conflict, as well as those that are not.
+    // We'll present them in user-defined order, as they may have set up the
+    // useful information together.
+    // This will be the number of rows down we are in the adapter. Each
+    // heading and each cell value gets its own row. Columns in conflict get
+    // two, as we'll need to display each one to the user.
+    int adapterOffset = 0;
+    List<Section> sections = new ArrayList<Section>();
+    this.mConflictColumns = new ArrayList<ConflictColumn>();
+    List<ConcordantColumn> noConflictColumns = new ArrayList<ConcordantColumn>();
+    for (ColumnDefinition cd : mOrderedDefns.getColumnDefinitions()) {
+      if (!cd.isUnitOfRetention()) {
+        continue;
+      }
+      String elementKey = cd.getElementKey();
+      ElementType elementType = cd.getType();
+      String columnDisplayName = persistedDisplayNames.get(elementKey);
+      if (columnDisplayName != null) {
+        columnDisplayName = ODKDataUtils.getLocalizedDisplayName(columnDisplayName);
+      } else {
+        columnDisplayName = NameUtil.constructSimpleDisplayName(elementKey);
+      }
+      Section newSection = new Section(adapterOffset, columnDisplayName);
+      ++adapterOffset;
+      sections.add(newSection);
+      String localRawValue = rowEnding.getRawDataOrMetadataByElementKey(elementKey);
+      String localDisplayValue = rowEnding
+          .getDisplayTextOfData(this, elementType, elementKey, true);
+      String serverRawValue = rowStarting.getRawDataOrMetadataByElementKey(elementKey);
+      String serverDisplayValue = rowStarting.getDisplayTextOfData(this, elementType, elementKey,
+          true);
+      if (deleteEntirely || (localRawValue == null && serverRawValue == null)
+          || (localRawValue != null && localRawValue.equals(serverRawValue))) {
+        // TODO: this doesn't compare actual equality of blobs if their display
+        // text is the same.
+        // We only want to display a single row, b/c there are no choices to
+        // be made by the user.
+        ConcordantColumn concordance = new ConcordantColumn(adapterOffset, localDisplayValue);
+        noConflictColumns.add(concordance);
+        ++adapterOffset;
+      } else {
+        // We need to display both the server and local versions.
+        ConflictColumn conflictColumn = new ConflictColumn(adapterOffset, elementKey,
+            localRawValue, localDisplayValue, serverRawValue, serverDisplayValue);
+        ++adapterOffset;
+        mConflictColumns.add(conflictColumn);
+      }
+    }
+    // Now that we have the appropriate lists, we need to construct the
+    // adapter that will display the information.
+    this.mAdapter = new ConflictResolutionListAdapter(this.getActionBar().getThemedContext(),
+        mAppName, this, sections, noConflictColumns, mConflictColumns);
+    this.setListAdapter(mAdapter);
+    // Here we'll handle the cases of whether or not rows were deleted. There
+    // are three cases to consider:
+    // 1) both rows were updated, neither is deleted. This is the normal case
+    // 2) the server row was deleted, the local was updated (thus a conflict)
+    // 3) the local was deleted, the server was updated (thus a conflict)
+    // To Figure this out we'll first need the state of each version.
+    // Note that these calls should never return nulls, as whenever a row is in
+    // conflict, there should be a conflict type. Therefore if we throw an
+    // error that is fine, as we've violated an invariant.
+
+    if (!deleteEntirely) {
+      this.mButtonTakeNewest
+          .setOnClickListener(new DiscardOlderValuesAndMarkNewestAsIncompleteRowClickListener());
+      this.mButtonTakeOldest
+          .setOnClickListener(new DiscardNewerValuesAndRetainOldestInOriginalStateRowClickListener());
+      if (SavepointTypeManipulator.isComplete(type)) {
+        this.mTextViewCheckpointOverviewMessage
+            .setText(getString(R.string.checkpoint_restore_complete_or_take_newest));
+        this.mButtonTakeOldest.setText(getString(R.string.checkpoint_take_oldest_finalized));
+      } else {
+        this.mTextViewCheckpointOverviewMessage
+            .setText(getString(R.string.checkpoint_restore_incomplete_or_take_newest));
+        this.mButtonTakeOldest.setText(getString(R.string.checkpoint_take_oldest_incomplete));
+      }
+      mAdapter.setConflictColumnsEnabled(false);
+      mAdapter.notifyDataSetChanged();
+    } else {
+      this.mButtonTakeNewest
+          .setOnClickListener(new DiscardOlderValuesAndMarkNewestAsIncompleteRowClickListener());
+      this.mButtonTakeOldest.setOnClickListener(new DiscardAllValuesAndDeleteRowClickListener());
+      this.mTextViewCheckpointOverviewMessage
+          .setText(getString(R.string.checkpoint_remove_or_take_newest));
+      this.mButtonTakeOldest.setText(getString(R.string.checkpoint_take_oldest_remove));
+    }
+
+    this.onDecisionMade();
+  }
+
+  @Override
+  public void databaseUnavailable() {
+    // TODO Auto-generated method stub
+    
   }
 
 }

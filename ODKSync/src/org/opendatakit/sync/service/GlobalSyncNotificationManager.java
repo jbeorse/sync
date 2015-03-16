@@ -37,18 +37,17 @@ public final class GlobalSyncNotificationManager {
 
   private List<AppSyncStatus> statusList;
 
-  GlobalSyncNotificationManager(Service service) {
+  public GlobalSyncNotificationManager(Service service) {
     this.test = false;
     this.service = service;
     this.displayNotification = false;
     this.statusList = new ArrayList<AppSyncStatus>();
   }
 
-  GlobalSyncNotificationManager(Service service, boolean test) {
+  public GlobalSyncNotificationManager(Service service, boolean test) {
     this.test = test;
     this.service = service;
     this.displayNotification = false;
-    this.statusList = new ArrayList<AppSyncStatus>();
   }
 
   public synchronized void startingSync(String appName) throws NoAppNameSpecifiedException {

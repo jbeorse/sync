@@ -23,6 +23,7 @@ import java.util.List;
 import org.opendatakit.aggregate.odktables.rest.entity.DataKeyValue;
 import org.opendatakit.aggregate.odktables.rest.entity.Scope;
 import org.opendatakit.common.android.data.ColumnDefinition;
+import org.opendatakit.common.android.data.OrderedColumns;
 import org.opendatakit.common.android.data.UserTable.Row;
 import org.opendatakit.common.android.provider.DataTableColumns;
 
@@ -318,13 +319,13 @@ public class SyncRow {
   }
   
 
-  public static final SyncRow convertToSyncRow(ArrayList<ColumnDefinition> orderedColumns,
+  public static final SyncRow convertToSyncRow(OrderedColumns orderedColumns,
       ArrayList<ColumnDefinition> fileAttachmentColumns, Row localRow) {
     String rowId = localRow.getRowId();
     String rowETag = localRow.getRawDataOrMetadataByElementKey(DataTableColumns.ROW_ETAG);
 
     ArrayList<DataKeyValue> values = new ArrayList<DataKeyValue>();
-    for (ColumnDefinition column : orderedColumns) {
+    for (ColumnDefinition column : orderedColumns.getColumnDefinitions()) {
       if (column.isUnitOfRetention()) {
         String elementKey = column.getElementKey();
         values.add(new DataKeyValue(elementKey, localRow

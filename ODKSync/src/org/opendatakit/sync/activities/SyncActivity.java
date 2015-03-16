@@ -15,23 +15,23 @@
  */
 package org.opendatakit.sync.activities;
 
-import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.opendatakit.common.android.database.DatabaseFactory;
-import org.opendatakit.common.android.utilities.SyncETagsUtils;
+import org.opendatakit.IntentConsts;
+import org.opendatakit.common.android.activities.BaseActivity;
+import org.opendatakit.common.android.logic.CommonToolProperties;
+import org.opendatakit.common.android.logic.PropertiesSingleton;
 import org.opendatakit.common.android.utilities.WebLogger;
+import org.opendatakit.database.service.OdkDbHandle;
 import org.opendatakit.sync.OdkSyncServiceProxy;
 import org.opendatakit.sync.R;
-import org.opendatakit.sync.SyncConsts;
-import org.opendatakit.sync.SyncPreferences;
 import org.opendatakit.sync.application.Sync;
-import org.opendatakit.sync.exceptions.NoAppNameSpecifiedException;
 import org.opendatakit.sync.files.SyncUtil;
+import org.opendatakit.sync.logic.SyncToolProperties;
 import org.opendatakit.sync.service.SyncProgressState;
 
 import android.accounts.Account;
@@ -42,7 +42,6 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.DialogInterface.OnClickListener;
 import android.content.Intent;
-import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
 import android.os.RemoteException;
 import android.view.Menu;
@@ -59,7 +58,7 @@ import android.widget.ToggleButton;
  * An activity for downloading from and uploading to an ODK Aggregate instance.
  * 
  */
-public class SyncActivity extends Activity {
+public class SyncActivity extends BaseActivity {
 
   static final String LOGTAG = SyncActivity.class.getSimpleName();
 
@@ -95,7 +94,7 @@ public class SyncActivity extends Activity {
   @Override
   public void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
-    appName = getIntent().getStringExtra(SyncConsts.INTENT_KEY_APP_NAME);
+    appName = getIntent().getStringExtra(IntentConsts.INTENT_KEY_APP_NAME);
     if (appName == null) {
       appName = SyncUtil.getDefaultAppName();
     }
@@ -106,17 +105,10 @@ public class SyncActivity extends Activity {
     findViewComponents();
     syncInstanceAttachments.setChecked(true);
     disableButtons();
-    try {
-      SyncPreferences prefs = new SyncPreferences(this, appName);
-      initializeData(prefs);
-      refreshActivityUINeeded(appName);
-    } catch (IOException e) {
-      // TODO Auto-generated catch block
-      WebLogger.getLogger(appName).printStackTrace(e);
-    }
+    initializeData();
+    refreshActivityUINeeded(appName);
 
     authorizeAccountSuccessful = false;
-
   }
 
   @Override
@@ -156,7 +148,7 @@ public class SyncActivity extends Activity {
   public boolean onOptionsItemSelected(MenuItem item) {
     if (item.getItemId() == MENU_ABOUT) {
       Intent i = new Intent(this, AboutWrapperActivity.class);
-      i.putExtra(SyncConsts.INTENT_KEY_APP_NAME, appName);
+      i.putExtra(IntentConsts.INTENT_KEY_APP_NAME, appName);
       startActivityForResult(i, ABOUT_ACTIVITY_CODE);
     }
     return super.onOptionsItemSelected(item);
@@ -170,7 +162,8 @@ public class SyncActivity extends Activity {
     progressMessage = (TextView) findViewById(R.id.aggregate_activity_progress_message);
   }
 
-  private void initializeData(SyncPreferences prefs) {
+  private void initializeData() {
+    PropertiesSingleton props = SyncToolProperties.get(this, appName);
     // Add accounts to spinner
     Account[] accounts = accountManager.getAccountsByType(ACCOUNT_TYPE_G);
     List<String> accountNames = new ArrayList<String>(accounts.length);
@@ -182,7 +175,7 @@ public class SyncActivity extends Activity {
     accountListSpinner.setAdapter(adapter);
 
     // Set saved server url
-    String serverUri = prefs.getServerUri();
+    String serverUri = props.getProperty(CommonToolProperties.KEY_SYNC_SERVER_URL);
 
     if (serverUri == null)
       uriField.setText(URI_FIELD_EMPTY);
@@ -190,7 +183,7 @@ public class SyncActivity extends Activity {
       uriField.setText(serverUri);
 
     // Set chosen account
-    String accountName = prefs.getAccount();
+    String accountName = props.getProperty(CommonToolProperties.KEY_ACCOUNT);
     if (accountName != null) {
       int index = accountNames.indexOf(accountName);
       accountListSpinner.setSelection(index);
@@ -218,54 +211,66 @@ public class SyncActivity extends Activity {
       @Override
       public void onClick(DialogInterface dialog, int which) {
 
-        try {
-          SyncPreferences prefs = new SyncPreferences(SyncActivity.this, appName);
-          // save fields in preferences
-          String uri = uriField.getText().toString();
-          if (uri.equals(URI_FIELD_EMPTY))
-            uri = null;
-          String accountName = (String) accountListSpinner.getSelectedItem();
+        // save fields in preferences
+        String uri = uriField.getText().toString();
+        if (uri.equals(URI_FIELD_EMPTY))
+          uri = null;
+        String accountName = (String) accountListSpinner.getSelectedItem();
 
-          URI verifiedUri = null;
-          if ( uri != null ) {
-            try {
-              verifiedUri = new URI(uri);
-            } catch (URISyntaxException e) {
-              WebLogger.getLogger(appName).d(LOGTAG,
-                  "[onClickSaveSettings][onClick] invalid server URI: " + uri);
-              Toast.makeText(getApplicationContext(), "Invalid server URI: " + uri, 
-                    Toast.LENGTH_LONG).show();
-              return;
-            }
-          }
-          
-          prefs.setServerUri(uri);
-          prefs.setAccount(accountName);
-          
-          // and remove any settings for a URL other than this...
-          SyncETagsUtils seu = new SyncETagsUtils();
-          SQLiteDatabase db = null;
+        URI verifiedUri = null;
+        if ( uri != null ) {
           try {
-            db = DatabaseFactory.get().getDatabase(getApplicationContext(), appName);
-            seu.deleteAllSyncETagsExceptForServer(db, verifiedUri);
+            verifiedUri = new URI(uri);
+          } catch (URISyntaxException e) {
+            WebLogger.getLogger(appName).d(LOGTAG,
+                "[onClickSaveSettings][onClick] invalid server URI: " + uri);
+            Toast.makeText(getApplicationContext(), "Invalid server URI: " + uri, 
+                  Toast.LENGTH_LONG).show();
+            return;
+          }
+        }
+        
+        PropertiesSingleton props = SyncToolProperties.get(SyncActivity.this, appName);
+        props.setProperty(CommonToolProperties.KEY_SYNC_SERVER_URL, uri);
+        props.setProperty(CommonToolProperties.KEY_ACCOUNT, accountName);
+        props.writeProperties();
+        
+        // and remove any settings for a URL other than this...
+        if ( Sync.getInstance().getDatabase() != null ) {
+          OdkDbHandle db = null;
+          boolean successful = false;
+          try {
+            db = Sync.getInstance().getDatabase().openDatabase(appName, true);
+            Sync.getInstance().getDatabase().deleteAllSyncETagsExceptForServer(appName, db, verifiedUri.toString());
+            successful = true;
+          } catch (RemoteException e) {
+            WebLogger.getLogger(appName).printStackTrace(e);
+            WebLogger.getLogger(appName).e(LOGTAG,
+                "[onClickSaveSettings][onClick] unable to update database");
+            Toast.makeText(SyncActivity.this, "database failure during update", 
+                Toast.LENGTH_LONG).show();
           } finally {
             if ( db != null ) {
-              db.close();
+              try {
+                Sync.getInstance().getDatabase().closeTransactionAndDatabase(appName, db, successful);
+              } catch (RemoteException e) {
+                WebLogger.getLogger(appName).printStackTrace(e);
+                WebLogger.getLogger(appName).e(LOGTAG,
+                    "[onClickSaveSettings][onClick] exception committing changes to database");
+                Toast.makeText(SyncActivity.this, "database failure during update", 
+                    Toast.LENGTH_LONG).show();
+              }
             }
           }
-          
-          // SS Oct 15: clear the auth token here.
-          // TODO if you change a user you can switch to their privileges
-          // without this.
-          WebLogger.getLogger(appName).d(LOGTAG,
-              "[onClickSaveSettings][onClick] invalidated authtoken");
-          invalidateAuthToken(SyncActivity.this, appName);
-          refreshActivityUINeeded(appName);
-        } catch (NoAppNameSpecifiedException e) {
-          WebLogger.getLogger(appName).printStackTrace(e);
-        } catch (IOException e) {
-          WebLogger.getLogger(appName).printStackTrace(e);
         }
+        
+        // SS Oct 15: clear the auth token here.
+        // TODO if you change a user you can switch to their privileges
+        // without this.
+        WebLogger.getLogger(appName).d(LOGTAG,
+            "[onClickSaveSettings][onClick] invalidated authtoken");
+        invalidateAuthToken(SyncActivity.this, appName);
+        refreshActivityUINeeded(appName);
       }
     });
 
@@ -278,19 +283,14 @@ public class SyncActivity extends Activity {
    * Hooked up to authorizeAccountButton's onClick in aggregate_activity.xml
    */
   public void onClickAuthorizeAccount(View v) {
-    try {
-      WebLogger.getLogger(appName).d(LOGTAG, "[onClickAuthorizeAccount] invalidated authtoken");
-      invalidateAuthToken(SyncActivity.this, appName);
-      SyncPreferences prefs = new SyncPreferences(this, appName);
-      Intent i = new Intent(this, AccountInfoActivity.class);
-      Account account = new Account(prefs.getAccount(), ACCOUNT_TYPE_G);
-      i.putExtra(SyncConsts.INTENT_KEY_APP_NAME, appName);
-      i.putExtra(AccountInfoActivity.INTENT_EXTRAS_ACCOUNT, account);
-      startActivityForResult(i, AUTHORIZE_ACCOUNT_RESULT_ID);
-    } catch (IOException e) {
-      // TODO Auto-generated catch block
-      WebLogger.getLogger(appName).printStackTrace(e);
-    }
+    WebLogger.getLogger(appName).d(LOGTAG, "[onClickAuthorizeAccount] invalidated authtoken");
+    invalidateAuthToken(SyncActivity.this, appName);
+    PropertiesSingleton props = SyncToolProperties.get(this, appName);
+    Intent i = new Intent(this, AccountInfoActivity.class);
+    Account account = new Account(props.getProperty(CommonToolProperties.KEY_ACCOUNT), ACCOUNT_TYPE_G);
+    i.putExtra(IntentConsts.INTENT_KEY_APP_NAME, appName);
+    i.putExtra(AccountInfoActivity.INTENT_EXTRAS_ACCOUNT, account);
+    startActivityForResult(i, AUTHORIZE_ACCOUNT_RESULT_ID);
   }
 
   /**
@@ -307,25 +307,20 @@ public class SyncActivity extends Activity {
     msg.setPositiveButton(getString(R.string.reset), new OnClickListener() {
       @Override
       public void onClick(DialogInterface dialog, int which) {
-        try {
-          SyncPreferences prefs = new SyncPreferences(SyncActivity.this, appName);
-          String accountName = prefs.getAccount();
-          WebLogger.getLogger(appName).e(LOGTAG,
-              "[onClickSyncNowPush] timestamp: " + System.currentTimeMillis());
-          if (accountName == null) {
-            Toast.makeText(SyncActivity.this, getString(R.string.choose_account),
-                Toast.LENGTH_SHORT).show();
-          } else {
-            try {
-              disableButtons();
-              Sync.getInstance().getOdkSyncServiceProxy().pushToServer(appName);
-            } catch (RemoteException e) {
-              WebLogger.getLogger(appName).e(LOGTAG, "Problem with push command");
-            }
+        PropertiesSingleton props = SyncToolProperties.get(SyncActivity.this, appName);
+        String accountName = props.getProperty(CommonToolProperties.KEY_ACCOUNT);
+        WebLogger.getLogger(appName).e(LOGTAG,
+            "[onClickSyncNowPush] timestamp: " + System.currentTimeMillis());
+        if (accountName == null) {
+          Toast.makeText(SyncActivity.this, getString(R.string.choose_account),
+              Toast.LENGTH_SHORT).show();
+        } else {
+          try {
+            disableButtons();
+            Sync.getInstance().getOdkSyncServiceProxy().pushToServer(appName);
+          } catch (RemoteException e) {
+            WebLogger.getLogger(appName).e(LOGTAG, "Problem with push command");
           }
-        } catch (IOException e) {
-          // TODO Auto-generated catch block
-          WebLogger.getLogger(appName).printStackTrace(e);
         }
       }
     });
@@ -340,39 +335,30 @@ public class SyncActivity extends Activity {
   public void onClickSyncNowPull(View v) {
     WebLogger.getLogger(appName).d(LOGTAG, "in onClickSyncNowPull");
     // ask whether to sync app files and table-level files
-    try {
-      SyncPreferences prefs = new SyncPreferences(this, appName);
-      String accountName = prefs.getAccount();
-      WebLogger.getLogger(appName).e(LOGTAG,
-          "[onClickSyncNowPull] timestamp: " + System.currentTimeMillis());
-      if (accountName == null) {
-        Toast.makeText(this, getString(R.string.choose_account), Toast.LENGTH_SHORT).show();
-      } else {
-        try {
-          disableButtons();
-          boolean syncFiles = syncInstanceAttachments.isChecked();
-          Sync.getInstance().getOdkSyncServiceProxy().synchronizeFromServer(appName, !syncFiles);
-        } catch (RemoteException e) {
-          WebLogger.getLogger(appName).e(LOGTAG, "Problem with pull command");
-        }
+    PropertiesSingleton props = SyncToolProperties.get(this, appName);
+    String accountName = props.getProperty(CommonToolProperties.KEY_ACCOUNT);
+    WebLogger.getLogger(appName).e(LOGTAG,
+        "[onClickSyncNowPull] timestamp: " + System.currentTimeMillis());
+    if (accountName == null) {
+      Toast.makeText(this, getString(R.string.choose_account), Toast.LENGTH_SHORT).show();
+    } else {
+      try {
+        disableButtons();
+        boolean syncFiles = syncInstanceAttachments.isChecked();
+        Sync.getInstance().getOdkSyncServiceProxy().synchronizeFromServer(appName, !syncFiles);
+      } catch (RemoteException e) {
+        WebLogger.getLogger(appName).e(LOGTAG, "Problem with pull command");
       }
-    } catch (IOException e) {
-      // TODO Auto-generated catch block
-      WebLogger.getLogger(appName).printStackTrace(e);
     }
 
   }
 
   public static void invalidateAuthToken(Context context, String appName) {
-    try {
-      SyncPreferences prefs = new SyncPreferences(context, appName);
-      AccountManager.get(context).invalidateAuthToken(ACCOUNT_TYPE_G, prefs.getAuthToken());
-      prefs.setAuthToken(null);
-      refreshActivityUINeeded(appName);
-    } catch (IOException e) {
-      // TODO Auto-generated catch block
-      WebLogger.getLogger(appName).printStackTrace(e);
-    }
+    PropertiesSingleton props = SyncToolProperties.get(context, appName);
+    AccountManager.get(context).invalidateAuthToken(ACCOUNT_TYPE_G, props.getProperty(CommonToolProperties.KEY_AUTH));
+    props.removeProperty(CommonToolProperties.KEY_AUTH);
+    props.writeProperties();
+    refreshActivityUINeeded(appName);
   }
 
   @Override
@@ -532,9 +518,9 @@ public class SyncActivity extends Activity {
               if (refreshRequired.get()) {
                 refreshRequired.set(false);
                 try {
-                  SyncPreferences prefs = new SyncPreferences(SyncActivity.this, appName);
-                  String accountName = prefs.getAccount();
-                  String serverUri = prefs.getServerUri();
+                  PropertiesSingleton props = SyncToolProperties.get(SyncActivity.this, appName);
+                  String accountName = props.getProperty(CommonToolProperties.KEY_ACCOUNT);
+                  String serverUri = props.getProperty(CommonToolProperties.KEY_SYNC_SERVER_URL);
 
                   boolean haveSettings = (accountName != null) && (serverUri != null);
 
@@ -629,5 +615,22 @@ public class SyncActivity extends Activity {
     findViewById(R.id.aggregate_activity_authorize_account_button).setEnabled(false);
     findViewById(R.id.aggregate_activity_sync_now_push_button).setEnabled(false);
     findViewById(R.id.aggregate_activity_sync_now_pull_button).setEnabled(false);
+  }
+
+  @Override
+  public void databaseAvailable() {
+    // TODO Auto-generated method stub
+    
+  }
+
+  @Override
+  public void databaseUnavailable() {
+    // TODO Auto-generated method stub
+    
+  }
+
+  @Override
+  public String getAppName() {
+    return appName;
   }
 }

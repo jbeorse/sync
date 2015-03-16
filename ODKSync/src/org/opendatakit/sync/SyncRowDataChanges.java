@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import org.opendatakit.aggregate.odktables.rest.ElementDataType;
 import org.opendatakit.aggregate.odktables.rest.entity.DataKeyValue;
 import org.opendatakit.common.android.data.ColumnDefinition;
+import org.opendatakit.common.android.data.OrderedColumns;
 
 /**
  * Tracks the data values for the local and server row so that we
@@ -34,7 +35,7 @@ final class SyncRowDataChanges {
     this.localRowConflictType = localRowConflictType;
   }
 
-  boolean identicalValuesExceptRowETagAndFilterScope(ArrayList<ColumnDefinition> orderedDefns) {
+  boolean identicalValuesExceptRowETagAndFilterScope(OrderedColumns orderedDefns) {
     if ((serverRow.getSavepointTimestamp() == null) ? (localRow.getSavepointTimestamp() != null)
         : !serverRow.getSavepointTimestamp().equals(localRow.getSavepointTimestamp())) {
       return false;
@@ -92,7 +93,7 @@ final class SyncRowDataChanges {
       // which may have rounding due to different database implementations,
       // data representations, and marshaling libraries.
       //
-      ColumnDefinition cd = ColumnDefinition.find(orderedDefns, local.column);
+      ColumnDefinition cd = orderedDefns.find(local.column);
       if (cd.getType().getDataType() == ElementDataType.number) {
         // !!Important!! Double.valueOf(str) handles NaN and +/-Infinity
         Double localNumber = Double.valueOf(local.value);
@@ -146,7 +147,7 @@ final class SyncRowDataChanges {
     return true;
   }
 
-  boolean identicalValues(ArrayList<ColumnDefinition> orderedDefns) {
+  boolean identicalValues(OrderedColumns orderedDefns) {
     if ((serverRow.getFilterScope() == null) ? (localRow.getFilterScope() != null) : !serverRow
         .getFilterScope().equals(localRow.getFilterScope())) {
       return false;

@@ -25,6 +25,7 @@ import org.apache.http.HttpStatus;
 import org.apache.wink.client.ClientWebException;
 import org.opendatakit.aggregate.odktables.rest.ConflictType;
 import org.opendatakit.aggregate.odktables.rest.ElementDataType;
+import org.opendatakit.aggregate.odktables.rest.KeyValueStoreConstants;
 import org.opendatakit.aggregate.odktables.rest.SyncState;
 import org.opendatakit.aggregate.odktables.rest.entity.DataKeyValue;
 import org.opendatakit.aggregate.odktables.rest.entity.RowOutcome;
@@ -35,19 +36,24 @@ import org.opendatakit.aggregate.odktables.rest.entity.RowResourceList;
 import org.opendatakit.aggregate.odktables.rest.entity.Scope;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResource;
 import org.opendatakit.common.android.data.ColumnDefinition;
+import org.opendatakit.common.android.data.OrderedColumns;
 import org.opendatakit.common.android.data.TableDefinitionEntry;
 import org.opendatakit.common.android.data.UserTable;
 import org.opendatakit.common.android.data.UserTable.Row;
 import org.opendatakit.common.android.provider.DataTableColumns;
-import org.opendatakit.common.android.utilities.ODKDatabaseUtils;
-import org.opendatakit.common.android.utilities.TableUtil;
+import org.opendatakit.common.android.utilities.KeyValueStoreHelper;
+import org.opendatakit.common.android.utilities.NameUtil;
+import org.opendatakit.common.android.utilities.ODKDataUtils;
 import org.opendatakit.common.android.utilities.WebLogger;
+import org.opendatakit.common.android.utilities.KeyValueStoreHelper.AspectHelper;
+import org.opendatakit.database.service.OdkDbHandle;
 import org.opendatakit.sync.SynchronizationResult.Status;
+import org.opendatakit.sync.application.Sync;
 import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
 import org.opendatakit.sync.service.SyncProgressState;
 
 import android.content.ContentValues;
-import android.database.sqlite.SQLiteDatabase;
+import android.os.RemoteException;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -186,12 +192,13 @@ public class ProcessRowDataChanges {
    *          during the sync'ing of the table-level files, or if the table
    *          schema does not match, the local table will be omitted from this
    *          list.
+   * @throws RemoteException 
    */
   public void synchronizeDataRowsAndAttachments(List<TableResource> workingListOfTables,
-      boolean deferInstanceAttachments) {
+      boolean deferInstanceAttachments) throws RemoteException {
     log.i(TAG, "entered synchronize()");
 
-    SQLiteDatabase db = null;
+    OdkDbHandle db = null;
 
     // we can assume that all the local table properties should
     // sync with the server.
@@ -201,16 +208,16 @@ public class ProcessRowDataChanges {
 
       String tableId = tableResource.getTableId();
       TableDefinitionEntry te;
-      ArrayList<ColumnDefinition> orderedDefns;
+      OrderedColumns orderedDefns;
       String displayName;
       try {
-        db = sc.getDatabase();
-        te = ODKDatabaseUtils.get().getTableDefinitionEntry(db, tableId);
-        orderedDefns = TableUtil.get().getColumnDefinitions(db, sc.getAppName(), tableId);
-        displayName = TableUtil.get().getLocalizedDisplayName(db, tableId);
+        db = sc.getDatabase(false);
+        te = Sync.getInstance().getDatabase().getTableDefinitionEntry(sc.getAppName(), db, tableId);
+        orderedDefns = Sync.getInstance().getDatabase().getUserDefinedColumns(sc.getAppName(), db, tableId);
+        displayName = CommonUtils.getLocalizedDisplayName(sc.getAppName(), db, tableId);
       } finally {
         if (db != null) {
-          db.close();
+          Sync.getInstance().getDatabase().closeDatabase(sc.getAppName(), db);
           db = null;
         }
       }
@@ -222,10 +229,10 @@ public class ProcessRowDataChanges {
   }
 
   private UserTable updateLocalRowsFromServerChanges(TableResource tableResource,
-      TableDefinitionEntry te, ArrayList<ColumnDefinition> orderedColumns, String displayName,
+      TableDefinitionEntry te, OrderedColumns orderedColumns, String displayName,
       boolean deferInstanceAttachments, ArrayList<ColumnDefinition> fileAttachmentColumns,
       List<SyncRowPending> rowsToPushFileAttachments, UserTable localDataTable, RowResourceList rows)
-      throws IOException {
+      throws IOException, ClientWebException, RemoteException {
 
     String tableId = tableResource.getTableId();
     TableResult tableResult = sc.getTableResult(tableId);
@@ -446,9 +453,11 @@ public class ProcessRowDataChanges {
     // / PERFORM LOCAL DATABASE CHANGES
 
     {
-      SQLiteDatabase db = null;
+      OdkDbHandle db = null;
+      boolean inTransaction = false;
+      boolean successful = false;
       try {
-        db = sc.getDatabase();
+        db = sc.getDatabase(false);
 
         // this will individually move some files to the locally-deleted state
         // if we cannot sync file attachments in those rows.
@@ -456,7 +465,8 @@ public class ProcessRowDataChanges {
             fileAttachmentColumns, deferInstanceAttachments, tableResult);
 
         // and now do a big transaction to update the local database.
-        db.beginTransaction();
+        Sync.getInstance().getDatabase().beginTransaction(sc.getAppName(), db);
+        inTransaction = true;
 
         deleteRowsInDb(db, tableResource, rowsToDeleteLocally, fileAttachmentColumns,
             deferInstanceAttachments, tableResult);
@@ -470,18 +480,22 @@ public class ProcessRowDataChanges {
         conflictRowsInDb(db, tableResource, orderedColumns, rowsToMoveToInConflictLocally,
             rowsToPushFileAttachments, hasAttachments, tableResult);
 
-        localDataTable = ODKDatabaseUtils.get().rawSqlQuery(db, sc.getAppName(), tableId,
-            orderedColumns, null, null, null, null, DataTableColumns.ID, "ASC");
+        String[] empty = {};
+        localDataTable = Sync.getInstance().getDatabase().rawSqlQuery(sc.getAppName(), db,
+            tableId,
+            orderedColumns, null, empty, empty, null, DataTableColumns.ID, "ASC");
 
         // TODO: fix this for synced_pending_files
         // We likely need to relax this constraint on the
         // server?
-
-        db.setTransactionSuccessful();
+        successful = true;
       } finally {
         if (db != null) {
-          db.endTransaction();
-          db.close();
+          if ( inTransaction ) {
+            Sync.getInstance().getDatabase().closeTransactionAndDatabase(sc.getAppName(), db, successful);
+          } else {
+            Sync.getInstance().getDatabase().closeDatabase(sc.getAppName(), db);
+          }
           db = null;
         }
       }
@@ -512,15 +526,16 @@ public class ProcessRowDataChanges {
    * @param deferInstanceAttachments
    *          true if new instance attachments should NOT be pulled from or
    *          pushed to the server. e.g., for bandwidth management.
+   * @throws RemoteException 
    */
   private void synchronizeTableDataRowsAndAttachments(TableResource tableResource,
-      TableDefinitionEntry te, ArrayList<ColumnDefinition> orderedColumns, String displayName,
-      boolean deferInstanceAttachments) {
+      TableDefinitionEntry te, OrderedColumns orderedColumns, String displayName,
+      boolean deferInstanceAttachments) throws RemoteException {
     boolean attachmentSyncSuccessful = false;
     boolean rowDataSyncSuccessful = false;
 
     ArrayList<ColumnDefinition> fileAttachmentColumns = new ArrayList<ColumnDefinition>();
-    for (ColumnDefinition cd : orderedColumns) {
+    for (ColumnDefinition cd : orderedColumns.getColumnDefinitions()) {
       if (cd.getType().getDataType() == ElementDataType.rowpath) {
         fileAttachmentColumns.add(cd);
       }
@@ -558,7 +573,7 @@ public class ProcessRowDataChanges {
       int passNumber = 1;
       while (passNumber <= 2) {
         // reset the table status to working...
-        tableResult.resetStatus();
+        tableResult.setStatus(Status.WORKING);
         tableResult.setMessage((passNumber==1) ? "beginning row data sync" : "retrying row data sync");
 
         ++passNumber;
@@ -600,15 +615,15 @@ public class ProcessRowDataChanges {
             // them all.
             UserTable localDataTable;
             {
-              SQLiteDatabase db = null;
-
+              OdkDbHandle db = null;
               try {
-                db = sc.getDatabase();
-                localDataTable = ODKDatabaseUtils.get().rawSqlQuery(db, sc.getAppName(), tableId,
-                    orderedColumns, null, null, null, null, DataTableColumns.ID, "ASC");
+                db = sc.getDatabase(false);
+                String[] empty = {};
+                localDataTable = Sync.getInstance().getDatabase().rawSqlQuery(sc.getAppName(), db, tableId,
+                    orderedColumns, null, empty, empty, null, DataTableColumns.ID, "ASC");
               } finally {
                 if (db != null) {
-                  db.close();
+                  Sync.getInstance().getDatabase().closeDatabase(sc.getAppName(), db);
                   db = null;
                 }
               }
@@ -691,27 +706,34 @@ public class ProcessRowDataChanges {
                 // we re-issue a fetch using the firstDataETag as 
                 // a starting point.
                 {
-                  SQLiteDatabase db = null;
-
+                  OdkDbHandle db = null;
+                  boolean successful = false;
                   try {
-                    db = sc.getDatabase();
+                    db = sc.getDatabase(true);
                     // update the dataETag to the one returned by the first
                     // of the fetch queries, above.
-                    ODKDatabaseUtils.get().updateDBTableETags(db, tableId,
+                    Sync.getInstance().getDatabase().updateDBTableETags(sc.getAppName(), db, 
+                        tableId,
                         tableResource.getSchemaETag(), firstDataETag);
-                    // and be sure to update our in-memory objects...
-                    te.setSchemaETag(tableResource.getSchemaETag());
-                    te.setLastDataETag(firstDataETag);
-                    tableResource.setDataETag(firstDataETag);
+                    successful = true;
                   } finally {
                     if (db != null) {
-                      db.close();
-                      db = null;
+                      try {
+                        Sync.getInstance().getDatabase().closeTransactionAndDatabase(sc.getAppName(), db, successful);
+                        if ( successful ) {
+                          // and be sure to update our in-memory objects...
+                          te.setSchemaETag(tableResource.getSchemaETag());
+                          te.setLastDataETag(firstDataETag);
+                          tableResource.setDataETag(firstDataETag);
+                        }
+                      } finally {
+                        db = null;
+                      }
                     }
                   }
                 }
                 
-                if ( (firstDataETag == null) ? (rows.getDataETag() != null) : !firstDataETag.equals(rows.getDataETag()) ) {
+                if ( !firstDataETag.equals(rows.getDataETag()) ) {
                   // re-issue request...
                   websafeResumeCursor = null;
                 } else {
@@ -834,21 +856,29 @@ public class ProcessRowDataChanges {
                 // time the update occurs, we are assured that there are no
                 // interleaved changes we are unaware of.
                 {
-                  SQLiteDatabase db = null;
-
+                  OdkDbHandle db = null;
+                  boolean successful = false;
                   try {
-                    db = sc.getDatabase();
+                    db = sc.getDatabase(true);
                     // update the dataETag to the one returned by the first
                     // of the fetch queries, above.
-                    ODKDatabaseUtils.get().updateDBTableETags(db, tableId,
+                    Sync.getInstance().getDatabase().updateDBTableETags(sc.getAppName(), db, 
+                        tableId,
                         tableResource.getSchemaETag(), outcomes.getDataETag());
-                    // and be sure to update our in-memory objects...
-                    te.setSchemaETag(tableResource.getSchemaETag());
-                    te.setLastDataETag(outcomes.getDataETag());
-                    tableResource.setDataETag(outcomes.getDataETag());
+                    successful = true;
                   } finally {
                     if (db != null) {
-                      db.close();
+                      try {
+                        Sync.getInstance().getDatabase().closeTransactionAndDatabase(sc.getAppName(), db, successful);
+                        if ( successful ) {
+                          // and be sure to update our in-memory objects...
+                          te.setSchemaETag(tableResource.getSchemaETag());
+                          te.setLastDataETag(outcomes.getDataETag());
+                          tableResource.setDataETag(outcomes.getDataETag());
+                        }
+                      } finally {
+                        
+                      }
                       db = null;
                     }
                   }
@@ -921,15 +951,16 @@ public class ProcessRowDataChanges {
                   if (outcome) {
                     // OK -- we succeeded in putting/getting all attachments
                     // update our state to the synced state.
-                    SQLiteDatabase db = null;
-
+                    OdkDbHandle db = null;
+                    boolean successful = false;
                     try {
-                      db = sc.getDatabase();
-                      ODKDatabaseUtils.get().updateRowETagAndSyncState(db, tableId,
-                          syncRowPending.getRowId(), syncRowPending.getRowETag(), SyncState.synced);
+                      db = sc.getDatabase(true);
+                      Sync.getInstance().getDatabase().updateRowETagAndSyncState(sc.getAppName(), db, tableId,
+                          syncRowPending.getRowId(), syncRowPending.getRowETag(), SyncState.synced.name());
+                      successful = true;
                     } finally {
                       if (db != null) {
-                        db.close();
+                        Sync.getInstance().getDatabase().closeTransactionAndDatabase(sc.getAppName(), db, successful);
                         db = null;
                       }
                     }
@@ -978,13 +1009,15 @@ public class ProcessRowDataChanges {
         // NOTE: disregard whether
         // attachments were successfully
         // sync'd.
-        SQLiteDatabase db = null;
+        OdkDbHandle db = null;
+        boolean successful = false;
         try {
-          db = sc.getDatabase();
-          ODKDatabaseUtils.get().updateDBTableLastSyncTime(db, tableId);
+          db = sc.getDatabase(true);
+          Sync.getInstance().getDatabase().updateDBTableLastSyncTime(sc.getAppName(), db, tableId);
+          successful = true;
         } finally {
           if (db != null) {
-            db.close();
+            Sync.getInstance().getDatabase().closeTransactionAndDatabase(sc.getAppName(), db, successful);
             db = null;
           }
         }
@@ -1019,10 +1052,10 @@ public class ProcessRowDataChanges {
   }
 
   private int processRowOutcomes(TableDefinitionEntry te, TableResource resource,
-      TableResult tableResult, ArrayList<ColumnDefinition> orderedColumns,
+      TableResult tableResult, OrderedColumns orderedColumns,
       ArrayList<ColumnDefinition> fileAttachmentColumns, boolean hasAttachments,
       List<SyncRowPending> rowsToPushFileAttachments, int countSoFar, int totalOutcomesSize,
-      List<SyncRow> segmentAlter, ArrayList<RowOutcome> outcomes, ArrayList<RowOutcome> specialCases) {
+      List<SyncRow> segmentAlter, ArrayList<RowOutcome> outcomes, ArrayList<RowOutcome> specialCases) throws RemoteException {
 
     ArrayList<SyncRowDataChanges> rowsToMoveToInConflictLocally = new ArrayList<SyncRowDataChanges>();
 
@@ -1036,11 +1069,10 @@ public class ProcessRowDataChanges {
     // a transaction and not lock up the database for very long.
     //
 
-    SQLiteDatabase db = null;
-
+    OdkDbHandle db = null;
+    boolean successful = false;
     try {
-      db = sc.getDatabase();
-      db.beginTransaction();
+      db = sc.getDatabase(true);
 
       for (int i = 0; i < segmentAlter.size(); ++i) {
         RowOutcome r = outcomes.get(i);
@@ -1054,24 +1086,23 @@ public class ProcessRowDataChanges {
             // DELETE
             // move the local record into the 'new_row' sync state
             // so it can be physically deleted.
-            ODKDatabaseUtils.get().updateRowETagAndSyncState(db, resource.getTableId(),
-                r.getRowId(), null, SyncState.new_row);
+            Sync.getInstance().getDatabase().updateRowETagAndSyncState(sc.getAppName(), db, 
+                resource.getTableId(),
+                r.getRowId(), null, SyncState.new_row.name());
             // !!Important!! update the rowETag in our copy of this row.
             syncRow.setRowETag(r.getRowETag());
             // and physically delete row and attachments from database.
-            ODKDatabaseUtils.get().deleteDataInExistingDBTableWithId(db, sc.getAppName(),
+            Sync.getInstance().getDatabase().deleteDataInExistingDBTableWithId(sc.getAppName(), db,
                 resource.getTableId(), r.getRowId());
             tableResult.incServerDeletes();
           } else {
-            ODKDatabaseUtils
-                .get()
-                .updateRowETagAndSyncState(
-                    db,
+           Sync.getInstance().getDatabase().updateRowETagAndSyncState(
+                     sc.getAppName(), db,
                     resource.getTableId(),
                     r.getRowId(),
                     r.getRowETag(),
-                    (hasAttachments && !syncRow.getUriFragments().isEmpty()) ? SyncState.synced_pending_files
-                        : SyncState.synced);
+                    ((hasAttachments && !syncRow.getUriFragments().isEmpty()) ? SyncState.synced_pending_files
+                        : SyncState.synced).name());
             // !!Important!! update the rowETag in our copy of this row.
             syncRow.setRowETag(r.getRowETag());
             if (hasAttachments && !syncRow.getUriFragments().isEmpty()) {
@@ -1139,11 +1170,10 @@ public class ProcessRowDataChanges {
           rowsToPushFileAttachments, hasAttachments, tableResult);
 
       // and allow this to happen
-      db.setTransactionSuccessful();
+      successful = true;
     } finally {
       if (db != null) {
-        db.endTransaction();
-        db.close();
+        Sync.getInstance().getDatabase().closeTransactionAndDatabase(sc.getAppName(), db, successful);
         db = null;
       }
     }
@@ -1168,11 +1198,12 @@ public class ProcessRowDataChanges {
    * @param hasAttachments
    * @param tableResult
    * @throws ClientWebException
+   * @throws RemoteException 
    */
-  private void conflictRowsInDb(SQLiteDatabase db, TableResource resource,
-      ArrayList<ColumnDefinition> orderedColumns, List<SyncRowDataChanges> changes,
+  private void conflictRowsInDb(OdkDbHandle db, TableResource resource,
+      OrderedColumns orderedColumns, List<SyncRowDataChanges> changes,
       List<SyncRowPending> rowsToSyncFileAttachments, boolean hasAttachments,
-      TableResult tableResult) throws ClientWebException {
+      TableResult tableResult) throws ClientWebException, RemoteException {
 
     int count = 0;
     for (SyncRowDataChanges change : changes) {
@@ -1182,7 +1213,8 @@ public class ProcessRowDataChanges {
       ContentValues values = new ContentValues();
 
       // delete the old server-values in_conflict row if it exists
-      ODKDatabaseUtils.get().deleteServerConflictRowWithId(db, resource.getTableId(),
+      Sync.getInstance().getDatabase().deleteServerConflictRowWithId(sc.getAppName(), db,
+          resource.getTableId(),
           serverRow.getRowId());
       // update existing localRow
 
@@ -1206,16 +1238,17 @@ public class ProcessRowDataChanges {
 
         // move the local record into the 'new_row' sync state
         // so it can be physically deleted.
-        ODKDatabaseUtils.get().updateRowETagAndSyncState(db, resource.getTableId(),
-            serverRow.getRowId(), null, SyncState.new_row);
+        Sync.getInstance().getDatabase().updateRowETagAndSyncState(sc.getAppName(), db,
+            resource.getTableId(),
+            serverRow.getRowId(), null, SyncState.new_row.name());
         // and physically delete it.
-        ODKDatabaseUtils.get().deleteDataInExistingDBTableWithId(db, sc.getAppName(),
+        Sync.getInstance().getDatabase().deleteDataInExistingDBTableWithId(sc.getAppName(), db,
             resource.getTableId(), serverRow.getRowId());
 
         tableResult.incLocalDeletes();
       } else {
         // update the localRow to be in_conflict
-        ODKDatabaseUtils.get().placeRowIntoConflict(db, resource.getTableId(),
+        Sync.getInstance().getDatabase().placeRowIntoConflict(sc.getAppName(), db, resource.getTableId(),
             serverRow.getRowId(), localRowConflictType);
 
         // set up to insert the in_conflict row from the server
@@ -1236,7 +1269,8 @@ public class ProcessRowDataChanges {
         values.put(DataTableColumns.FILTER_TYPE,
             (type == null) ? Scope.Type.DEFAULT.name() : type.name());
         values.put(DataTableColumns.FILTER_VALUE, serverRow.getFilterScope().getValue());
-        ODKDatabaseUtils.get().insertDataIntoExistingDBTableWithId(db, resource.getTableId(),
+        Sync.getInstance().getDatabase().insertDataIntoExistingDBTableWithId(sc.getAppName(), db,
+            resource.getTableId(),
             orderedColumns, values, serverRow.getRowId());
 
         // We're going to check our representation invariant here. A local and
@@ -1291,11 +1325,12 @@ public class ProcessRowDataChanges {
    * @param hasAttachments
    * @param tableResult
    * @throws ClientWebException
+   * @throws RemoteException 
    */
-  private void insertRowsInDb(SQLiteDatabase db, TableResource resource,
-      ArrayList<ColumnDefinition> orderedColumns, List<SyncRowDataChanges> changes,
+  private void insertRowsInDb(OdkDbHandle db, TableResource resource,
+      OrderedColumns orderedColumns, List<SyncRowDataChanges> changes,
       List<SyncRowPending> rowsToPushFileAttachments, boolean hasAttachments,
-      TableResult tableResult) throws ClientWebException {
+      TableResult tableResult) throws ClientWebException, RemoteException {
     int count = 0;
     for (SyncRowDataChanges change : changes) {
       SyncRow serverRow = change.serverRow;
@@ -1315,7 +1350,8 @@ public class ProcessRowDataChanges {
         values.put(colName, entry.value);
       }
 
-      ODKDatabaseUtils.get().insertDataIntoExistingDBTableWithId(db, resource.getTableId(),
+      Sync.getInstance().getDatabase().insertDataIntoExistingDBTableWithId(sc.getAppName(), db,
+          resource.getTableId(),
           orderedColumns, values, serverRow.getRowId());
       tableResult.incLocalInserts();
 
@@ -1345,11 +1381,12 @@ public class ProcessRowDataChanges {
    * @param hasAttachments
    * @param tableResult
    * @throws ClientWebException
+   * @throws RemoteException 
    */
-  private void updateRowsInDb(SQLiteDatabase db, TableResource resource,
-      ArrayList<ColumnDefinition> orderedColumns, List<SyncRowDataChanges> changes,
+  private void updateRowsInDb(OdkDbHandle db, TableResource resource,
+      OrderedColumns orderedColumns, List<SyncRowDataChanges> changes,
       List<SyncRowPending> rowsToSyncFileAttachments, boolean hasAttachments,
-      TableResult tableResult) throws ClientWebException {
+      TableResult tableResult) throws ClientWebException, RemoteException {
     int count = 0;
     for (SyncRowDataChanges change : changes) {
       // if the localRow sync state was synced_pending_files,
@@ -1382,7 +1419,8 @@ public class ProcessRowDataChanges {
         values.put(colName, entry.value);
       }
 
-      ODKDatabaseUtils.get().updateDataInExistingDBTableWithId(db, resource.getTableId(),
+      Sync.getInstance().getDatabase().updateDataInExistingDBTableWithId(sc.getAppName(), db,
+          resource.getTableId(),
           orderedColumns, values, serverRow.getRowId());
       tableResult.incLocalUpdates();
 
@@ -1416,10 +1454,11 @@ public class ProcessRowDataChanges {
    * @param tableResult
    * @return
    * @throws IOException
+   * @throws RemoteException 
    */
-  private void pushLocalAttachmentsBeforeDeleteRowsInDb(SQLiteDatabase db, TableResource resource,
+  private void pushLocalAttachmentsBeforeDeleteRowsInDb(OdkDbHandle db, TableResource resource,
       List<SyncRowDataChanges> changes, ArrayList<ColumnDefinition> fileAttachmentColumns,
-      boolean deferInstanceAttachments, TableResult tableResult) throws IOException {
+      boolean deferInstanceAttachments, TableResult tableResult) throws IOException, RemoteException {
 
     // try first to push any attachments of the soon-to-be-deleted
     // local row up to the server
@@ -1446,8 +1485,9 @@ public class ProcessRowDataChanges {
             // this list. Whenever we next sync files, we will push
             // any local files that are not on the server then delete
             // the local record.
-            ODKDatabaseUtils.get().updateRowETagAndSyncState(db, resource.getTableId(),
-                change.localRow.getRowId(), change.serverRow.getRowETag(), SyncState.deleted);
+            Sync.getInstance().getDatabase().updateRowETagAndSyncState(sc.getAppName(), db, 
+                resource.getTableId(),
+                change.localRow.getRowId(), change.serverRow.getRowETag(), SyncState.deleted.name());
             changes.remove(i);
           }
         }
@@ -1470,10 +1510,11 @@ public class ProcessRowDataChanges {
    * @param deferInstanceAttachments
    * @param tableResult
    * @throws IOException
+   * @throws RemoteException 
    */
-  private void deleteRowsInDb(SQLiteDatabase db, TableResource resource,
+  private void deleteRowsInDb(OdkDbHandle db, TableResource resource,
       List<SyncRowDataChanges> changes, ArrayList<ColumnDefinition> fileAttachmentColumns,
-      boolean deferInstanceAttachments, TableResult tableResult) throws IOException {
+      boolean deferInstanceAttachments, TableResult tableResult) throws IOException, RemoteException {
     int count = 0;
 
     // now delete the rows we can delete...
@@ -1482,10 +1523,10 @@ public class ProcessRowDataChanges {
         // DELETE
         // move the local record into the 'new_row' sync state
         // so it can be physically deleted.
-        ODKDatabaseUtils.get().updateRowETagAndSyncState(db, resource.getTableId(),
-            change.serverRow.getRowId(), null, SyncState.new_row);
+        Sync.getInstance().getDatabase().updateRowETagAndSyncState(sc.getAppName(), db, resource.getTableId(),
+            change.serverRow.getRowId(), null, SyncState.new_row.name());
         // and physically delete row and attachments from database.
-        ODKDatabaseUtils.get().deleteDataInExistingDBTableWithId(db, sc.getAppName(),
+        Sync.getInstance().getDatabase().deleteDataInExistingDBTableWithId(sc.getAppName(), db,
             resource.getTableId(), change.serverRow.getRowId());
         tableResult.incLocalDeletes();
       }

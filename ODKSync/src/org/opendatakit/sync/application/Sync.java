@@ -14,15 +14,11 @@
 
 package org.opendatakit.sync.application;
 
-import org.opendatakit.common.android.utilities.ODKFileUtils;
+import org.opendatakit.common.android.application.CommonApplication;
 import org.opendatakit.sync.OdkSyncServiceProxy;
 import org.opendatakit.sync.R;
 
-import android.app.Application;
-import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager.NameNotFoundException;
-
-public class Sync extends Application {
+public class Sync extends CommonApplication {
 
   public static final String LOGTAG = Sync.class.getSimpleName();
 
@@ -61,50 +57,32 @@ public class Sync extends Application {
     }
   }
 
-  public String getVersionCodeString() {
-    try {
-      PackageInfo pinfo;
-      pinfo = getPackageManager().getPackageInfo(getPackageName(), 0);
-      int versionNumber = pinfo.versionCode;
-      return Integer.toString(versionNumber);
-    } catch (NameNotFoundException e) {
-      e.printStackTrace();
-      return "";
-    }
-  }
-
-  public String getVersionedAppName() {
-    String versionDetail = "";
-    try {
-      PackageInfo pinfo;
-      pinfo = getPackageManager().getPackageInfo(getPackageName(), 0);
-      int versionNumber = pinfo.versionCode;
-      String versionName = pinfo.versionName;
-      versionDetail = " " + versionName + " (rev " + versionNumber + ")";
-    } catch (NameNotFoundException e) {
-      e.printStackTrace();
-    }
-    return getString(R.string.app_name) + versionDetail;
-  }
-
-  /**
-   * Creates required directories on the SDCard (or other external storage)
-   *
-   * @return true if there are tables present
-   * @throws RuntimeException
-   *           if there is no SDCard or the directory exists as a non directory
-   */
-  public static void createODKDirs(String appName) throws RuntimeException {
-
-    ODKFileUtils.verifyExternalStorageAvailability();
-
-    ODKFileUtils.assertDirectoryStructure(appName);
-  }
-
   @Override
   public void onCreate() {
     singleton = this;
     super.onCreate();
+  }
+
+  @Override
+  public int getAppNameResourceId() {
+    return R.string.app_name;
+  }
+
+  @Override
+  public int getAssetZipResourceId() {
+    // Ignored -- needs handling in InitializationTask
+    return -1;
+  }
+
+  @Override
+  public int getFrameworkZipResourceId() {
+    // Ignored -- needs handling in InitializationTask
+    return -1;
+  }
+
+  @Override
+  public int getWebKitResourceId() {
+    return -1;
   }
 
 }

@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.opendatakit.sync"
-    android:versionCode="125"
+    android:versionCode="127"
     android:versionName="2.0"
     android:sharedUserId="org.opendatakit"
     android:sharedUserLabel="@string/app_userLabel" >
 
     <uses-sdk
-        android:minSdkVersion="14"
+        android:minSdkVersion="16"
         android:targetSdkVersion="19" />
 
     <uses-permission android:name="android.permission.INTERNET" />
@@ -23,22 +23,13 @@
     <uses-permission android:name="android.permission.WRITE_SYNC_SETTINGS" />
     <uses-permission android:name="com.google.android.providers.gsf.permission.READ_GSERVICES" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-    
-    <permission-tree android:icon="@drawable/odk_sync"
-                     android:label="@string/webkit_permission_tree"
-                     android:name="org.opendatakit.dbshim" />
-    
-    <permission-tree android:icon="@drawable/odk_sync"
-                     android:label="@string/webkit_permission_tree"
-                     android:name="org.opendatakit.webkitserver" />
-    
-    <permission android:name="org.opendatakit.webkitserver.RUN_WEBSERVER" 
-        android:label="@string/webkit_launch_permission" 
-        android:protectionLevel="signature"></permission>
-    
-    <permission android:name="org.opendatakit.dbshim.RUN_DBSHIM" 
-        android:label="@string/dbshim_launch_permission" 
-        android:protectionLevel="signature"></permission>
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
+    <permission
+          android:name="org.opendatakit.database.RUN_DATABASE"
+          android:protectionLevel="signature" />
+    <uses-permission android:name="org.opendatakit.database.RUN_DATABASE" />
     
     <application
         android:name="org.opendatakit.sync.application.Sync"
@@ -47,19 +38,10 @@
         android:installLocation="auto"
         android:icon="@drawable/odk_sync"
         android:label="@string/app_name"
-        android:theme="@style/AppTheme" >
+        android:theme="@style/Opendatakit" >
         <service android:name="org.opendatakit.sync.service.OdkSyncService" 
             android:process=":syncservice"/>
-        <service android:name="org.opendatakit.webkitserver.service.OdkWebkitServerService" 
-            android:exported="true"
-            android:process=":webkitservice"
-            android:permission="org.opendatakit.webkitserver.RUN_WEBSERVER" >
-        </service>
-        <service android:name="org.opendatakit.dbshim.service.OdkDbShimService" 
-            android:exported="true"
-            android:process=":dbshimservice"
-            android:permission="org.opendatakit.dbshim.RUN_DBSHIM" >
-        </service>
+
         <activity
             android:name="org.opendatakit.sync.activities.SyncActivity"
             android:label="@string/app_name" >

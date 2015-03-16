@@ -14,13 +14,14 @@
 
 package org.opendatakit.sync.activities;
 
-import java.io.IOException;
-
+import org.opendatakit.IntentConsts;
+import org.opendatakit.common.android.activities.BaseActivity;
+import org.opendatakit.common.android.logic.CommonToolProperties;
+import org.opendatakit.common.android.logic.PropertiesSingleton;
 import org.opendatakit.common.android.utilities.WebLogger;
 import org.opendatakit.sync.R;
-import org.opendatakit.sync.SyncConsts;
-import org.opendatakit.sync.SyncPreferences;
 import org.opendatakit.sync.files.SyncUtil;
+import org.opendatakit.sync.logic.SyncToolProperties;
 
 import android.accounts.Account;
 import android.accounts.AccountManager;
@@ -42,7 +43,7 @@ import android.widget.Toast;
  * @author the.dylan.price@gmail.com (modified by)
  */
 
-public class AccountInfoActivity extends Activity {
+public class AccountInfoActivity extends BaseActivity {
   public static final String INTENT_EXTRAS_ACCOUNT = "account";
 
   private static final String LOGTAG = AccountInfoActivity.class.getSimpleName();
@@ -60,7 +61,7 @@ public class AccountInfoActivity extends Activity {
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
-    appName = getIntent().getStringExtra(SyncConsts.INTENT_KEY_APP_NAME);
+    appName = getIntent().getStringExtra(IntentConsts.INTENT_KEY_APP_NAME);
     if (appName == null) {
       appName = SyncUtil.getDefaultAppName();
     }
@@ -145,14 +146,10 @@ public class AccountInfoActivity extends Activity {
   protected void gotAuthToken(Bundle bundle) {
     // Set the authentication token and dismiss the dialog.
     String auth_token = bundle.getString(AccountManager.KEY_AUTHTOKEN);
-    try {
-      SyncPreferences prefs = new SyncPreferences(this, appName);
-      prefs.setAuthToken(auth_token);
-      WebLogger.getLogger(appName).i(LOGTAG, "TOKEN" + auth_token);
-
-    } catch (IOException e) {
-      WebLogger.getLogger(appName).printStackTrace(e);
-    }
+    PropertiesSingleton props = SyncToolProperties.get(this, appName);
+    props.setProperty(CommonToolProperties.KEY_AUTH, auth_token);
+    props.writeProperties();
+    WebLogger.getLogger(appName).i(LOGTAG, "TOKEN" + auth_token);
 
     dismissDialog(WAITING_ID);
     setResult(Activity.RESULT_OK);
@@ -181,6 +178,23 @@ public class AccountInfoActivity extends Activity {
   @Override
   protected void onActivityResult(int requestCode, int resultCode, Intent data) {
     super.onActivityResult(requestCode, resultCode, data);
+  }
+
+  @Override
+  public void databaseAvailable() {
+    // TODO Auto-generated method stub
+    
+  }
+
+  @Override
+  public void databaseUnavailable() {
+    // TODO Auto-generated method stub
+    
+  }
+
+  @Override
+  public String getAppName() {
+    return appName;
   }
 
 }

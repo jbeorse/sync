@@ -1,7 +1,8 @@
-package org.opendatakit.sync.service;
+package org.opendatakit.sync.service.impl;
 
 import org.opendatakit.sync.AbstractSyncServiceTest;
 import org.opendatakit.sync.exceptions.NoAppNameSpecifiedException;
+import org.opendatakit.sync.service.GlobalSyncNotificationManager;
 
 public class NotificationManagerTest extends AbstractSyncServiceTest {
 

@@ -15,21 +15,22 @@
  */
 package org.opendatakit.sync.activities;
 
+import org.opendatakit.IntentConsts;
+import org.opendatakit.common.android.activities.BaseActivity;
 import org.opendatakit.sync.R;
-import org.opendatakit.sync.SyncConsts;
 import org.opendatakit.sync.files.SyncUtil;
 
 import android.app.Activity;
 import android.os.Bundle;
 
-public class AboutWrapperActivity extends Activity {
+public class AboutWrapperActivity extends BaseActivity {
 
   private String appName;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
-    appName = getIntent().getStringExtra(SyncConsts.INTENT_KEY_APP_NAME);
+    appName = getIntent().getStringExtra(IntentConsts.INTENT_KEY_APP_NAME);
     if (appName == null) {
       appName = SyncUtil.getDefaultAppName();
     }
@@ -40,6 +41,14 @@ public class AboutWrapperActivity extends Activity {
 
   public String getAppName() {
     return appName;
+  }
+
+  @Override
+  public void databaseAvailable() {
+  }
+
+  @Override
+  public void databaseUnavailable() {
   }
 
 }

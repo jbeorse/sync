@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>ODKSyncTest</name>
+	<name>opendatakit.sync.test</name>
 	<comment></comment>
 	<projects>
 		<project>ODKSync</project>

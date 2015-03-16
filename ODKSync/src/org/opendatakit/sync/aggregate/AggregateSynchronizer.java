@@ -67,22 +67,25 @@ import org.opendatakit.aggregate.odktables.rest.entity.TableDefinition;
 import org.opendatakit.aggregate.odktables.rest.entity.TableDefinitionResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResource;
 import org.opendatakit.aggregate.odktables.rest.entity.TableResourceList;
+import org.opendatakit.common.android.logic.CommonToolProperties;
+import org.opendatakit.common.android.logic.PropertiesSingleton;
 import org.opendatakit.common.android.utilities.ODKFileUtils;
-import org.opendatakit.common.android.utilities.SyncETagsUtils;
 import org.opendatakit.common.android.utilities.WebLogger;
 import org.opendatakit.common.android.utilities.WebUtils;
+import org.opendatakit.database.service.OdkDbHandle;
 import org.opendatakit.sync.R;
-import org.opendatakit.sync.SyncPreferences;
 import org.opendatakit.sync.SyncRow;
 import org.opendatakit.sync.SyncRowPending;
 import org.opendatakit.sync.Synchronizer;
 import org.opendatakit.sync.application.Sync;
 import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
+import org.opendatakit.sync.logic.SyncToolProperties;
 import org.opendatakit.sync.service.SyncProgressState;
 
 import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.content.Context;
+import android.os.RemoteException;
 
 /**
  * Implementation of {@link Synchronizer} for ODK Aggregate.
@@ -408,8 +411,8 @@ public class AggregateSynchronizer implements Synchronizer {
   public String updateAccessToken() throws InvalidAuthTokenException {
     AccountManager accountManager = AccountManager.get(context);
     try {
-      SyncPreferences prefs = new SyncPreferences(context, appName);
-      Account account = new Account(prefs.getAccount(), ACCOUNT_TYPE_G);
+      PropertiesSingleton props = SyncToolProperties.get(context, appName);
+      Account account = new Account(props.getProperty(CommonToolProperties.KEY_ACCOUNT), ACCOUNT_TYPE_G);
       this.accessToken = accountManager.blockingGetAuthToken(account, authString, true);
       return accessToken;
     } catch (Exception e) {
@@ -1060,9 +1063,15 @@ public class AggregateSynchronizer implements Synchronizer {
 
   public List<OdkTablesFileManifestEntry> getAppLevelFileManifest(boolean pushLocalFiles, String serverReportedAppLevelETag)
       throws ClientWebException, InvalidAuthTokenException {
-    SyncETagsUtils seu = new SyncETagsUtils();
+
     URI fileManifestUri = normalizeUri(aggregateUri, getManifestUriFragment());
-    String eTag = seu.getManifestSyncETag(context, appName, fileManifestUri, null);
+    String eTag = null;
+    try {
+      eTag = getManifestSyncETag(context, appName, fileManifestUri, null);
+    } catch (RemoteException e) {
+      log.printStackTrace(e);
+      log.e(LOGTAG, "database access error (ignoring)");
+    }
     Resource rsc = buildResource(fileManifestUri);
     // don't short-circuit manifest if we are pushing local files,
     // as we need to know exactly what is on the server to minimize
@@ -1098,16 +1107,27 @@ public class AggregateSynchronizer implements Synchronizer {
     }
     // update the manifest ETag record...
     eTag = rsp.getHeaders().getFirst(HttpHeaders.ETAG);
-    seu.updateManifestSyncETag(context, appName, fileManifestUri, null, eTag);
+    try {
+      updateManifestSyncETag(context, appName, fileManifestUri, null, eTag);
+    } catch (RemoteException e) {
+      log.printStackTrace(e);
+      log.e(LOGTAG, "database access error (ignoring)");
+    }
     // and return the list of values...
     return theList;
   }
 
   public List<OdkTablesFileManifestEntry> getTableLevelFileManifest(String tableId, String serverReportedTableLevelETag,
       boolean pushLocalFiles) throws ClientWebException, InvalidAuthTokenException {
-    SyncETagsUtils seu = new SyncETagsUtils();
+
     URI fileManifestUri = normalizeUri(aggregateUri, getManifestUriFragment() + tableId);
-    String eTag = seu.getManifestSyncETag(context, appName, fileManifestUri, tableId);
+    String eTag = null;
+    try {
+      eTag = getManifestSyncETag(context, appName, fileManifestUri, tableId);
+    } catch (RemoteException e) {
+      log.printStackTrace(e);
+      log.e(LOGTAG, "database access error (ignoring)");
+    }
     Resource rsc = buildResource(fileManifestUri);
     // don't short-circuit manifest if we are pushing local files,
     // as we need to know exactly what is on the server to minimize
@@ -1143,7 +1163,12 @@ public class AggregateSynchronizer implements Synchronizer {
     }
     // update the manifest ETag record...
     eTag = rsp.getHeaders().getFirst(HttpHeaders.ETAG);
-    seu.updateManifestSyncETag(context, appName, fileManifestUri, tableId, eTag);
+    try {
+      updateManifestSyncETag(context, appName, fileManifestUri, tableId, eTag);
+    } catch (RemoteException e) {
+      log.printStackTrace(e);
+      log.e(LOGTAG, "database access error (ignoring)");
+    }
     // and return the list of values...
     return theList;
   }
@@ -1208,8 +1233,6 @@ public class AggregateSynchronizer implements Synchronizer {
   private boolean compareAndDownloadFile(String tableId, OdkTablesFileManifestEntry entry) {
     String basePath = ODKFileUtils.getAppFolder(appName);
 
-    SyncETagsUtils seu = new SyncETagsUtils();
-
     // if the file is a placeholder on the server, then don't do anything...
     if (entry.contentLength == 0) {
       return false;
@@ -1252,7 +1275,7 @@ public class AggregateSynchronizer implements Synchronizer {
         try {
           int statusCode = downloadFile(newFile, uri);
           if (statusCode == HttpStatus.SC_OK) {
-            seu.updateFileSyncETag(context, appName, uri, tableId, newFile.lastModified(),
+            updateFileSyncETag(context, appName, uri, tableId, newFile.lastModified(),
                 entry.md5hash);
             return true;
           } else {
@@ -1265,8 +1288,13 @@ public class AggregateSynchronizer implements Synchronizer {
         }
       } else {
         boolean hasUpToDateEntry = true;
-        String md5hash = seu
-            .getFileSyncETag(context, appName, uri, tableId, newFile.lastModified());
+        String md5hash = null;
+        try {
+          md5hash = getFileSyncETag(context, appName, uri, tableId, newFile.lastModified());
+        } catch (RemoteException e1) {
+          log.printStackTrace(e1);
+          log.e(LOGTAG, "database access error (ignoring)");
+        }
         if (md5hash == null) {
           // file exists, but no record of what is on the server
           // compute local value
@@ -1281,7 +1309,7 @@ public class AggregateSynchronizer implements Synchronizer {
           try {
             int statusCode = downloadFile(newFile, uri);
             if (statusCode == HttpStatus.SC_OK || statusCode == HttpStatus.SC_NOT_MODIFIED) {
-              seu.updateFileSyncETag(context, appName, uri, tableId, newFile.lastModified(),
+              updateFileSyncETag(context, appName, uri, tableId, newFile.lastModified(),
                   md5hash);
               return true;
             } else {
@@ -1295,7 +1323,12 @@ public class AggregateSynchronizer implements Synchronizer {
           }
         } else {
           if (!hasUpToDateEntry) {
-            seu.updateFileSyncETag(context, appName, uri, tableId, newFile.lastModified(), md5hash);
+            try {
+              updateFileSyncETag(context, appName, uri, tableId, newFile.lastModified(), md5hash);
+            } catch (RemoteException e) {
+              log.printStackTrace(e);
+              log.e(LOGTAG, "database access error (ignoring)");
+            }
           }
           // no change
           return false;
@@ -1476,8 +1509,6 @@ public class AggregateSynchronizer implements Synchronizer {
       throw new IllegalStateException("should never get here!");
     }
     
-    SyncETagsUtils seu = new SyncETagsUtils();
-
     /**********************************************
      * 
      * 
@@ -1522,7 +1553,7 @@ public class AggregateSynchronizer implements Synchronizer {
           int statusCode = downloadFile(cat.localFile, cat.instanceFileDownloadUri);
           if (statusCode == HttpStatus.SC_OK || statusCode == HttpStatus.SC_NOT_MODIFIED) { 
             String md5Hash = ODKFileUtils.getMd5Hash(appName, cat.localFile);
-            seu.updateFileSyncETag(context, appName, cat.instanceFileDownloadUri, tableId,
+            updateFileSyncETag(context, appName, cat.instanceFileDownloadUri, tableId,
                 cat.localFile.lastModified(), md5Hash);
           } else {
             success = false;
@@ -1532,11 +1563,11 @@ public class AggregateSynchronizer implements Synchronizer {
           // content on the server.
           // this could be inaccurate if there are buggy programs on the
           // device!
-          String md5hash = seu.getFileSyncETag(context, appName, cat.instanceFileDownloadUri,
+          String md5hash = getFileSyncETag(context, appName, cat.instanceFileDownloadUri,
               tableId, cat.localFile.lastModified());
           if (md5hash == null) {
             md5hash = ODKFileUtils.getMd5Hash(appName, cat.localFile);
-            seu.updateFileSyncETag(context, appName, cat.instanceFileDownloadUri, tableId,
+            updateFileSyncETag(context, appName, cat.instanceFileDownloadUri, tableId,
                 cat.localFile.lastModified(), md5hash);
           }
         }
@@ -1572,6 +1603,61 @@ public class AggregateSynchronizer implements Synchronizer {
      */
   }
 
+  private String getFileSyncETag(Context context, String appName, URI fileDownloadUri, String tableId, long lastModified) throws RemoteException {
+    OdkDbHandle db = null;
+    try {
+      db = Sync.getInstance().getDatabase().openDatabase(appName, false);
+      return Sync.getInstance().getDatabase().getFileSyncETag(appName, db, fileDownloadUri.toString(), tableId,
+          lastModified);
+    } finally {
+      if ( db != null ) {
+        Sync.getInstance().getDatabase().closeDatabase(appName, db);
+      }
+    }
+  }
+
+  private void updateFileSyncETag(Context context, String appName, URI fileDownloadUri, String tableId, long lastModified, String documentETag) throws RemoteException {
+    boolean successful = false;
+    OdkDbHandle db = null;
+    try {
+      db = Sync.getInstance().getDatabase().openDatabase(appName, true);
+      Sync.getInstance().getDatabase().updateFileSyncETag(appName, db, fileDownloadUri.toString(), tableId,
+          lastModified, documentETag);
+      successful = true;
+    } finally {
+      if ( db != null ) {
+        Sync.getInstance().getDatabase().closeTransactionAndDatabase(appName, db, successful);
+      }
+    }
+  }
+
+  private String getManifestSyncETag(Context context, String appName, URI fileDownloadUri, String tableId) throws RemoteException {
+    OdkDbHandle db = null;
+    try {
+      db = Sync.getInstance().getDatabase().openDatabase(appName, false);
+      return Sync.getInstance().getDatabase().getManifestSyncETag(appName, db, fileDownloadUri.toString(), tableId);
+    } finally {
+      if ( db != null ) {
+        Sync.getInstance().getDatabase().closeDatabase(appName, db);
+      }
+    }
+  }
+
+  private void updateManifestSyncETag(Context context, String appName, URI fileDownloadUri, String tableId, String documentETag) throws RemoteException {
+    boolean successful = false;
+    OdkDbHandle db = null;
+    try {
+      db = Sync.getInstance().getDatabase().openDatabase(appName, true);
+      Sync.getInstance().getDatabase().updateManifestSyncETag(appName, db, fileDownloadUri.toString(), tableId,
+          documentETag);
+      successful = true;
+    } finally {
+      if ( db != null ) {
+        Sync.getInstance().getDatabase().closeTransactionAndDatabase(appName, db, successful);
+      }
+    }
+  }
+    
   @Override
   public boolean putFileAttachments(String instanceFileUri, String tableId, SyncRowPending localRow,
       boolean deferInstanceAttachments) throws ClientWebException {

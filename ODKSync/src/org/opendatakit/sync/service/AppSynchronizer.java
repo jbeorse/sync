@@ -19,12 +19,13 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.opendatakit.aggregate.odktables.rest.entity.TableResource;
+import org.opendatakit.common.android.logic.CommonToolProperties;
+import org.opendatakit.common.android.logic.PropertiesSingleton;
 import org.opendatakit.common.android.utilities.ODKFileUtils;
 import org.opendatakit.common.android.utilities.WebLogger;
-import org.opendatakit.sync.R;
 import org.opendatakit.sync.ProcessAppAndTableLevelChanges;
-import org.opendatakit.sync.SyncPreferences;
 import org.opendatakit.sync.ProcessRowDataChanges;
+import org.opendatakit.sync.R;
 import org.opendatakit.sync.SyncExecutionContext;
 import org.opendatakit.sync.SynchronizationResult;
 import org.opendatakit.sync.SynchronizationResult.Status;
@@ -35,6 +36,7 @@ import org.opendatakit.sync.aggregate.AggregateSynchronizer;
 import org.opendatakit.sync.application.Sync;
 import org.opendatakit.sync.exceptions.InvalidAuthTokenException;
 import org.opendatakit.sync.exceptions.NoAppNameSpecifiedException;
+import org.opendatakit.sync.logic.SyncToolProperties;
 
 import android.app.Service;
 import android.content.Context;
@@ -125,24 +127,15 @@ public class AppSynchronizer {
 
     private void sync(SyncNotification syncProgress) {
 
-      SyncPreferences prefs = null;
-      try {
-        prefs = new SyncPreferences(cntxt, appName);
-      } catch (Exception e1) {
-        WebLogger.getLogger(appName).printStackTrace(e1);
-      }
-
-      if (prefs == null) {
-        status = SyncStatus.FILE_ERROR;
-        syncProgress.finalErrorNotification("Unable to open SyncPreferences");
-        return;
-      }
-
+      PropertiesSingleton props = SyncToolProperties.get(this.cntxt, appName);
+      
       try {
 
+        String authToken = props.getProperty(CommonToolProperties.KEY_AUTH);
+        String serverUri = props.getProperty(CommonToolProperties.KEY_SYNC_SERVER_URL);
         WebLogger.getLogger(appName).i(LOGTAG, "APPNAME IN SERVICE: " + appName);
-        WebLogger.getLogger(appName).i(LOGTAG, "TOKEN IN SERVICE:" + prefs.getAuthToken());
-        WebLogger.getLogger(appName).i(LOGTAG, "URI IN SEVERICE:" + prefs.getServerUri());
+        WebLogger.getLogger(appName).i(LOGTAG, "TOKEN IN SERVICE:" + authToken);
+        WebLogger.getLogger(appName).i(LOGTAG, "URI IN SEVERICE:" + serverUri);
 
         // TODO: should use the APK manager to search for org.opendatakit.N
         // packages, and collect N:V strings e.g., 'survey:1', 'tables:1',
@@ -161,10 +154,10 @@ public class AppSynchronizer {
         String odkClientVersion = versionCode.substring(0, versionCode.length() - 2);
 
         Synchronizer synchronizer = new AggregateSynchronizer(cntxt, appName, odkClientVersion,
-            prefs.getServerUri(), prefs.getAuthToken());
+            serverUri, authToken);
         
         SynchronizationResult syncResult = new SynchronizationResult();
-        SyncExecutionContext sharedContext = new SyncExecutionContext( cntxt, appName, synchronizer, syncProgress, syncResult);
+        SyncExecutionContext sharedContext = new SyncExecutionContext( Sync.getInstance(), appName, synchronizer, syncProgress, syncResult);
         ProcessAppAndTableLevelChanges appAndTableLevelProcessor = new ProcessAppAndTableLevelChanges(sharedContext);
         
         ProcessRowDataChanges rowDataProcessor = new ProcessRowDataChanges(sharedContext);
