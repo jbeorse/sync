@@ -17,6 +17,7 @@ import org.opendatakit.aggregate.odktables.rest.entity.TableResourceList;
 import org.opendatakit.common.android.data.ColumnList;
 import org.opendatakit.common.android.data.OrderedColumns;
 import org.opendatakit.common.android.data.TableDefinitionEntry;
+import org.opendatakit.common.android.provider.FormsColumns;
 import org.opendatakit.common.android.utilities.WebLogger;
 import org.opendatakit.database.service.OdkDbHandle;
 import org.opendatakit.sync.SynchronizationResult.Status;
@@ -232,7 +233,7 @@ public class ProcessAppAndTableLevelChanges {
         }
         log.i(TAG, "[synchronizeConfigurationAndContent] synchronizing table " + localTableId);
 
-        if (!localTableId.equals("framework")) {
+        if (!localTableId.equals(FormsColumns.COMMON_BASE_FORM_ID)) {
           TableDefinitionEntry entry;
           OrderedColumns orderedDefns;
           try {

@@ -64,7 +64,7 @@ public class Sync extends CommonApplication {
   }
 
   @Override
-  public int getAppNameResourceId() {
+  public int getApkDisplayNameResourceId() {
     return R.string.app_name;
   }
 

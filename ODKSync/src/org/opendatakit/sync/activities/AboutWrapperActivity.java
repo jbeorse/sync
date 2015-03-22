@@ -20,7 +20,6 @@ import org.opendatakit.common.android.activities.BaseActivity;
 import org.opendatakit.sync.R;
 import org.opendatakit.sync.files.SyncUtil;
 
-import android.app.Activity;
 import android.os.Bundle;
 
 public class AboutWrapperActivity extends BaseActivity {
