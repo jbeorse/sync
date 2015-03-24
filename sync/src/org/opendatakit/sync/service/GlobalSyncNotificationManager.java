@@ -35,13 +35,12 @@ public final class GlobalSyncNotificationManager {
 
   private boolean displayNotification;
 
-  private List<AppSyncStatus> statusList;
+  private List<AppSyncStatus> statusList = new ArrayList<AppSyncStatus>();
 
   public GlobalSyncNotificationManager(Service service) {
     this.test = false;
     this.service = service;
     this.displayNotification = false;
-    this.statusList = new ArrayList<AppSyncStatus>();
   }
 
   public GlobalSyncNotificationManager(Service service, boolean test) {

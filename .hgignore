@@ -1,9 +1,5 @@
-
-syntax: regexp
-^ODKSync/gen$
-syntax: regexp
-^ODKSync/bin$
-syntax: regexp
-^ODKSyncTest/bin$
-syntax: regexp
-^ODKSyncTest/gen$
+syntax: glob
+sync/bin/**
+sync/gen/**
+sync.test/bin/**
+sync.test/gen/**
