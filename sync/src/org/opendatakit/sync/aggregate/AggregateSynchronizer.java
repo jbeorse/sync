@@ -639,49 +639,97 @@ public class AggregateSynchronizer implements Synchronizer {
     return outcomes;
   }
 
-  private static List<String> filterOutTableIdAssetFiles(List<String> relativePaths) {
-    List<String> newList = new ArrayList<String>();
-    for (String relativePath : relativePaths) {
-      if (relativePath.startsWith("assets/csv/")) {
-        // by convention, the files here begin with their identifying tableId
-        continue;
-      } else {
-        newList.add(relativePath);
-      }
-    }
-    return newList;
-  }
+  private List<String> getAppLevelFiles() {
+    final Set<String> excludingNamedItemsUnderFolder = ODKFileUtils.getTopLevelDirectoriesToExcludeFromSync();
+    File baseFolder = new File(ODKFileUtils.getAppFolder(appName));
 
-  /**
-   * Remove all assets/*.init files (e.g., tables.init) that only alter the data
-   * tables of the application. These are not needed on the server because their
-   * actions have already caused changes in the data tables that will be shared
-   * across all devices. I.e., they only need to be executed on the one starter
-   * device, and then everything gets replicated everywhere else.
-   * 
-   * @param relativePaths
-   * @return
-   */
-  private static List<String> filterOutAssetInitFiles(List<String> relativePaths) {
-    List<String> newList = new ArrayList<String>();
-    for (String relativePath : relativePaths) {
-      if (relativePath.equals("assets/tables.init")) {
-        continue;
+    // Return an empty list of the folder doesn't exist or is not a directory
+    if (!baseFolder.exists()) {
+      return new ArrayList<String>();
+    } else if (!baseFolder.isDirectory()) {
+      log.e(LOGTAG, "[getAppLevelFiles] folder is not a directory: " + baseFolder.getAbsolutePath());
+      return new ArrayList<String>();
+    }
+
+    // construct the set of starting directories and files to process
+    File[] partials = baseFolder.listFiles(new FileFilter() {
+      @Override
+      public boolean accept(File pathname) {
+        return !excludingNamedItemsUnderFolder.contains(pathname.getName());
+      }
+    });
+
+    if (partials == null) {
+      return Collections.emptyList();
+    }
+
+    LinkedList<File> unexploredDirs = new LinkedList<File>();
+    List<String> relativePaths = new ArrayList<String>();
+    
+    // copy the starting set into a queue of unexploredDirs
+    // and a list of files to be sync'd
+    for (int i = 0; i < partials.length; ++i) {
+      if (partials[i].isDirectory()) {
+        unexploredDirs.add(partials[i]);
       } else {
-        newList.add(relativePath);
+        relativePaths.add(ODKFileUtils.asRelativePath(appName, partials[i]));
       }
     }
-    return newList;
+
+    boolean haveFilteredTablesDir = false;
+    boolean haveFilteredAssetsCsvDir = false;
+    boolean haveFilteredTableInitFile = false;
+    
+    while (!unexploredDirs.isEmpty()) {
+      File exploring = unexploredDirs.removeFirst();
+      File[] files = exploring.listFiles();
+      for (File f : files) {
+        if (f.isDirectory()) {
+          // ignore the config/tables dir
+          if ( !haveFilteredTablesDir ) {
+            File tablesDir = new File(ODKFileUtils.getTablesFolder(appName));
+            if ( f.equals(tablesDir) ) {
+              haveFilteredTablesDir = true;
+              continue;
+            }
+          }
+          // ignore the config/assets/csv dir
+          if ( !haveFilteredAssetsCsvDir ) {
+            File csvDir = new File(ODKFileUtils.getAssetsCsvFolder(appName));
+            if ( f.equals(csvDir) ) {
+              haveFilteredAssetsCsvDir = true;
+              continue;
+            }
+          }
+
+          // we'll need to explore it
+          unexploredDirs.add(f);
+        } else {
+          // ignore the config/assets/tables.init file -- never sync'd to server...
+          if ( !haveFilteredTableInitFile ) {
+            File tablesInitFile = new File(ODKFileUtils.getTablesInitializationFile(appName));
+            if ( f.equals(tablesInitFile) ) {
+              haveFilteredTableInitFile = true;
+              continue;
+            }
+          }
+          // we'll add it to our list of files.
+          relativePaths.add(ODKFileUtils.asRelativePath(appName, f));
+        }
+      }
+    }
+
+    return relativePaths; 
   }
 
   private static List<String> filterInTableIdFiles(List<String> relativePaths, String tableId) {
     List<String> newList = new ArrayList<String>();
     for (String relativePath : relativePaths) {
-      if (relativePath.startsWith("assets/csv/")) {
+      if (relativePath.startsWith("config/assets/csv/")) {
         // by convention, the files here begin with their identifying tableId
         String[] parts = relativePath.split("/");
-        if (parts.length >= 3) {
-          String[] nameElements = parts[2].split("\\.");
+        if (parts.length >= 4) {
+          String[] nameElements = parts[3].split("\\.");
           if (nameElements[0].equals(tableId)) {
             newList.add(relativePath);
           }
@@ -797,11 +845,7 @@ public class AggregateSynchronizer implements Synchronizer {
     }
 
     // Get the app-level files on our device.
-    Set<String> dirsToExclude = ODKFileUtils.getDirectoriesToExcludeFromSync(true);
-    File appFolder = new File(ODKFileUtils.getAppFolder(appName));
-    List<String> relativePathsOnDevice = getAllFilesUnderFolder(appFolder, dirsToExclude);
-    relativePathsOnDevice = filterOutTableIdAssetFiles(relativePathsOnDevice);
-    relativePathsOnDevice = filterOutAssetInitFiles(relativePathsOnDevice);
+    List<String> relativePathsOnDevice = getAppLevelFiles();
 
     boolean success = true;
     double stepSize = 100.0 / (1 + relativePathsOnDevice.size() + manifest.size());
@@ -927,23 +971,21 @@ public class AggregateSynchronizer implements Synchronizer {
       return;
     }
 
-    String tableIdPropertiesFile = "tables" + File.separator + tableId + File.separator
-        + "properties.csv";
+    String tableIdPropertiesFile = ODKFileUtils.asRelativePath(appName, 
+        new File(ODKFileUtils.getTablePropertiesCsvFile(appName, tableId)));
 
     boolean tablePropertiesChanged = false;
 
-    // Get any assets/csv files that begin with tableId
+    // Get any config/assets/csv files that begin with tableId
     Set<String> dirsToExclude = new HashSet<String>();
-    File assetsCsvFolder = new File(ODKFileUtils.getAssetsFolder(appName) + "/csv");
+    File assetsCsvFolder = new File(ODKFileUtils.getAssetsCsvFolder(appName));
     List<String> relativePathsToTableIdAssetsCsvOnDevice = getAllFilesUnderFolder(assetsCsvFolder,
         dirsToExclude);
     relativePathsToTableIdAssetsCsvOnDevice = filterInTableIdFiles(
         relativePathsToTableIdAssetsCsvOnDevice, tableId);
 
-    // We don't want to sync anything in the instances directory, because this
-    // contains things like media attachments.
+    // instance directory is now under the data tree, so we don't have to worry about it...
     File tableFolder = new File(ODKFileUtils.getTablesFolder(appName, tableId));
-    dirsToExclude.add(ODKFileUtils.INSTANCES_FOLDER_NAME);
     List<String> relativePathsOnDevice = getAllFilesUnderFolder(tableFolder, dirsToExclude);
 
     // mix in the assets files for this tableId, if any...

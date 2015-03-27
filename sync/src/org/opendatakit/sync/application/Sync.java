@@ -69,13 +69,13 @@ public class Sync extends CommonApplication {
   }
 
   @Override
-  public int getAssetZipResourceId() {
+  public int getConfigZipResourceId() {
     // Ignored -- needs handling in InitializationTask
     return -1;
   }
 
   @Override
-  public int getFrameworkZipResourceId() {
+  public int getSystemZipResourceId() {
     // Ignored -- needs handling in InitializationTask
     return -1;
   }

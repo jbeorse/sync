@@ -178,7 +178,7 @@ public interface Synchronizer {
    * @param tableId
    * @param serverReportedTableLevelETag may be null. The server's table-level manifest ETag if known.
    * @param onChange
-   *          callback if the assets/csv/tableId.properties.csv file changes
+   *          callback if the config/assets/csv/tableId.properties.csv file changes
    * @param pushLocal
    *          true if the local files should be pushed
    * @throws ClientWebException

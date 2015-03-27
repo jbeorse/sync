@@ -190,7 +190,7 @@ public class ProcessAppAndTableLevelChanges {
     // (4) delete the table-id level files locally
     //
     // We also probably want some critical files to be pulled last. e.g.,
-    // tables/tableid/index.html , assets/index.html ?
+    // config/tables/tableid/index.html , config/assets/index.html ?
     // so that we know that all supporting files are present before we
     // update these files.
     //
