@@ -1508,32 +1508,17 @@ public class AggregateSynchronizer implements Synchronizer {
     URI instanceFileDownloadUri;
   }
 
-  private CommonFileAttachmentTerms computeCommonFileAttachmentTerms(String instanceFileUri, String instanceId, File instanceFolder, String relativePath) {
-    // clean up the value...
-    if ( relativePath.startsWith("/") ) {
-      relativePath = relativePath.substring(1);
-    }
+  private CommonFileAttachmentTerms computeCommonFileAttachmentTerms(String serverInstanceFileUri, 
+      String tableId, String instanceId, String rowpathUri) {
     
-    String relativeInstanceFolderPath = ODKFileUtils.asRelativePath(appName, instanceFolder);
-    File localFile;
-    if ( relativePath.startsWith(relativeInstanceFolderPath)) {
-      log.w(LOGTAG, "rowpath contains full app-relative path!");
-      localFile = ODKFileUtils.getAsFile(appName, relativePath);
-    } else {
-      localFile = new File(instanceFolder, relativePath);
-    }
-    String baseInstanceFolder = instanceFolder.getAbsolutePath();
-    String baseLocalAttachment = localFile.getAbsolutePath();
-    if ( !baseLocalAttachment.startsWith(baseInstanceFolder) ) {
-      throw new IllegalStateException("instance data file is not within the instances tree!");
-    }
-    String partialValue = baseLocalAttachment.substring(baseInstanceFolder.length());
-    if (partialValue.startsWith("/") ) {
-      partialValue = partialValue.substring(1);
-    }
+    File localFile = 
+        ODKFileUtils.getRowpathFile(appName, tableId, instanceId, rowpathUri);
+
+    // use a cleaned-up rowpathUri in case there are leading slashes, instance paths, etc.
+    String cleanRowpathUri = ODKFileUtils.asRowpathUri(appName, tableId, instanceId, localFile);
     
-    URI instanceFileDownloadUri = normalizeUri(instanceFileUri, instanceId + "/file/"
-        + partialValue);
+    URI instanceFileDownloadUri = normalizeUri(serverInstanceFileUri, instanceId + "/file/"
+        + cleanRowpathUri);
 
   
     CommonFileAttachmentTerms cat = new CommonFileAttachmentTerms();
@@ -1544,7 +1529,7 @@ public class AggregateSynchronizer implements Synchronizer {
   }
   
   @Override
-  public boolean getFileAttachments(String instanceFileUri, String tableId, SyncRowPending serverRow,
+  public boolean getFileAttachments(String serverInstanceFileUri, String tableId, SyncRowPending serverRow,
       boolean deferInstanceAttachments) throws ClientWebException {
 
     if (serverRow.getUriFragments().isEmpty()) {
@@ -1574,13 +1559,10 @@ public class AggregateSynchronizer implements Synchronizer {
           instanceFolder, null);
 
       // 4) Iterate over all non-null file attachments in the data row
-      for (String relativePath : serverRow.getUriFragments()) {
-        // clean up the value...
-        if ( relativePath.startsWith("/") ) {
-          relativePath = relativePath.substring(1);
-        }
+      for (String rowpathUri : serverRow.getUriFragments()) {
         
-        CommonFileAttachmentTerms cat = computeCommonFileAttachmentTerms(instanceFileUri, instanceId, instanceFolder, relativePath);
+        CommonFileAttachmentTerms cat = computeCommonFileAttachmentTerms(serverInstanceFileUri, 
+            tableId, instanceId, rowpathUri);
 
         String appFolderRelativePath = ODKFileUtils.asRelativePath(appName, cat.localFile);
         // remove it from the local files list
@@ -1701,7 +1683,7 @@ public class AggregateSynchronizer implements Synchronizer {
   }
     
   @Override
-  public boolean putFileAttachments(String instanceFileUri, String tableId, SyncRowPending localRow,
+  public boolean putFileAttachments(String serverInstanceFileUri, String tableId, SyncRowPending localRow,
       boolean deferInstanceAttachments) throws ClientWebException {
 
     if (localRow.getUriFragments().isEmpty()) {
@@ -1725,17 +1707,11 @@ public class AggregateSynchronizer implements Synchronizer {
       // 1) Get this row's instanceId (rowId)
       String instanceId = localRow.getRowId();
       
-      // 2) Get the folder holding the instance attachments
-      File instanceFolder = new File(ODKFileUtils.getInstanceFolder(appName, tableId, instanceId));
-
       // 3) Iterate over all non-null file attachments in the data row
-      for (String relativePath : localRow.getUriFragments()) {
-        // clean up the value...
-        if (relativePath.startsWith("/")) {
-          relativePath = relativePath.substring(1);
-        }
+      for (String rowpathUri : localRow.getUriFragments()) {
         
-        CommonFileAttachmentTerms cat = computeCommonFileAttachmentTerms(instanceFileUri, instanceId, instanceFolder, relativePath);
+        CommonFileAttachmentTerms cat = computeCommonFileAttachmentTerms(serverInstanceFileUri, 
+            tableId, instanceId, rowpathUri);
 
         if (cat.localFile.exists()) {
 
