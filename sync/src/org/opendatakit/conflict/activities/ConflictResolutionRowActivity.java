@@ -913,10 +913,9 @@ public class ConflictResolutionRowActivity extends BaseListActivity implements
       ++adapterOffset;
       sections.add(newSection);
       String localRawValue = localRow.getRawDataOrMetadataByElementKey(elementKey);
-      String localDisplayValue = localRow.getDisplayTextOfData(this, elementType, elementKey, true);
+      String localDisplayValue = localRow.getDisplayTextOfData(elementType, elementKey);
       String serverRawValue = serverRow.getRawDataOrMetadataByElementKey(elementKey);
-      String serverDisplayValue = serverRow.getDisplayTextOfData(this, elementType, elementKey,
-          true);
+      String serverDisplayValue = serverRow.getDisplayTextOfData(elementType, elementKey);
       if ((localRawValue == null && serverRawValue == null)
           || (localRawValue != null && localRawValue.equals(serverRawValue))) {
         // TODO: this doesn't compare actual equality of blobs if their display

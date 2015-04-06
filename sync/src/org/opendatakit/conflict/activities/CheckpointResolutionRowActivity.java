@@ -535,10 +535,9 @@ public class CheckpointResolutionRowActivity extends BaseListActivity implements
       sections.add(newSection);
       String localRawValue = rowEnding.getRawDataOrMetadataByElementKey(elementKey);
       String localDisplayValue = rowEnding
-          .getDisplayTextOfData(this, elementType, elementKey, true);
+          .getDisplayTextOfData(elementType, elementKey);
       String serverRawValue = rowStarting.getRawDataOrMetadataByElementKey(elementKey);
-      String serverDisplayValue = rowStarting.getDisplayTextOfData(this, elementType, elementKey,
-          true);
+      String serverDisplayValue = rowStarting.getDisplayTextOfData(elementType, elementKey);
       if (deleteEntirely || (localRawValue == null && serverRawValue == null)
           || (localRawValue != null && localRawValue.equals(serverRawValue))) {
         // TODO: this doesn't compare actual equality of blobs if their display
