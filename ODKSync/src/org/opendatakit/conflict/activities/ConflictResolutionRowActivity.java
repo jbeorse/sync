@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.opendatakit.aggregate.odktables.rest.ConflictType;
+import org.opendatakit.aggregate.odktables.rest.ElementDataType;
 import org.opendatakit.aggregate.odktables.rest.ElementType;
 import org.opendatakit.aggregate.odktables.rest.KeyValueStoreConstants;
 import org.opendatakit.aggregate.odktables.rest.SyncState;
@@ -731,8 +732,39 @@ public class ConflictResolutionRowActivity extends ListActivity implements
             // delete the record of the server row
             ODKDatabaseUtils.get().deleteServerConflictRowWithId(db, mTableId, mRowId);
             // move the local conflict back into the normal (null) state
+
+            // determine whether we should flag this as pending files
+            // or whether it can transition directly to sync'd.
+            SyncState newState;
+            {
+              boolean hasUriFragments = false;
+              // we are collapsing to the server state. Examine the 
+              // server row. Look at all the columns that may contain file
+              // attachments. If they do (non-null, non-empty), then 
+              // set the hasUriFragments flag to true and break out of the loop.
+              // 
+              // Set the resolved row to synced_pending_files if there are
+              // non-null, non-empty file attachments in the row. This 
+              // ensures that we will pull down those attachments at the next
+              // sync.
+              Row serverRow = mConflictTable.getServerTable().getRowAtIndex(0);
+              for ( ColumnDefinition cd :  ConflictResolutionRowActivity.this.mOrderedDefns ) {
+                if (cd.getType().getDataType() != ElementDataType.rowpath) {
+                  // not a file attachment
+                  continue;
+                }
+                String v = serverRow.getRawDataOrMetadataByElementKey(cd.getElementKey());
+                if ( v != null && v.length() != 0 ) {
+                  // non-null file attachment specified on server row
+                  hasUriFragments = true;
+                  break;
+                }
+              }
+              newState = hasUriFragments ? SyncState.synced_pending_files :
+                  SyncState.synced;
+            }
             ODKDatabaseUtils.get().restoreRowFromConflict(db, mTableId, mRowId,
-                SyncState.synced_pending_files, localConflictType);
+                newState, localConflictType);
             db.setTransactionSuccessful();
           } finally {
             if (db != null) {

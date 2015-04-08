@@ -1473,7 +1473,8 @@ public class AggregateSynchronizer implements Synchronizer {
       boolean deferInstanceAttachments) throws ClientWebException {
 
     if (serverRow.getUriFragments().isEmpty()) {
-      throw new IllegalStateException("should never get here!");
+      this.log.w("getFileAttachments", "logic error - probably from conflict mgmt - should never get here!");
+      return true;
     }
     
     SyncETagsUtils seu = new SyncETagsUtils();
@@ -1577,7 +1578,8 @@ public class AggregateSynchronizer implements Synchronizer {
       boolean deferInstanceAttachments) throws ClientWebException {
 
     if (localRow.getUriFragments().isEmpty()) {
-      throw new IllegalStateException("should never get here!");
+      this.log.w("putFileAttachments", "logic error - probably from conflict mgmt - should never get here!");
+      return true;
     }
 
     /**********************************************
