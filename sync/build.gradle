@@ -1,0 +1,58 @@
+apply plugin: 'com.android.application'
+
+android {
+    compileSdkVersion 19
+    buildToolsVersion "23.0.0 rc2"
+
+    defaultConfig {
+        applicationId "org.opendatakit.sync"
+        minSdkVersion 16
+        targetSdkVersion 19
+
+        testApplicationId "org.opendatakit.sync.test"
+        testInstrumentationRunner "android.test.InstrumentationTestRunner"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
+        }
+    }
+
+    packagingOptions {
+        pickFirst 'META-INF/DEPENDENCIES'    /* File 1: wink-jackson2-client-1.4-sources.jar
+                                                File 2: jackson-core-2.4.1.1.jar */
+
+        pickFirst 'META-INF/LICENSE'         /* File 1: wink-jackson2-client-1.4-sources.jar
+                                                File 2: jackson-core-2.4.1.1.jar */
+
+        pickFirst 'META-INF/LICENSE.txt'     /* File 1: commons-lang3-3.1.jar
+                                                File 2: commons-io-2.4.jar */
+
+        pickFirst 'META-INF/NOTICE'          /* File 1: wink-jackson2-client-1.4-sources.jar
+                                                File 2: jackson-core-2.4.1.1.jar */
+
+        pickFirst 'META-INF/NOTICE.txt'      /* File 1: commons-lang3-3.1.jar
+                                                File 2: commons-io-2.4.jar */
+
+        pickFirst 'META-INF/services/com.fasterxml.jackson.core.JsonFactory'
+        /* File 1: jackson-core-2.4.1.1.jar
+           File 2: jackson-dataformat-xml-2.4.1.jar */
+        pickFirst 'META-INF/services/com.fasterxml.jackson.core.ObjectCodec'
+        /* File 1: jackson-databind-2.4.1.3.jar
+           File 2: jackson-dataformat-xml-2.4.1.jar */
+        pickFirst 'META-INF/services/javax.ws.rs.ext.MessageBodyReader'
+        /* File 1: jackson-jaxrs-xml-provider-2.4.1.jar
+           File 2: jackson-jaxrs-json-provider-2.4.1.jar */
+        pickFirst 'META-INF/services/javax.ws.rs.ext.MessageBodyWriter'
+        /* File 1: jackson-jaxrs-xml-provider-2.4.1.jar
+           File 2: jackson-jaxrs-json-provider-2.4.1.jar */
+    }
+}
+
+dependencies {
+    compile fileTree(include: '*.jar', dir: 'libs')
+    compile project(':opendatakit.androidlibrary:androidlibrary')
+    compile project(':opendatakit.androidcommon:androidcommon')
+}
