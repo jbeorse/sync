@@ -3,3 +3,8 @@ sync/bin/**
 sync/gen/**
 sync.test/bin/**
 sync.test/gen/**
+build/**
+local.properties
+.idea/**
+.gradle/**
+*.iml
