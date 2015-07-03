@@ -5,11 +5,11 @@ android {
     buildToolsVersion "22.0.1"
 
     defaultConfig {
-        applicationId "org.opendatakit.sync"
+        applicationId "org.sync"
         minSdkVersion 16
         targetSdkVersion 19
 
-        testApplicationId "org.opendatakit.sync.test"
+        testApplicationId "org.sync.test"
         testInstrumentationRunner "android.test.InstrumentationTestRunner"
     }
 
@@ -53,6 +53,6 @@ android {
 
 dependencies {
     compile fileTree(include: '*.jar', dir: 'libs')
-    compile project(':opendatakit.androidlibrary:androidlibrary')
-    compile project(':opendatakit.androidcommon:androidcommon')
+    compile project(':androidlibrary:androidlibrary_lib')
+    compile project(':androidcommon:androidcommon_lib')
 }
