@@ -25,6 +25,7 @@ import org.opendatakit.IntentConsts;
 import org.opendatakit.common.android.activities.BaseActivity;
 import org.opendatakit.common.android.logic.CommonToolProperties;
 import org.opendatakit.common.android.logic.PropertiesSingleton;
+import org.opendatakit.common.android.utilities.DependencyChecker;
 import org.opendatakit.common.android.utilities.WebLogger;
 import org.opendatakit.database.service.OdkDbHandle;
 import org.opendatakit.sync.OdkSyncServiceProxy;
@@ -105,6 +106,13 @@ public class SyncActivity extends BaseActivity {
     findViewComponents();
     syncInstanceAttachments.setChecked(true);
     disableButtons();
+
+    DependencyChecker dc = new DependencyChecker(this);
+    boolean hasDependencies = dc.checkDependencies();
+    if (!hasDependencies) { // dependencies missing
+      return;
+    }
+
     initializeData();
     refreshActivityUINeeded(appName);
 
